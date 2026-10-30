@@ -39,6 +39,32 @@ python3 /path/to/token-graph/scripts/explorer_server.py --no-browser
 
 Open the printed URL manually. It includes a private per-run access token. The server listens only on `127.0.0.1`.
 
+## Local exploration agent
+
+The optional command-line agent uses an installed Ollama model to explore a project's graph and read relevant source files. Start Ollama and install `qwen3:8b`, then run:
+
+```sh
+python3 token-graph/scripts/explore_agent.py /path/to/project --build
+```
+
+This builds a code-only graph if needed and opens an interactive prompt. Omit `--build` to use an existing graph, or supply a question for a single answer:
+
+```sh
+python3 token-graph/scripts/explore_agent.py /path/to/project 'How does authentication work?'
+```
+
+You can also use the agent in the viewer: start the local explorer server as shown above, open a project, and choose **Local agent** in the question bar. The viewer checks Ollama and lets you choose an installed local model. Follow-up questions use the latest six exchanges; select **New conversation** to clear them. When opening `index.html` directly, select **Local agent** and **Ask** to display the server instructions and a field for the server address. The browser cannot start the server itself.
+
+To generate a graph with local AI, choose **Local agent** and **Generate AI graph** for an opened project, or run:
+
+```sh
+python3 token-graph/scripts/generate_agent.py /path/to/project
+```
+
+The generator detects an installed local model (preferring `qwen3:8b`); use `--model` to choose another. Install its optional Python dependency once with `python3 token-graph/scripts/setup_runtime.py --download-deps --extras ollama`. The parser extracts code structure, while Ollama analyzes supported documents and labels communities. A code-only project may have no document semantics to extract. The operation updates graph artifacts and ignore settings in the project; a failed generation restores an existing graph JSON. Model-generated relationships can be inaccurate. Audio and video require a separately prepared local transcription model, and image analysis is not enabled by this button.
+
+Use `--model MODEL` to select another installed local Ollama model in the CLI. The agent contacts Ollama on `127.0.0.1:11434` and has read-only graph and source tools; `--build` writes graph artifacts and updates graph ignore settings in the selected project. It excludes common secret files, but source code may contain embedded sensitive information. Answers can be inaccurate; verify important claims against the cited source. CLI questions are independent.
+
 ## Work from source
 
 ```sh

@@ -22,6 +22,9 @@ import webbrowser
 
 SKILL = Path(__file__).resolve().parents[1]
 SCRIPTS = SKILL / "scripts"
+if str(SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS))
+import explore_agent
 PAGE = SKILL / "assets" / "project-explorer.html"
 STATE = SKILL / ".explorer-server.json"      # port + token of the running server
 PROJECTS = SKILL / ".explorer-projects.json"  # projects built or opened here, newest first
@@ -122,6 +125,43 @@ def ask(body: dict, project: Path) -> dict:
     if result.returncode:
         raise ValueError((result.stderr.strip().splitlines() or ["The graph engine failed."])[-1])
     return json.loads(result.stdout)
+
+
+def ollama_models() -> list[str]:
+    """List installed local models, excluding Ollama's hosted model entries."""
+    req = urllib.request.Request('http://127.0.0.1:11434/api/tags')
+    try:
+        with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(req, timeout=3) as response:
+            data = json.load(response)
+    except (OSError, ValueError) as error:
+        raise ValueError('Ollama is not responding. Start the Ollama app and try again.') from error
+    return [item['name'] for item in data.get('models', [])
+            if isinstance(item, dict) and isinstance(item.get('name'), str)
+            and ':cloud' not in item['name'].lower() and not item.get('remote_model') and not item.get('remote_host')]
+
+
+def agent_answer(body: dict, project: Path) -> dict:
+    question = str(body.get('question') or '').strip()
+    model = str(body.get('model') or '').strip()
+    if not question or len(question) > 4000:
+        raise ValueError('Enter a question of up to 4,000 characters.')
+    if not graph_path(project).is_file():
+        raise ValueError('This project has no graph yet; build it first.')
+    if model not in ollama_models():
+        raise ValueError('Select an installed local Ollama model and try again.')
+    history = body.get('history', [])
+    if not isinstance(history, list) or len(history) > 12 or any(
+        not isinstance(item, dict) or item.get('role') not in ('user', 'assistant')
+        or not isinstance(item.get('content'), str) or len(item['content']) > 8000 for item in history
+    ):
+        raise ValueError('Invalid conversation history.')
+    history = [{'role': item['role'], 'content': item['content']} for item in history]
+    try:
+        if history:
+            return {'text': explore_agent.explore(project, question, model, history)}
+        return {'text': explore_agent.explore(project, question, model)}
+    except (OSError, ValueError, KeyError, subprocess.TimeoutExpired) as error:
+        raise ValueError(f'Agent failed: {error}') from error
 
 
 def engine_python() -> str:
@@ -232,12 +272,12 @@ class Jobs:
         self.lock = threading.Lock()
         self.current: dict | None = None
 
-    def start(self, project: Path) -> dict:
+    def start(self, project: Path, model: str | None = None) -> dict:
         with self.lock:
             if self.current and self.current["state"] == "running":
                 raise RuntimeError(f"A graph is already being built for {self.current['project']}.")
             job = {"id": secrets.token_hex(6), "project": str(project), "state": "running", "step": "starting",
-                   "started": time.time(), "finished": None, "message": "", "mode": ""}
+                   "started": time.time(), "finished": None, "message": "", "mode": "", "model": model}
             self.current = job
         threading.Thread(target=self._run, args=(job, project), daemon=True).start()
         return dict(job)
@@ -252,12 +292,17 @@ class Jobs:
                               text=True, encoding="utf-8", errors="replace", creationflags=NO_WINDOW, check=False)
 
     def _run(self, job: dict, project: Path) -> None:
+        saved_graph = False
         try:
             # Keep the previous graph so the page can show what changed (/api/diff).
             if graph_path(project).is_file():
                 shutil.copy2(graph_path(project), previous_graph_path(project))
-            # An existing graph is updated incrementally (changed files only); otherwise built from scratch.
-            if graph_path(project).is_file():
+                saved_graph = True
+            # An existing graph is updated incrementally; AI generation uses local semantic extraction.
+            if job.get("model"):
+                job["mode"] = "ai"
+                result = self._step(job, project, "generating graph with local Ollama", ["build-local", str(project), "--model", job["model"]])
+            elif graph_path(project).is_file():
                 job["mode"] = "update"
                 result = self._step(job, project, "updating graph (changed files only)", ["update", str(project)])
             else:
@@ -272,6 +317,11 @@ class Jobs:
             job["state"] = "done"
             job["step"] = "done"
         except Exception as error:  # reported to the page, never swallowed
+            if job.get("model") and saved_graph:
+                try:
+                    shutil.copy2(previous_graph_path(project), graph_path(project))
+                except OSError as restore_error:
+                    error = RuntimeError(f"{error}\nCould not restore the previous graph: {restore_error}")
             job["state"] = "error"
             job["message"] = str(error)
         finally:
@@ -352,6 +402,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(200, graph_diff(self._known_project(query.get("project"))))
             if url.path == "/api/editors":
                 return self._json(200, {"vscode": has_vscode(), "rider": find_rider() is not None})
+            if url.path == "/api/agent/status":
+                return self._json(200, {"models": ollama_models()})
             if url.path == "/api/graph":
                 project = self._project(query.get("project"))
                 graph = graph_path(project)
@@ -388,8 +440,16 @@ class Handler(BaseHTTPRequestHandler):
             if url.path == "/api/build":
                 project = self._project(body.get("project"))
                 return self._json(200, {"job": JOBS.start(project)})
+            if url.path == "/api/agent/build":
+                project = self._known_project(body.get("project"))
+                model = str(body.get("model") or "")
+                if model not in ollama_models():
+                    raise ValueError("Select an installed local Ollama model first.")
+                return self._json(200, {"job": JOBS.start(project, model)})
             if url.path == "/api/ask":
                 return self._json(200, ask(body, self._known_project(body.get("project"))))
+            if url.path == "/api/agent":
+                return self._json(200, agent_answer(body, self._known_project(body.get("project"))))
             if url.path == "/api/open":
                 editor = body.get("editor")
                 if editor not in ("vscode", "rider"):

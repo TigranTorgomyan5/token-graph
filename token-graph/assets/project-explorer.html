@@ -57,6 +57,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       .ask-choices{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
       .ask-choices button{border:1px solid #665bd0;border-radius:7px;background:#1b1a3a;color:#d0c8ff;font:11px var(--sans);padding:5px 9px;cursor:pointer;text-align:left}
       .ask-hint{font-size:11px;color:#7f8ba3;margin-top:6px}
+      .agent-chat{margin-top:10px;max-height:320px;overflow:auto;display:flex;flex-direction:column;gap:8px}.agent-message{white-space:pre-wrap;overflow-wrap:anywhere;padding:10px;border-radius:8px;background:#0b1020;font:12px/1.5 var(--sans);color:#d6dcea}.agent-message.user{background:#252347}.agent-message strong{display:block;color:#bcb4ff;margin-bottom:4px}
       .kind-filter{width:100%;margin-top:8px;border:1px solid #2c3953;border-radius:8px;background:#0b1020;color:#cfd6e6;font:12px var(--sans);padding:7px 8px}
       .search-results{margin-top:8px;max-height:260px;overflow:auto;border:1px solid #222d43;border-radius:8px;background:#0d1426}
       .search-result{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid #1a2338;background:none;color:#e4e9f5;padding:6px 9px;cursor:pointer;font:12px var(--sans)}
@@ -109,6 +110,12 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
           <div class="eyebrow">PROJECT EXPLORER</div>
           <div class="source-choice">
             <button type="button" class="source-button primary hidden" id="build-project" title="Pick a project folder; its graph is built (or updated) and opened here">Choose project &amp; build graph</button>
+            <form id="project-path-form" class="hidden">
+              <label for="project-path" class="eyebrow">PROJECT FOLDER PATH</label>
+              <input class="ask-input" id="project-path" type="text" placeholder="/Users/name/Projects/my-project" autocomplete="off" style="width:100%;box-sizing:border-box;margin:6px 0" required />
+              <button type="submit" class="source-button primary">Build graph</button>
+              <button type="button" class="source-button" id="project-path-cancel">Cancel</button>
+            </form>
             <label class="source-button" for="projects-folder">Choose Projects folder</label>
             <button type="button" class="source-button" id="original-source">Reload local graph</button>
             <label class="source-button" id="token-source" for="graph-file">Add graph JSON files</label>
@@ -133,6 +140,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
           <button type="button" class="server-setup-close" id="server-setup-close" aria-label="Close">×</button>
           <strong>Enable build, update, and change tracking</strong>
           <p>Run the command for your installed skill, open the address it prints, then choose your project. The server stays on your computer.</p>
+          <label for="server-address">Local server address</label><input class="ask-input" id="server-address" placeholder="Paste the address printed by the server" style="width:100%;box-sizing:border-box" /><button type="button" class="ask-go" id="server-connect">Open local viewer</button><p id="server-connect-error" role="status"></p>
           <label>Codex <code id="server-command-codex">python3 "$HOME/.codex/skills/token-graph/scripts/explorer_server.py" --no-browser</code></label>
           <label>Claude Code <code id="server-command-claude">python3 "$HOME/.claude/skills/token-graph/scripts/explorer_server.py" --no-browser</code></label>
         </section>
@@ -157,15 +165,20 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
               <button type="button" data-mode="query" aria-pressed="true" title="Ask about the code in plain words">Question</button>
               <button type="button" data-mode="path" aria-pressed="false" title="How is A connected to B?">Path A → B</button>
               <button type="button" data-mode="affected" aria-pressed="false" title="What depends on this and could break if it changes?">Impact</button>
+              <button type="button" data-mode="agent" aria-pressed="false" title="Explore with a local Ollama model">Local agent</button>
             </div>
             <div class="ask-input-wrap"><input class="ask-input" id="ask-a" list="ask-nodes" autocomplete="off" spellcheck="false" placeholder="e.g. how is partial cashout executed" /><button type="button" class="ask-pick hidden" id="ask-a-pick" title="Use the selected node">◎</button></div>
             <div class="ask-input-wrap hidden" id="ask-b-wrap"><input class="ask-input" id="ask-b" list="ask-nodes" autocomplete="off" spellcheck="false" placeholder="To: class, method or file" /><button type="button" class="ask-pick" id="ask-b-pick" title="Use the selected node">◎</button></div>
             <select class="ask-depth" id="ask-budget" title="Estimated answer size; increase it when the result is truncated."><option value="400">~400 tokens</option><option value="800" selected>~800 tokens</option><option value="1500">~1,500 tokens</option><option value="3000">~3,000 tokens</option></select>
             <select class="ask-depth hidden" id="ask-depth" title="How many steps of dependants to follow"><option value="1">1 step</option><option value="2" selected>2 steps</option><option value="3">3 steps</option></select>
+            <select class="ask-depth hidden" id="agent-model" aria-label="Local Ollama model"><option value="">Checking Ollama…</option></select>
+            <button type="button" class="ask-go hidden" id="agent-build" title="Build a graph using the local model for document semantics">Generate AI graph</button>
             <button type="button" class="ask-go" id="ask-go">Ask</button>
           </div>
           <datalist id="ask-nodes"></datalist>
           <div class="ask-hint" id="ask-hint">Answers come from this project's graph on your computer. Matching nodes light up on the graph below.</div>
+          <div id="agent-chat" class="agent-chat hidden" aria-live="polite" aria-label="Local agent conversation"></div>
+          <button type="button" class="ask-pick hidden" id="agent-clear">New conversation</button>
           <div class="ask-result hidden" id="ask-result">
             <div class="ask-result-bar"><span id="ask-summary"></span><span class="spacer"></span><button type="button" id="ask-only" aria-pressed="false" title="Hide everything except the answer's nodes">Show only these</button><button type="button" id="ask-copy" title="Copy the answer text, e.g. to paste into Claude">Copy text</button><button type="button" id="ask-clear">Clear</button></div>
             <pre class="ask-text" id="ask-text"></pre>
@@ -1008,8 +1021,22 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     query: { a: 'e.g. how is partial cashout executed', pickA: false },
     path: { a: 'From: class, method or file', pickA: true },
     affected: { a: 'Class, method or file that would change', pickA: true },
+    agent: { a: 'Ask the local agent about this project', pickA: false },
   };
   let askMode = 'query';
+  let agentHistory = [];
+  let agentProject = null;
+
+  function clearAgentChat() {
+    agentHistory = []; agentProject = state.projectPath;
+    $('#agent-chat').replaceChildren();
+  }
+  function appendAgentMessage(role, content) {
+    const item = document.createElement('div'); item.className = `agent-message ${role}`;
+    const label = document.createElement('strong'); label.textContent = role === 'user' ? 'You' : 'Local agent';
+    const body = document.createElement('div'); body.textContent = content;
+    item.append(label, body); $('#agent-chat').append(item); item.scrollIntoView?.({block:'nearest'});
+  }
 
   function setAskMode(mode) {
     askMode = mode;
@@ -1019,6 +1046,12 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     $('#ask-b-wrap').classList.toggle('hidden', mode !== 'path');
     $('#ask-depth').classList.toggle('hidden', mode !== 'affected');
     $('#ask-budget').classList.toggle('hidden', mode !== 'query');
+    $('#agent-model').classList.toggle('hidden', mode !== 'agent');
+    $('#agent-build').classList.toggle('hidden', mode !== 'agent');
+    $('#agent-chat').classList.toggle('hidden', mode !== 'agent');
+    $('#agent-clear').classList.toggle('hidden', mode !== 'agent');
+    if (mode === 'agent') checkAgent();
+    else $('#ask-hint').textContent = answerHint();
     $('#ask-a').focus();
   }
   function askScopeNote() {
@@ -1160,11 +1193,33 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
   }
 
   async function runAsk() {
+    if (askMode === 'agent' && !serverToken) { showServerInstructions(); return; }
     if (!state.nodes.length) { $('#ask-hint').textContent = 'Load a project graph first.'; return; }
     if (serverToken && !state.projectPath) { $('#ask-hint').textContent = 'Open a project graph first.'; return; }
     const request = { project: state.projectPath, mode: askMode, a: $('#ask-a').value, b: $('#ask-b').value, depth: $('#ask-depth').value,
       budget: $('#ask-budget').value, hideTests: state.hideTests, hideGenerated: state.hideGenerated };
     const go = $('#ask-go');
+    if (askMode === 'agent') {
+      if (!serverToken) { showServerInstructions(); return; }
+      if (!request.a.trim()) { $('#ask-hint').textContent = 'Enter a question for the local agent.'; return; }
+      if (!$('#agent-model').value) { await checkAgent(); if (!$('#agent-model').value) return; }
+      const project = state.projectPath;
+      if (agentProject !== project) clearAgentChat();
+      go.disabled = true; go.textContent = 'Exploring…';
+      $('#ask-hint').textContent = 'The local agent is exploring the graph and source. This can take a few minutes.';
+      try {
+        const history = agentHistory.slice(-12);
+        const result = await api('/api/agent', {project, question: request.a, model: $('#agent-model').value, history});
+        if (state.projectPath !== project) return;
+        appendAgentMessage('user', request.a);
+        appendAgentMessage('assistant', result.text);
+        agentHistory.push({role:'user', content:request.a}, {role:'assistant', content:result.text.slice(0,8000)});
+        $('#ask-a').value = '';
+        $('#ask-hint').textContent = 'Answer generated locally. Verify important claims against the source.';
+      } catch (error) { $('#ask-hint').textContent = error.message; }
+      finally { go.disabled = false; go.textContent = 'Ask'; }
+      return;
+    }
     go.disabled = true; go.textContent = 'Asking…';
     $('#ask-hint').textContent = 'Searching the graph…';
     try {
@@ -1177,8 +1232,30 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     }
   }
 
+  async function checkAgent() {
+    const select = $('#agent-model');
+    select.replaceChildren(new Option('Checking Ollama…', ''));
+    if (!serverToken) { $('#ask-hint').textContent = 'Start the local server to use the agent.'; return; }
+    try {
+      const {models} = await api('/api/agent/status');
+      select.replaceChildren();
+      if (!models.length) { select.add(new Option('No local models installed', '')); $('#ask-hint').textContent = 'Install a local model in Ollama, then select Local agent again.'; return; }
+      for (const model of models) select.add(new Option(model, model));
+      if (models.includes('qwen3:8b')) select.value = 'qwen3:8b';
+      $('#ask-hint').textContent = 'Ollama is ready. The agent uses the graph and may read project source files.';
+    } catch (error) { select.replaceChildren(new Option('Ollama unavailable', '')); $('#ask-hint').textContent = error.message; }
+  }
+
   document.querySelectorAll('.ask-modes [data-mode]').forEach(b => b.addEventListener('click', () => setAskMode(b.dataset.mode)));
   $('#ask-go').addEventListener('click', runAsk);
+  $('#agent-clear').addEventListener('click', clearAgentChat);
+  $('#server-connect').addEventListener('click', () => {
+    try {
+      const url = new URL($('#server-address').value.trim());
+      if (url.protocol !== 'http:' || !['127.0.0.1', 'localhost'].includes(url.hostname) || !url.searchParams.get('token')) throw new Error();
+      location.href = url.href;
+    } catch (_) { $('#server-connect-error').textContent = 'Enter the full local server address, including its token.'; }
+  });
   for (const id of ['#ask-a', '#ask-b']) {
     $(id).addEventListener('keydown', event => { if (event.key === 'Enter') runAsk(); });
     $(id).addEventListener('input', event => suggestNodes(event.target.value));
@@ -1249,6 +1326,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
 
   function setBuilding(text) {
     buildButton.disabled = Boolean(text);
+    $('#agent-build').disabled = Boolean(text);
     buildButton.textContent = text || 'Choose project & build graph';
   }
 
@@ -1295,7 +1373,16 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       if (!path) {
         setBuilding('Choose a folder in the dialog…');
         const picked = await api('/api/pick', { start: state.projectPath || '' });
-        path = picked.manual ? prompt('Enter the full path to your project folder:', state.projectPath || '') : picked.path;
+        if (picked.manual) {
+          setBuilding('');
+          $('#project-path-form').classList.remove('hidden');
+          $('#project-path').value = state.projectPath || '';
+          $('#data-status').classList.remove('error-state');
+          $('#data-status').textContent = 'Enter the full path to your project folder.';
+          $('#project-path').focus();
+          return;
+        }
+        path = picked.path;
         if (!path) { setBuilding(''); $('#data-status').textContent = 'No folder chosen.'; return; }
       }
       await api('/api/build', { project: path });
@@ -1333,6 +1420,28 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     $('#ask-hint').textContent = 'Browser results use node-name matching and graph traversal; verify source code.';
   }
   buildButton.addEventListener('click', () => serverToken ? buildProject() : showServerInstructions());
+  $('#agent-build').addEventListener('click', async () => {
+    if (!serverToken) { showServerInstructions(); return; }
+    if (!state.projectPath) { $('#ask-hint').textContent = 'Open a project first.'; return; }
+    if (!$('#agent-model').value) { await checkAgent(); if (!$('#agent-model').value) return; }
+    setBuilding('Starting AI graph…');
+    try {
+      await api('/api/agent/build', {project: state.projectPath, model: $('#agent-model').value});
+      $('#ask-hint').textContent = 'Generating the graph locally. Check the build status in the sidebar.';
+      watchJob();
+    } catch (error) { setBuilding(''); $('#ask-hint').textContent = error.message; }
+  });
+  $('#project-path-form').addEventListener('submit', event => {
+    event.preventDefault();
+    const path = $('#project-path').value.trim();
+    if (!path) return;
+    $('#project-path-form').classList.add('hidden');
+    buildProject(path);
+  });
+  $('#project-path-cancel').addEventListener('click', () => {
+    $('#project-path-form').classList.add('hidden');
+    $('#data-status').textContent = 'No folder chosen.';
+  });
   $('#server-setup-close').addEventListener('click', () => $('#server-setup').classList.add('hidden'));
 
   async function initServer() {

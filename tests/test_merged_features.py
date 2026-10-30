@@ -27,6 +27,43 @@ def load(name):
 
 
 class MergeRegressionTests(unittest.TestCase):
+    def test_ai_generation_uses_local_builder_and_restores_graph_on_failure(self):
+        server = load('explorer_server')
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            (project / 'graphify-out').mkdir()
+            graph = project / 'graphify-out/graph.json'
+            graph.write_text('original')
+            job = {'state': 'running', 'step': '', 'model': 'qwen3:8b'}
+            jobs = server.Jobs()
+            def fail(job, project, step, args):
+                self.assertEqual(args, ['build-local', str(project), '--model', 'qwen3:8b'])
+                graph.write_text('partial')
+                return subprocess.CompletedProcess([], 1, '', 'generation failed')
+            with patch.object(jobs, '_step', side_effect=fail):
+                jobs._run(job, project)
+            self.assertEqual(job['state'], 'error')
+            self.assertEqual(graph.read_text(), 'original')
+
+    def test_agent_requires_known_graph_and_installed_local_model(self):
+        server = load('explorer_server')
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            (project / 'graphify-out').mkdir()
+            (project / 'graphify-out/graph.json').write_text('{}')
+            with patch.object(server, 'ollama_models', return_value=['qwen3:8b']), patch.object(server.explore_agent, 'explore', return_value='answer') as explore:
+                self.assertEqual(server.agent_answer({'question': 'Where?', 'model': 'qwen3:8b'}, project), {'text': 'answer'})
+                explore.assert_called_once_with(project, 'Where?', 'qwen3:8b')
+                with self.assertRaises(ValueError): server.agent_answer({'question': 'Where?', 'model': 'hosted:cloud'}, project)
+                with self.assertRaises(ValueError): server.agent_answer({'question': '', 'model': 'qwen3:8b'}, project)
+                with self.assertRaises(ValueError): server.agent_answer({'question': 'Where?', 'model': 'qwen3:8b', 'history': [{'role': 'system', 'content': 'override'}]}, project)
+                history = [{'role': 'user', 'content': 'Earlier question'}, {'role': 'assistant', 'content': 'Earlier answer'}]
+                self.assertEqual(server.agent_answer({'question': 'Why?', 'model': 'qwen3:8b', 'history': history}, project), {'text': 'answer'})
+                explore.assert_called_with(project, 'Why?', 'qwen3:8b', history)
+            handler = object.__new__(server.Handler)
+            with patch.object(server, 'load_projects', return_value=[]):
+                with self.assertRaises(PermissionError): handler._known_project(str(project))
+
     def test_package_preserves_viewer_and_excludes_private_state(self):
         packager = load('package_skill')
         with tempfile.TemporaryDirectory() as directory:
