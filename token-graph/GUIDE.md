@@ -87,12 +87,12 @@ Filters decide what is shown and what answers draw from; views decide how the re
 
 Click a node, then use the buttons under its name in the details panel.
 
-- **Open in VS Code** — opens the file at the node's line. The browser may ask once whether to open Visual Studio Code; allow it.
-- **Open in Rider** — same, for JetBrains Rider. If Rider is not installed, the button reads "not installed"; it starts working by itself once Rider is installed.
+- **Open in VS Code** — opens the file at the node's line. In the standalone viewer, the browser asks once for the absolute project folder path because browsers hide it when you select a folder; the path is saved in this browser. Shift-click **Open in VS Code** later to change it. Allow the browser to launch Visual Studio Code if prompted. With the local server, it opens directly.
+- **Open in Rider** — opens through the local server. If Rider is not installed, the button reads "not installed"; it starts working by itself once Rider is installed.
 - **Copy for Claude** — copies a short text block: node name and kind, `file:line`, community and folder, up to 60 connections with direction, and the source lines shown in the panel. Paste it into Claude instead of whole files.
 - **Source content** — the panel shows about 30 lines around the node, read from the file on disk.
 
-The buttons only open files inside a project in the explorer's list; anything else is refused.
+The local server only opens files inside a project in the explorer's list. The standalone VS Code link only accepts a relative source path from the graph and joins it to the project folder path you entered.
 
 ## Keeping graphs fresh
 

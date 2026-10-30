@@ -642,11 +642,12 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     if (!node) { panel.innerHTML = '<div class="details-empty"><div class="detail-orbit">◎</div><h2>Explore the graph</h2><p>Pick any node to inspect its source, community, and nearby connections.</p></div>'; return; }
     const kind = node.file_type === 'document' ? 'DOC' : node.file_type === 'code' ? 'CODE' : String(node.file_type || 'NODE').toUpperCase();
     const neighbors = (state.adjacency.get(node.id) || []).map(edge => ({ ...edge, node: state.nodeById.get(edge.nodeId) })).filter(edge => edge.node).slice(0, 18);
-    const canOpen = Boolean(serverToken && state.projectPath && node.source_file);
     const editorButton = (editor, name) => {
-      const ready = canOpen && state.editors[editor];
-      const why = !canOpen ? 'Available when opened from the Token Graph desktop shortcut' : !state.editors[editor] ? `${name} is not installed on this computer` : `Open ${node.source_file} at this line in ${name}`;
-      return `<button data-open="${editor}" ${ready ? '' : 'disabled'} title="${escapeHtml(why)}">Open in ${name}${state.editors[editor] || !canOpen ? '' : ' (not installed)'}</button>`;
+      const localVscode = !serverToken && editor === 'vscode' && Boolean(node.source_file);
+      const serverReady = Boolean(serverToken && state.projectPath && state.editors[editor] && node.source_file);
+      const ready = localVscode || serverReady;
+      const why = localVscode ? 'Open this source file in VS Code; the browser will ask for the project folder path once. Shift-click to change it later.' : !serverToken ? 'Open this editor through the local Token Graph server' : !state.projectPath ? 'Open a project graph first' : !state.editors[editor] ? `${name} is not installed on this computer` : `Open ${node.source_file} at this line in ${name}`;
+      return `<button data-open="${editor}" ${ready ? '' : 'disabled'} title="${escapeHtml(why)}">Open in ${name}${serverToken && state.projectPath && !state.editors[editor] ? ' (not installed)' : ''}</button>`;
     };
     panel.innerHTML = `<div class="detail-header"><span class="node-kind ${kind === 'DOC' ? 'doc' : ''}">${kind}</span><strong class="detail-title">${escapeHtml(node.label)}</strong><button class="detail-close" aria-label="Close node details">×</button></div>
       <div class="detail-actions"><button data-focus title="Show only this node and its neighbours (double-click a node does the same)">${state.focus?.id === node.id ? 'Focused' : 'Focus here'}</button><button data-copy title="Copy this node, its connections and the visible source lines as short text to paste into an assistant">Copy context</button>${node.source_file ? editorButton('vscode', 'VS Code') + editorButton('rider', 'Rider') : ''}</div>
@@ -664,11 +665,16 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       button.textContent = await copyText(nodeContext(node)) ? 'Copied ✓' : 'Copy failed';
       setTimeout(() => { button.textContent = 'Copy context'; }, 1500);
     });
-    panel.querySelectorAll('[data-open]').forEach(button => button.addEventListener('click', async () => {
+    panel.querySelectorAll('[data-open]').forEach(button => button.addEventListener('click', async event => {
       const label = button.textContent;
       button.disabled = true;
       try {
-        await api('/api/open', { editor: button.dataset.open, project: state.projectPath, file: node.source_file, line: node.source_location || '' });
+        if (!serverToken && button.dataset.open === 'vscode') {
+          openInVSCode(node, event.shiftKey);
+          $('#data-status').textContent = 'If your browser asks, allow it to open Visual Studio Code. Shift-click to change the saved project path.';
+        } else {
+          await api('/api/open', { editor: button.dataset.open, project: state.projectPath, file: node.source_file, line: node.source_location || '' });
+        }
         button.textContent = 'Opened ✓';
       } catch (error) {
         button.textContent = label;
@@ -708,6 +714,34 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       }
     }
   }
+  function openInVSCode(node, changePath = false) {
+    const source = String(node.source_file || '').replace(/\\/g, '/').replace(/^\.\//, '');
+    const parts = source.split('/');
+    const unsafe = !source || source.startsWith('/') || /^[a-z]:/i.test(source) || parts.includes('..') || parts.some(part => /^(\.git|\.env(?:\..*)?|id_rsa|id_ed25519|credentials(?:\..*)?)$/i.test(part)) || /\.(pem|key|p12|pfx)$/i.test(source);
+    if (unsafe) throw new Error('This graph entry does not point to a safe project source file.');
+    let root = '';
+    try { root = changePath ? '' : localStorage.getItem(state.editorRootKey) || ''; } catch (_) { /* Ask again if local storage is unavailable. */ }
+    if (!root) {
+      root = window.prompt('Enter the absolute path to this project folder. The browser hides this path when you select a folder; Token Graph will remember it in this browser.');
+      if (!root) throw new Error('Project folder path was not provided.');
+      root = root.trim().replace(/[\\/]+$/, '');
+      if (!root || !(/^(?:[a-z]:[\\/]|\\\\|\/)/i.test(root))) throw new Error('Enter an absolute project folder path, such as /Users/name/Projects/my-project.');
+      try { localStorage.setItem(state.editorRootKey, root); } catch (_) { /* The path can still be used for this click. */ }
+    }
+    let fullPath = root.replace(/\\/g, '/');
+    if (!fullPath.endsWith('/')) fullPath += '/';
+    fullPath += source;
+    const location = String(node.source_location || '').split(':').pop();
+    const line = Math.max(1, Number(location.match(/\d+/)?.[0]) || 1);
+    const target = `vscode://file${encodeURI(fullPath).replace(/#/g, '%23').replace(/\?/g, '%3F')}:${line}`;
+    const link = document.createElement('a');
+    link.href = target;
+    link.rel = 'noopener';
+    document.body.append(link);
+    link.click();
+    link.remove();
+  }
+
   function select(node) { state.selected = node || null; renderDetails(state.selected); draw(); }
 
   // "Copy context": the node, its connections and the loaded source lines, as compact text.
@@ -873,6 +907,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       }
     }
     state.projectPath = entry.path || null;
+    state.editorRootKey = `tokenGraph.vscodeRoot.${hashString(`${entry.name}|${entry.sourceRoot || ''}`)}`;
     state.localSource = entry.folderFiles ? {files: entry.folderFiles, root: entry.sourceRoot} : null;
     state.activeCommunity = null; state.selected = null; state.hovered = null;
     state.query = ''; $('#search').value = '';

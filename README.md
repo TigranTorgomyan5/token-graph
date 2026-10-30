@@ -29,7 +29,7 @@ Read the [user guide](token-graph/README.md), [installation details](token-graph
 
 Open [index.html](index.html) locally in a browser. Choose your Projects folder to discover existing `graphify-out/graph.json` files and switch projects. The default 3D view supports drag-to-rotate, Shift-drag/right-drag to pan, scrolling to zoom, node selection and focus. A 2D toggle is also available. Existing Graphify graphs remain compatible.
 
-The standalone viewer includes Question, Path and Impact controls that search and traverse the loaded graph in your browser. These results use simple name matching and graph relationships and can differ from the full engine. Select a Projects folder to preview source files when inspecting nodes.
+The standalone viewer includes Question, Path and Impact controls that search and traverse the loaded graph in your browser. These results use simple name matching and graph relationships and can differ from the full engine. Select a Projects folder to preview source files when inspecting nodes. **Open in VS Code** prompts once for each project’s full folder path, then opens the selected source file at its graph line; the local server opens files directly.
 
 For building, updating, freshness checks and full engine queries from the viewer, start the optional loopback server:
 
