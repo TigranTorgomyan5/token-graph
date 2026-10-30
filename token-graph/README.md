@@ -78,11 +78,15 @@ The viewer finds existing `graphify-out/graph.json` files, including graphs crea
 
 Search nodes by name or source file. Click a node to inspect its details and connections. **3D is the default view.** Drag to rotate, Shift-drag or right-drag to pan, and scroll to zoom. Use the **2D** button for the flat map. Use the communities list to focus on a group of related code.
 
-Files are read locally by the browser. After a graph changes on disk, reselect its folder or JSON file to load the latest data. Loaded selections last for the current page session; reloading or closing the page clears them.
+Files are read locally by the browser. When a Projects folder is selected, clicking a node loads a short source preview on demand; common credential and private-key files are excluded. After a graph changes on disk, reselect its folder or JSON file to load the latest data. Loaded selections last for the current page session; reloading or closing the page clears them.
+
+## Ask about a loaded graph
+
+The **Question**, **Path A → B**, and **Impact** controls are available directly in the file-based viewer. They search the loaded JSON locally using node-name matching and graph traversal, then highlight matching nodes. Browser results can differ from the bundled engine's ranking; treat them as navigation hints and verify the source. The hide-tests and hide-generated toggles apply to these answers.
 
 ## Optional local server
 
-The viewer also supports building/updating graphs, graph questions with highlighted answers, source previews, freshness checks and diffs through a local server:
+The viewer also supports building/updating graphs, full engine-backed graph questions, source previews, freshness checks and diffs through a local server:
 
 ```sh
 python3 /path/to/token-graph/scripts/explorer_server.py --no-browser

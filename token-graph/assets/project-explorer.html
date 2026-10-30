@@ -73,7 +73,15 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       .topbar-button{border:1px solid #2c3953;border-radius:999px;background:#111a2d;color:#cfd6e6;font:11px var(--sans);padding:6px 11px;cursor:pointer}
       .topbar-button:hover{background:#18213a}
       .graph-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;padding:28px;text-align:center;background:#0b1120e8;color:#d9e1f0}.graph-empty strong{font-size:16px}.graph-empty p{max-width:420px;color:#95a3ba;line-height:1.6;margin:0}.graph-empty button{padding:9px 14px;cursor:pointer}
-      .toolbar-right{flex-wrap:wrap;justify-content:flex-end}.graph-toolbar{height:auto;min-height:46px;gap:8px;padding-top:8px;padding-bottom:8px}.canvas-wrap canvas{touch-action:none}.canvas-hint{max-width:calc(100% - 28px);line-height:1.6}
+      .server-setup{position:relative;margin:16px 0;padding:14px 40px 14px 16px;border:1px solid #35415a;border-radius:9px;background:#141e31;color:#dfe6f4}.server-setup p{color:#aab8cd;line-height:1.5}.server-setup label{display:block;margin-top:10px;font-weight:600}.server-setup code{display:block;margin-top:5px;padding:8px;border-radius:5px;background:#0b1120;color:#c4baff;font:11px/1.5 var(--mono);overflow-wrap:anywhere}.server-setup-close{position:absolute;right:10px;top:8px;background:none;border:0;color:#b9c4d6;font-size:20px;cursor:pointer}
+      .topbar{height:auto;min-height:91px;gap:10px;padding:12px 0;flex-wrap:wrap}.topbar>div:first-child{flex:1 1 200px;min-width:0}.topbar-actions{flex-wrap:wrap;min-width:0}.stale-chip{text-align:left;white-space:normal}
+      .graph-toolbar{height:auto;min-height:46px;gap:8px;padding-top:8px;padding-bottom:8px;flex-wrap:wrap}
+      .graph-title{flex:1 1 210px;min-width:0;flex-wrap:wrap}.graph-title strong,.graph-title .help-button{white-space:nowrap}
+      .toolbar-right{flex:2 1 390px;min-width:0;flex-wrap:wrap;justify-content:flex-start;gap:8px}
+      .toolbar-right .view-toggle,.toolbar-right .filter-toggle{flex:0 0 auto}.filter-toggle,.legend{flex-wrap:wrap}
+      .canvas-wrap canvas{touch-action:none}.canvas-hint{max-width:calc(100% - 28px);line-height:1.6}
+      @media(max-width:700px){.sidebar-section{display:flex}.community-list{max-height:180px}.graph-title,.toolbar-right{width:100%}}
+
     </style>
   </head>
   <body>
@@ -121,6 +129,14 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
           <div class="topbar-actions"><button type="button" class="stale-chip hidden" id="stale-chip"></button><button type="button" class="topbar-button hidden" id="diff-button" title="What was added, removed or re-connected in the graph by the last build or update">Changes since last build</button><span class="snapshot" id="snapshot">Graph snapshot</span><button class="icon-button" id="reset-view" title="Reset view" aria-label="Reset view">⟲</button></div>
         </header>
 
+        <section class="server-setup hidden" id="server-setup" aria-label="Enable project tools">
+          <button type="button" class="server-setup-close" id="server-setup-close" aria-label="Close">×</button>
+          <strong>Enable build, update, and change tracking</strong>
+          <p>Run the command for your installed skill, open the address it prints, then choose your project. The server stays on your computer.</p>
+          <label>Codex <code id="server-command-codex">python3 "$HOME/.codex/skills/token-graph/scripts/explorer_server.py" --no-browser</code></label>
+          <label>Claude Code <code id="server-command-claude">python3 "$HOME/.claude/skills/token-graph/scripts/explorer_server.py" --no-browser</code></label>
+        </section>
+
         <section class="overview" aria-label="Graph summary">
           <article class="metric-card"><span class="metric-icon indigo">◉</span><div><div class="metric-label">NODES</div><strong id="node-total">—</strong></div><span class="metric-note">code + docs</span></article>
           <article class="metric-card"><span class="metric-icon cyan">⤢</span><div><div class="metric-label">CONNECTIONS</div><strong id="edge-total">—</strong></div><span class="metric-note">relationships</span></article>
@@ -144,7 +160,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
             </div>
             <div class="ask-input-wrap"><input class="ask-input" id="ask-a" list="ask-nodes" autocomplete="off" spellcheck="false" placeholder="e.g. how is partial cashout executed" /><button type="button" class="ask-pick hidden" id="ask-a-pick" title="Use the selected node">◎</button></div>
             <div class="ask-input-wrap hidden" id="ask-b-wrap"><input class="ask-input" id="ask-b" list="ask-nodes" autocomplete="off" spellcheck="false" placeholder="To: class, method or file" /><button type="button" class="ask-pick" id="ask-b-pick" title="Use the selected node">◎</button></div>
-            <select class="ask-depth" id="ask-budget" title="Answer size in estimated tokens. Smaller is cheaper to paste into Claude; raise it when the answer says TRUNCATED and lacks what you need."><option value="400">~400 tokens</option><option value="800" selected>~800 tokens</option><option value="1500">~1,500 tokens</option><option value="3000">~3,000 tokens</option></select>
+            <select class="ask-depth" id="ask-budget" title="Estimated answer size; increase it when the result is truncated."><option value="400">~400 tokens</option><option value="800" selected>~800 tokens</option><option value="1500">~1,500 tokens</option><option value="3000">~3,000 tokens</option></select>
             <select class="ask-depth hidden" id="ask-depth" title="How many steps of dependants to follow"><option value="1">1 step</option><option value="2" selected>2 steps</option><option value="3">3 steps</option></select>
             <button type="button" class="ask-go" id="ask-go">Ask</button>
           </div>
@@ -309,15 +325,24 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
   function normalizeGraph(raw) {
     const edges = raw?.links ?? raw?.edges;
     if (!raw || !Array.isArray(raw.nodes) || !Array.isArray(edges)) throw new Error('This file is not a Token Graph graph export. It must include nodes and links or edges.');
-    state.nodes = raw.nodes.map((node) => tagNode({ ...node, x: 0, y: 0 }));
+    if (raw.nodes.some(node => !node || node.id == null)) throw new Error('Each graph node needs an id.');
+    state.nodes = raw.nodes.map(node => tagNode({ ...node, id: String(node.id), x: 0, y: 0 }));
     state.focus = null;
     $('#focus-bar').classList.add('hidden');
     state.highlight = null; state.highlightOnly = false;
     $('#ask-result').classList.add('hidden');
-    state.links = edges.filter((link) => link.source != null && link.target != null);
+    const edgeId = value => typeof value === 'object' && value !== null ? value.id : value;
+    state.links = edges.filter(link => link && edgeId(link.source) != null && edgeId(link.target) != null).map(link => ({...link, source:String(edgeId(link.source)), target:String(edgeId(link.target)), ...(link._src != null ? {_src:String(edgeId(link._src))} : {}), ...(link._tgt != null ? {_tgt:String(edgeId(link._tgt))} : {})}));
     state.nodeById = new Map(state.nodes.map((node) => [node.id, node]));
+    state.outgoing = new Map(state.nodes.map(node => [node.id, []]));
+    state.incoming = new Map(state.nodes.map(node => [node.id, []]));
     state.adjacency = new Map(state.nodes.map((node) => [node.id, []]));
     for (const link of state.links) {
+      const source = link._src ?? link.source, target = link._tgt ?? link.target;
+      if (state.outgoing.has(source) && state.incoming.has(target)) {
+        state.outgoing.get(source).push({nodeId: target, relation: link.relation});
+        state.incoming.get(target).push({nodeId: source, relation: link.relation});
+      }
       if (state.adjacency.has(link.source)) state.adjacency.get(link.source).push({ nodeId: link.target, relation: link.relation });
       if (state.adjacency.has(link.target)) state.adjacency.get(link.target).push({ nodeId: link.source, relation: link.relation });
     }
@@ -624,12 +649,12 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       return `<button data-open="${editor}" ${ready ? '' : 'disabled'} title="${escapeHtml(why)}">Open in ${name}${state.editors[editor] || !canOpen ? '' : ' (not installed)'}</button>`;
     };
     panel.innerHTML = `<div class="detail-header"><span class="node-kind ${kind === 'DOC' ? 'doc' : ''}">${kind}</span><strong class="detail-title">${escapeHtml(node.label)}</strong><button class="detail-close" aria-label="Close node details">×</button></div>
-      <div class="detail-actions"><button data-focus title="Show only this node and its neighbours (double-click a node does the same)">${state.focus?.id === node.id ? 'Focused' : 'Focus here'}</button><button data-copy title="Copy this node, its connections and the visible source lines as short text to paste into Claude">Copy for Claude</button>${node.source_file ? editorButton('vscode', 'VS Code') + editorButton('rider', 'Rider') : ''}</div>
+      <div class="detail-actions"><button data-focus title="Show only this node and its neighbours (double-click a node does the same)">${state.focus?.id === node.id ? 'Focused' : 'Focus here'}</button><button data-copy title="Copy this node, its connections and the visible source lines as short text to paste into an assistant">Copy context</button>${node.source_file ? editorButton('vscode', 'VS Code') + editorButton('rider', 'Rider') : ''}</div>
       <div class="detail-label">SOURCE FILE</div><div class="detail-value detail-code">${escapeHtml(node.source_file || 'External / unavailable')}</div>
       ${node.source_location ? `<div class="detail-label">LOCATION</div><div class="detail-value">${escapeHtml(node.source_location)}</div>` : ''}
       <div class="detail-label">COMMUNITY</div><div class="detail-value">${escapeHtml(node.community_name || 'Unassigned')}</div>
       ${node.description || node.rationale ? `<div class="detail-label">${node.description ? 'DESCRIPTION' : 'RATIONALE'}</div><div class="detail-value node-description">${escapeHtml(node.description || node.rationale)}</div>` : ''}
-      <div class="detail-label">SOURCE CONTENT</div><pre class="source-excerpt" id="source-excerpt">${node.source_file ? 'Source excerpts are not embedded in this standalone HTML.' : 'No source file is attached to this node.'}</pre>
+      <div class="detail-label">SOURCE CONTENT</div><pre class="source-excerpt" id="source-excerpt">${node.source_file ? 'Choose the Projects folder or use the local server to preview source.' : 'No source file is attached to this node.'}</pre>
       <div class="detail-label">CONNECTED NODES <span class="muted">(${(state.adjacency.get(node.id) || []).length})</span></div>
       <div class="connection-list">${neighbors.length ? neighbors.map(edge => `<button class="detail-connection" data-node="${escapeHtml(edge.node.id)}"><span class="relation">${escapeHtml(edge.relation || 'links')}</span><span class="neighbor">${escapeHtml(edge.node.label)}</span></button>`).join('') : '<div class="empty-result">No indexed connections.</div>'}</div>`;
     panel.querySelector('.detail-close').addEventListener('click', () => select(null));
@@ -637,7 +662,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     panel.querySelector('[data-copy]').addEventListener('click', async event => {
       const button = event.currentTarget;
       button.textContent = await copyText(nodeContext(node)) ? 'Copied ✓' : 'Copy failed';
-      setTimeout(() => { button.textContent = 'Copy for Claude'; }, 1500);
+      setTimeout(() => { button.textContent = 'Copy context'; }, 1500);
     });
     panel.querySelectorAll('[data-open]').forEach(button => button.addEventListener('click', async () => {
       const label = button.textContent;
@@ -653,7 +678,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       setTimeout(() => { button.textContent = label; button.disabled = false; }, 1500);
     }));
     panel.querySelectorAll('[data-node]').forEach(button => button.addEventListener('click', () => select(state.nodeById.get(button.dataset.node))));
-    if (node.source_file && !window.GRAPHIFY_DATA && location.protocol !== 'file:') {
+    if (node.source_file && serverToken && state.projectPath) {
       const sourceUrl = `/api/source?file=${encodeURIComponent(node.source_file)}&line=${encodeURIComponent(node.source_location || '')}&project=${encodeURIComponent(state.projectPath || '')}`;
       fetch(sourceUrl, { headers: { 'X-Token-Graph': serverToken || '' } }).then(response => { if (!response.ok) throw new Error('Source excerpt unavailable'); return response.json(); }).then(source => {
         if (state.selected?.id !== node.id) return;
@@ -662,11 +687,30 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       }).catch(() => {
         if (state.selected?.id === node.id && $('#source-excerpt')) $('#source-excerpt').textContent = 'Source content could not be loaded.';
       });
+    } else if (node.source_file && state.localSource) {
+      const fileName = String(node.source_file).replace(/\\/g, '/').replace(/^\.\//, '');
+      const parts = fileName.split('/');
+      const unsafe = !fileName || fileName.startsWith('/') || /^[a-z]:/i.test(fileName) || parts.includes('..') || parts.some(part => /^(\.git|\.env(?:\..*)?|id_rsa|id_ed25519|credentials(?:\..*)?)$/i.test(part)) || /\.(pem|key|p12|pfx)$/i.test(fileName);
+      const file = unsafe ? null : state.localSource.files.get(state.localSource.root + fileName);
+      if (!file || file.size > 2000000) {
+        $('#source-excerpt').textContent = 'Source preview unavailable for this file.';
+      } else {
+        file.text().then(text => {
+          if (state.selected !== node) return;
+          const location = String(node.source_location || '').split(':').pop();
+          const line = Math.max(1, Number(location.match(/\d+/)?.[0]) || 1);
+          const start = Math.max(1, line - 3);
+          const lines = text.split(/\r?\n/).slice(start-1, start+28);
+          $('#source-excerpt').textContent = lines.map((value,index) => `${String(start+index).padStart(4,' ')}  ${value}`).join('\n') || '(empty file)';
+        }).catch(() => {
+          if (state.selected === node) $('#source-excerpt').textContent = 'Source content could not be loaded. Reselect the Projects folder.';
+        });
+      }
     }
   }
   function select(node) { state.selected = node || null; renderDetails(state.selected); draw(); }
 
-  // "Copy for Claude": the node, its connections and the loaded source lines, as compact text.
+  // "Copy context": the node, its connections and the loaded source lines, as compact text.
   function nodeContext(node) {
     const where = node.source_file ? `${node.source_file}${node.source_location ? ':' + node.source_location : ''}` : 'no source file';
     const lines = [
@@ -729,7 +773,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     state[key] = on;
     store(`tokenGraph.${key}`, on);
     $(buttonId).setAttribute('aria-pressed', String(on));
-    $('#ask-hint').textContent = `Answers come from this project’s graph on your computer. ${askScopeNote()}`;
+    $('#ask-hint').textContent = answerHint();
     if (state.selected && !visible(state.selected)) select(null);
     updateMetrics({});
     renderCommunityList();
@@ -791,12 +835,12 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
   });
   $('#search').addEventListener('keydown', event => { if (event.key === 'Enter') { const node = state.nodes.find(n => visible(n)); if (node) { select(node); centerNode(node); draw(); } } if (event.key === 'Escape') { event.target.value = ''; state.query = ''; draw(); } });
   document.addEventListener('keydown', event => { if (event.key === '/' && !['INPUT','TEXTAREA'].includes(document.activeElement.tagName)) { event.preventDefault(); $('#search').focus(); } });
-  $('#original-source').addEventListener('click', () => loadLocalGraph());
+  $('#original-source').addEventListener('click', () => serverToken ? loadLocalGraph() : showServerInstructions());
   const loadedGraphs = new Map();
   let graphSequence = 0;
 
   // raw may be null for a server project; switchGraph then fetches it on first view.
-  function addGraph(raw, name, path = null) {
+  function addGraph(raw, name, path = null, folderFiles = null, sourceRoot = '') {
     if (raw !== null && (!raw || !Array.isArray(raw.nodes) || !Array.isArray(raw.links ?? raw.edges))) {
       throw new Error(`${name}: expected a graph JSON with nodes and links or edges.`);
     }
@@ -806,7 +850,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       }
     }
     const id = String(++graphSequence);
-    loadedGraphs.set(id, { raw, name, path });
+    loadedGraphs.set(id, { raw, name, path, folderFiles, sourceRoot });
     const option = document.createElement('option');
     option.value = id;
     option.textContent = name;
@@ -829,6 +873,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       }
     }
     state.projectPath = entry.path || null;
+    state.localSource = entry.folderFiles ? {files: entry.folderFiles, root: entry.sourceRoot} : null;
     state.activeCommunity = null; state.selected = null; state.hovered = null;
     state.query = ''; $('#search').value = '';
     renderDetails(null);
@@ -839,7 +884,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     $('#graph-source-note').textContent = `Viewing ${entry.name}. ${loadedGraphs.size} graph(s) loaded in this tab. Data stays in this browser.`;
     const project = document.querySelector('#project-name');
     if (project) project.textContent = entry.name;
-    $('#diff-button').classList.toggle('hidden', !(serverToken && state.projectPath));
+    $('#diff-button').classList.remove('hidden');
     checkStale();
   }
 
@@ -866,14 +911,14 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
         if (!raw.benchmark && !raw.graph?.benchmark && benchmarkFile) {
           try { raw.benchmark = JSON.parse(await benchmarkFile.text()); } catch (_) { /* Graph remains usable without benchmark. */ }
         }
-        entries.push({ raw, project });
+        entries.push({ raw, project, sourceRoot: path.slice(0, -'graphify-out/graph.json'.length) });
       } catch (error) { errors.push(`${project}: ${error.message}`); }
     }
     if (entries.length) {
       loadedGraphs.clear();
       $('#graph-selector').replaceChildren();
       for (const entry of entries) {
-        const id = addGraph(entry.raw, entry.project);
+        const id = addGraph(entry.raw, entry.project, null, byPath, entry.sourceRoot);
         firstId ||= id;
       }
       switchGraph(firstId);
@@ -946,6 +991,10 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     return skipped.length ? `Answers skip ${skipped.join(' and ')} (Hide buttons above the graph).` : 'Answers include tests and generated code.';
   }
 
+  function answerHint() {
+    return `${serverToken && state.projectPath ? 'Answers come from the local graph engine.' : 'Browser results use node-name matching and graph traversal; verify source code.'} ${askScopeNote()}`;
+  }
+
   // Suggest node ids while typing a name; a picked suggestion sends the exact id, so it is never ambiguous.
   function suggestNodes(text) {
     const list = $('#ask-nodes');
@@ -1003,16 +1052,89 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     if (state.highlight) fitGraph(new Set(nodes.keys())); else draw();
   }
 
+  function showServerInstructions() {
+    const windows = /^win/i.test(navigator.userAgentData?.platform || navigator.platform || '');
+    for (const name of ['codex','claude']) {
+      $('#server-command-'+name).textContent = windows
+        ? `python "$env:USERPROFILE\\.${name}\\skills\\token-graph\\scripts\\explorer_server.py" --no-browser`
+        : `python3 "$HOME/.${name}/skills/token-graph/scripts/explorer_server.py" --no-browser`;
+    }
+    $('#server-setup').classList.remove('hidden');
+    $('#server-setup').scrollIntoView?.({behavior:'smooth', block:'nearest'});
+  }
+
+  // File-mode queries use the loaded graph only; this is a small, deterministic
+  // name-matching/traversal fallback, not the bundled Python engine's ranking.
+  function browserAsk(request) {
+    const eligible = node => node && !(state.hideTests && node._test) && !(state.hideGenerated && node._generated);
+    const describe = node => `${node.label || node.id} [${node.source_file || 'no file'}${node.source_location ? ':' + node.source_location : ''}]`;
+    const resolve = (query, role) => {
+      const value = String(query || '').trim().toLowerCase();
+      if (!value) return {error: `Enter ${role === 'target' ? 'a destination' : 'a node name'}.`, ambiguous: null};
+      const candidates = state.nodes.filter(eligible);
+      const clean = text => String(text || '').toLowerCase().replace(/\(\)$/, '');
+      let matches = candidates.filter(n => String(n.id).toLowerCase() === value);
+      if (!matches.length) matches = candidates.filter(n => clean(n.label) === clean(value));
+      if (!matches.length) matches = candidates.filter(n => String(n.source_file || '').toLowerCase() === value);
+      if (!matches.length) matches = candidates.filter(n => clean(n.label).includes(clean(value)));
+      if (!matches.length) return {error:`No node matches '${query}'.`, ambiguous:null};
+      if (matches.length > 1) return {error:`Ambiguous name '${query}':\n` + matches.slice(0,25).map(n => `  ${describe(n)}\n    id: ${n.id}`).join('\n'), ambiguous:role};
+      return {node: matches[0]};
+    };
+    const neighbors = (id, mode) => {
+      const edges = mode === 'directed' ? [...(state.outgoing.get(id) || []), ...(state.incoming.get(id) || []).filter(e => e.relation === 'contains')] : state.adjacency.get(id) || [];
+      return edges.filter(e => eligible(state.nodeById.get(e.nodeId)));
+    };
+    if (request.mode === 'query') {
+      const stop = new Set(['how','what','where','which','the','and','are','does','with','from','for','this','that','code','flow']);
+      const terms = (String(request.a || '').toLowerCase().match(/[a-z0-9_]+/g) || []).filter(t => t.length > 1 && !stop.has(t));
+      if (!terms.length) return {text:'Enter a class, function, file name or specific keywords.',nodes:{},seeds:[]};
+      const rank = node => { const label=String(node.label||'').toLowerCase(), file=String(node.source_file||'').toLowerCase(), id=String(node.id).toLowerCase(); return terms.reduce((n,t)=>n+(label.includes(t)?4:0)+(id.includes(t)?2:0)+(file.includes(t)?1:0),0); };
+      const seeds=state.nodes.filter(eligible).map(n=>({node:n,score:rank(n)})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,3).map(x=>x.node.id);
+      if (!seeds.length) return {text:'No matching nodes found. Try a class, function or file name.',nodes:{},seeds:[]};
+      const levels=new Map(seeds.map(id=>[id,0])), queue=[...seeds];
+      for (let i=0;i<queue.length;i++) {const id=queue[i],level=levels.get(id);if(level>=2)continue;for(const edge of neighbors(id,'any'))if(!levels.has(edge.nodeId)){levels.set(edge.nodeId,level+1);queue.push(edge.nodeId);}}
+      const maxChars=Math.max(100,Number(request.budget)||800)*4;
+      const lines=['Browser graph search (name matching; verify source code):']; const shown={}; let used=lines[0].length, truncated=false;
+      for (const id of queue) {const n=state.nodeById.get(id),line=`NODE ${describe(n)} · id: ${id}`;if(used+line.length+1>maxChars){truncated=true;break;}lines.push(line);shown[id]=levels.get(id);used+=line.length+1;}
+      const shownIds=new Set(Object.keys(shown));
+      for(const edge of state.links){if(!shownIds.has(String(edge.source))||!shownIds.has(String(edge.target)))continue;const a=state.nodeById.get(edge.source),b=state.nodeById.get(edge.target),line=`EDGE ${a?.label||edge.source} --${edge.relation||'links'}--> ${b?.label||edge.target}`;if(used+line.length+1>maxChars){truncated=true;break;}lines.push(line);used+=line.length+1;}
+      if(truncated) lines.push('TRUNCATED: increase the answer size or narrow the question.');
+      return {text:lines.join('\n'),nodes:shown,seeds:seeds.filter(id=>Object.hasOwn(shown,id))};
+    }
+    const from=resolve(request.a,request.mode==='path'?'source':'node');
+    if(from.error)return {text:from.error,nodes:{},seeds:[],ambiguous:from.ambiguous};
+    if(request.mode==='path') {
+      const to=resolve(request.b,'target');if(to.error)return {text:to.error,nodes:{},seeds:[],ambiguous:to.ambiguous};
+      if(from.node.id===to.node.id)return {text:'Both names refer to the same node.',nodes:{},seeds:[]};
+      const findRoute=mode=>{const seen=new Map([[from.node.id,null]]),q=[from.node.id];for(let i=0;i<q.length;i++){const id=q[i],level=seen.get(id)?.depth||0;if(level>=12)continue;for(const edge of neighbors(id,mode)){if(seen.has(edge.nodeId))continue;seen.set(edge.nodeId,{previous:id,depth:level+1,relation:edge.relation});if(edge.nodeId===to.node.id){const route=[edge.nodeId];while(seen.get(route[0]))route.unshift(seen.get(route[0]).previous);return {route,seen};}q.push(edge.nodeId);}}return null;};
+      let found=findRoute('directed'),undirected=false;if(!found){found=findRoute('any');undirected=true;}
+      if(!found)return {text:'No connection found within 12 steps. A missing path does not prove there is no relationship.',nodes:{},seeds:[]};
+      const lines=[undirected?'No directed path; shortest connection ignoring direction:':'Directed path:'];
+      for(let i=0;i<found.route.length;i++){const id=found.route[i];lines.push(`${i ? '  → ' : ''}${describe(state.nodeById.get(id))}${i ? ` (${found.seen.get(id).relation||'links'})` : ''}`);}
+      return {text:lines.join('\n'),nodes:Object.fromEntries(found.route.map((id,i)=>[id,i])),seeds:[from.node.id,to.node.id],route:found.route};
+    }
+    if(request.mode==='affected') {
+      const relations=new Set(['calls','indirect_call','references','imports','imports_from','dynamic_import','re_exports','inherits','extends','implements','uses','mixes_in','embeds','requires']);
+      const maxDepth=Math.min(4,Math.max(1,Number(request.depth)||2));const levels=new Map([[from.node.id,0]]),q=[from.node.id];
+      for(let i=0;i<q.length;i++){const id=q[i],level=levels.get(id);if(level>=maxDepth)continue;for(const edge of state.incoming.get(id)||[]){if(!relations.has(edge.relation)||!eligible(state.nodeById.get(edge.nodeId))||levels.has(edge.nodeId))continue;levels.set(edge.nodeId,level+1);q.push(edge.nodeId);}}
+      const lines=[`Potential dependants of ${describe(from.node)}:`];const shown=q.slice(0,501);for(const id of shown.slice(1))lines.push(`  ${levels.get(id)} step(s): ${describe(state.nodeById.get(id))}`);if(q.length===1)lines.push('No indexed dependants found. Dynamic calls and external dependencies may be missing.');else if(q.length>shown.length)lines.push(`TRUNCATED: ${q.length-shown.length} additional nodes omitted; use a narrower scope.`);
+      return {text:lines.join('\n'),nodes:Object.fromEntries(shown.map(id=>[id,levels.get(id)])),seeds:[from.node.id]};
+    }
+    return {text:'Unknown graph operation.',nodes:{},seeds:[]};
+  }
+
   async function runAsk() {
-    if (!state.projectPath) { $('#ask-hint').textContent = 'Open a project graph first.'; return; }
+    if (!state.nodes.length) { $('#ask-hint').textContent = 'Load a project graph first.'; return; }
+    if (serverToken && !state.projectPath) { $('#ask-hint').textContent = 'Open a project graph first.'; return; }
     const request = { project: state.projectPath, mode: askMode, a: $('#ask-a').value, b: $('#ask-b').value, depth: $('#ask-depth').value,
       budget: $('#ask-budget').value, hideTests: state.hideTests, hideGenerated: state.hideGenerated };
     const go = $('#ask-go');
     go.disabled = true; go.textContent = 'Asking…';
     $('#ask-hint').textContent = 'Searching the graph…';
     try {
-      showAskResult(await api('/api/ask', request));
-      $('#ask-hint').textContent = `Answers come from this project’s graph on your computer. ${askScopeNote()}`;
+      showAskResult(serverToken && state.projectPath ? await api('/api/ask', request) : browserAsk(request));
+      $('#ask-hint').textContent = answerHint();
     } catch (error) {
       $('#ask-hint').textContent = error.message;
     } finally {
@@ -1043,7 +1165,9 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
   const when = seconds => new Date(seconds * 1000).toLocaleString();
   async function checkStale() {
     const chip = $('#stale-chip');
-    if (!serverToken || !state.projectPath) { chip.classList.add('hidden'); return; }
+    if (!serverToken) { chip.textContent = 'Freshness: use local server'; chip.title = 'Open server instructions to check graph freshness.'; chip.dataset.serverHelp = '1'; chip.dataset.stale = ''; chip.classList.remove('hidden'); return; }
+    if (!state.projectPath) { chip.classList.add('hidden'); return; }
+    chip.dataset.serverHelp = '';
     try {
       const s = await api(`/api/stale?project=${encodeURIComponent(state.projectPath)}`);
       const n = s.changed + s.deleted;
@@ -1054,10 +1178,11 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       chip.classList.remove('hidden');
     } catch (_) { chip.classList.add('hidden'); }
   }
-  $('#stale-chip').addEventListener('click', () => { if ($('#stale-chip').dataset.stale && state.projectPath) buildProject(state.projectPath); });
+  $('#stale-chip').addEventListener('click', () => { if ($('#stale-chip').dataset.serverHelp) showServerInstructions(); else if ($('#stale-chip').dataset.stale && state.projectPath) buildProject(state.projectPath); });
 
   async function showDiff() {
-    if (!state.projectPath) return;
+    if (!serverToken) { showServerInstructions(); return; }
+    if (!state.projectPath) { showAskResult({text:'Load a project through the local server to compare graph versions.',nodes:{}}); return; }
     let d;
     try { d = await api(`/api/diff?project=${encodeURIComponent(state.projectPath)}`); }
     catch (error) { $('#ask-hint').textContent = error.message; return; }
@@ -1165,12 +1290,19 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     $('#data-status').textContent = 'Server stopped. Open the desktop shortcut to start it again.';
   }
 
+  buildButton.classList.remove('hidden');
+  $('#ask-panel').classList.remove('hidden');
+  if (!serverToken) {
+    buildButton.title = 'Show instructions for the local server needed to build or update graphs';
+    $('#original-source').textContent = 'Update current graph';
+    $('#ask-hint').textContent = 'Browser results use node-name matching and graph traversal; verify source code.';
+  }
+  buildButton.addEventListener('click', () => serverToken ? buildProject() : showServerInstructions());
+  $('#server-setup-close').addEventListener('click', () => $('#server-setup').classList.add('hidden'));
+
   async function initServer() {
-    buildButton.classList.remove('hidden');
-    buildButton.addEventListener('click', () => buildProject());
     $('#stop-server').classList.remove('hidden');
     $('#stop-server').addEventListener('click', stopServer);
-    $('#ask-panel').classList.remove('hidden');
     setInterval(checkStale, 60000);
     $('#original-source').textContent = 'Update current graph';
     $('#original-source').title = 'Re-scan the current project; only changed files are re-parsed';

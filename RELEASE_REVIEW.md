@@ -30,8 +30,8 @@ Dependency installation may access PyPI only when explicitly requested. Analysis
 ## Artifact
 
 - File: `token-graph.zip`
-- Size: 1,661,726 bytes
-- SHA-256: `78b189b314a213a6e69d4f7f7529786b9ef534661e1539c7dd350a4bf8943082`
+- Size: 1,669,874 bytes
+- SHA-256: `8769d96f17657ad7fe23300d8d080145c950562fe321e5607c496f0f2e19b3fa`
 - Recipient instructions: `token-graph/INSTALL.md` inside the ZIP.
 
 ## Reviewed changes merged on 2026-10-30
