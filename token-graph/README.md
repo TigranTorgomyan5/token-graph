@@ -76,7 +76,7 @@ Each project keeps its own graph. Projects are not merged unless you explicitly 
 
 The viewer finds existing `graphify-out/graph.json` files, including graphs created previously with Graphify. You can also use **Add graph JSON files** to load selected files from different locations.
 
-Search nodes by name or source file. Click a node to inspect its details and connections. Drag to pan and scroll to zoom. Use the communities list to focus on a group of related code.
+Search nodes by name or source file. Click a node to inspect its details and connections. **3D is the default view.** Drag to rotate, Shift-drag or right-drag to pan, and scroll to zoom. Use the **2D** button for the flat map. Use the communities list to focus on a group of related code.
 
 Files are read locally by the browser. After a graph changes on disk, reselect its folder or JSON file to load the latest data. Loaded selections last for the current page session; reloading or closing the page clears them.
 

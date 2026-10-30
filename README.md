@@ -1,6 +1,6 @@
 # Token Graph
 
-A local code knowledge graph skill for **Codex** and **Claude Code**, with a multi-project browser viewer.
+A local code knowledge graph skill for **Codex** and **Claude Code**, with an offline, interactive 3D multi-project viewer.
 
 Build graphs of files, classes, functions, imports and calls. Query the relevant code, trace relationships, inspect change impact, and explore projects from one place.
 
@@ -27,7 +27,7 @@ Read the [user guide](token-graph/README.md), [installation details](token-graph
 
 ## Explore projects
 
-Open [index.html](index.html) locally in a browser. Choose your Projects folder to discover existing `graphify-out/graph.json` files and switch projects. Existing Graphify graphs remain compatible.
+Open [index.html](index.html) locally in a browser. Choose your Projects folder to discover existing `graphify-out/graph.json` files and switch projects. The default 3D view supports drag-to-rotate, Shift-drag/right-drag to pan, scrolling to zoom, node selection and focus. A 2D toggle is also available. Existing Graphify graphs remain compatible.
 
 For building, updating and asking graph questions from the viewer, start the optional loopback server:
 
@@ -63,6 +63,6 @@ Codex/Claude still handles its normal conversation through its configured provid
 
 Context-reduction figures are heuristic estimates, not measured token usage or guaranteed savings. Cloud and remote database integrations are disabled. Some document/media features require optional local packages.
 
-The release has 21 passing automated tests and a local-server HTTP smoke test on macOS/Python 3.14. Native Windows/Linux validation is still outstanding. See the [review report](RELEASE_REVIEW.md) for details.
+The release has 22 passing automated tests and a local-server HTTP smoke test on macOS/Python 3.14. Native Windows/Linux validation is still outstanding. See the [review report](RELEASE_REVIEW.md) for details.
 
 The bundled engine's attribution and license files are preserved under [token-graph/vendor](token-graph/vendor).

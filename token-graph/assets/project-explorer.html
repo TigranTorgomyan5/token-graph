@@ -72,6 +72,8 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       .stale-chip.fresh{border-color:#22543f;background:#0f2a20;color:#7fdcb2;cursor:default}
       .topbar-button{border:1px solid #2c3953;border-radius:999px;background:#111a2d;color:#cfd6e6;font:11px var(--sans);padding:6px 11px;cursor:pointer}
       .topbar-button:hover{background:#18213a}
+      .graph-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;padding:28px;text-align:center;background:#0b1120e8;color:#d9e1f0}.graph-empty strong{font-size:16px}.graph-empty p{max-width:420px;color:#95a3ba;line-height:1.6;margin:0}.graph-empty button{padding:9px 14px;cursor:pointer}
+      .toolbar-right{flex-wrap:wrap;justify-content:flex-end}.graph-toolbar{height:auto;min-height:46px;gap:8px;padding-top:8px;padding-bottom:8px}.canvas-wrap canvas{touch-action:none}.canvas-hint{max-width:calc(100% - 28px);line-height:1.6}
     </style>
   </head>
   <body>
@@ -156,12 +158,13 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
         </section>
 
         <section class="graph-panel">
-          <div class="graph-toolbar"><div class="graph-title"><span class="live-dot"></span><strong id="graph-title">Relationship graph</strong><span id="visible-count" class="muted">All nodes</span><button class="help-button" id="graph-help-toggle" aria-expanded="false" aria-controls="graph-help">How to read this</button></div><div class="toolbar-right"><div class="filter-toggle" role="group" aria-label="Hide nodes"><button class="filter-button" id="hide-tests" aria-pressed="false" title="Hide test files (_test.go, *.Tests projects, tests/ folders, *.spec.ts …)">Hide tests</button><button class="filter-button" id="hide-generated" aria-pressed="false" title="Hide generated code (gen/ folders, *.pb.go, *.g.cs, *.Designer.cs, EF Migrations …)">Hide generated</button></div><div class="view-toggle" role="group" aria-label="Graph view"><button class="view-button active" id="all-view" aria-pressed="true">All graph</button><button class="view-button" id="docs-view" aria-pressed="false">Documentation</button></div><div class="legend"><span class="legend-code"><i class="legend-dot code-dot"></i>Community</span><span><i class="legend-dot doc-dot"></i>Docs</span><span><i class="legend-line"></i>Connection</span></div></div></div>
-          <div class="graph-help hidden" id="graph-help"><button class="help-close" id="graph-help-close" aria-label="Close graph guide">×</button><strong>Reading the graph</strong><p>Each dot is an indexed code symbol or documentation section. Colors group nodes by Token Graph community; documentation dots are cyan.</p><p>Lines show relationships between two visible nodes. Select a dot to see its source excerpt and connections. Drag to pan, scroll to zoom, or search for a label/file.</p></div>
+          <div class="graph-toolbar"><div class="graph-title"><span class="live-dot"></span><strong id="graph-title">Relationship graph</strong><span id="visible-count" class="muted">All nodes</span><button class="help-button" id="graph-help-toggle" aria-expanded="false" aria-controls="graph-help">How to read this</button></div><div class="toolbar-right"><div class="view-toggle" role="group" aria-label="Graph dimensions"><button class="view-button active" id="mode-3d" aria-pressed="true">3D</button><button class="view-button" id="mode-2d" aria-pressed="false">2D</button></div><div class="filter-toggle" role="group" aria-label="Hide nodes"><button class="filter-button" id="hide-tests" aria-pressed="false" title="Hide test files (_test.go, *.Tests projects, tests/ folders, *.spec.ts …)">Hide tests</button><button class="filter-button" id="hide-generated" aria-pressed="false" title="Hide generated code (gen/ folders, *.pb.go, *.g.cs, *.Designer.cs, EF Migrations …)">Hide generated</button></div><div class="view-toggle" role="group" aria-label="Graph view"><button class="view-button active" id="all-view" aria-pressed="true">All graph</button><button class="view-button" id="docs-view" aria-pressed="false">Documentation</button></div><div class="legend"><span class="legend-code"><i class="legend-dot code-dot"></i>Community</span><span><i class="legend-dot doc-dot"></i>Docs</span><span><i class="legend-line"></i>Connection</span></div></div></div>
+          <div class="graph-help hidden" id="graph-help"><button class="help-close" id="graph-help-close" aria-label="Close graph guide">×</button><strong>Reading the graph</strong><p>Each dot is an indexed code symbol or documentation section. Colors group nodes by Token Graph community; documentation dots are cyan.</p><p>Lines show relationships between two visible nodes. Select a dot to see its source excerpt and connections. In 3D, drag to orbit and Shift-drag or right-drag to pan. Scroll to zoom. Switch to 2D for a flat map. Search or click a node to inspect it.</p></div>
           <div class="focus-bar hidden" id="focus-bar"><span>Focus on</span><b id="focus-name"></b><button id="focus-1" aria-pressed="true" title="Direct neighbours only">1 step</button><button id="focus-2" aria-pressed="false" title="Neighbours of neighbours too">2 steps</button><span class="muted" id="focus-count"></span><button class="focus-exit" id="focus-exit" title="Show the whole graph again (Esc)">✕ Exit focus</button></div>
           <div class="canvas-wrap" id="canvas-wrap"><canvas id="graph-canvas" aria-label="Interactive graph of project files and code symbols"></canvas>
-            <div class="canvas-hint"><span>DRAG</span> pan <b>·</b> <span>SCROLL</span> zoom <b>·</b> click a node for details <b>·</b> <span>DOUBLE-CLICK</span> focus</div>
+            <div class="canvas-hint" id="navigation-hint"><span>DRAG</span> rotate <b>·</b> <span>SHIFT + DRAG</span> pan <b>·</b> <span>SCROLL</span> zoom <b>·</b> double-click to focus</div>
             <div class="canvas-loading" id="loading">Preparing project graph…</div>
+            <div class="graph-empty hidden" id="graph-empty" role="status"><strong id="graph-empty-title"></strong><p id="graph-empty-detail"></p><button class="help-button" id="graph-empty-reset">Show all graph</button></div>
           </div>
           <div class="graph-footer"><span><span class="live-dot"></span> Token Graph snapshot</span><span id="graph-updated">—</span></div>
         </section>
@@ -201,6 +204,8 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
   const GENERATED_PATH = /(^|\/)(gen|generated|__generated__)(\/|$)|\.pb(\.gw)?\.go$|_gen\.go$|_pb2(_grpc)?\.pyi?$|\.g(\.i)?\.cs$|\.designer\.cs$|\.generated\.\w+$|(^|\/)migrations\/[^\/]+\.cs$|(^|\/)obj\//i;
   const stored = (key, fallback = false) => { try { const v = localStorage.getItem(key); return v === null ? fallback : v === '1'; } catch (_) { return fallback; } };
   const store = (key, on) => { try { localStorage.setItem(key, on ? '1' : '0'); } catch (_) { /* per-viewer convenience only */ } };
+  state.is3d = stored('tokenGraph.is3d', true);
+  state.yaw = .45; state.pitch = -.25; state.cameraTarget = {x:0,y:0,z:0};
   state.hideTests = stored('tokenGraph.hideTests');
   state.hideGenerated = stored('tokenGraph.hideGenerated', true);  // same default as /token-graph answers
   state.focus = null;      // { id, depth, ids } while focus mode is on
@@ -228,22 +233,55 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     draw();
   }
 
+  function projectNode(node) {
+    if (!state.is3d) return { ...node, depth: 0, perspective: 1 };
+    const target = state.cameraTarget;
+    const x = (node._x3 || 0) - target.x;
+    const y = (node._y3 || 0) - target.y;
+    const z = (node._z3 || 0) - target.z;
+    const cy = Math.cos(state.yaw), sy = Math.sin(state.yaw);
+    const cp = Math.cos(state.pitch), sp = Math.sin(state.pitch);
+    const rx = x * cy + z * sy, rz = -x * sy + z * cy;
+    const ry = y * cp - rz * sp, depth = y * sp + rz * cp;
+    const distance = state.cameraDistance || 1500;
+    const perspective = distance / Math.max(distance * .25, distance - depth);
+    return { ...node, x: rx * perspective, y: ry * perspective, depth, perspective };
+  }
+
+  function centerNode(node) {
+    const point = projectNode(node);
+    state.x = -point.x * state.scale; state.y = -point.y * state.scale;
+  }
+
+  function setDimension(is3d) {
+    state.is3d = is3d;
+    store('tokenGraph.is3d', is3d);
+    $('#mode-3d').classList.toggle('active', is3d);
+    $('#mode-2d').classList.toggle('active', !is3d);
+    $('#mode-3d').setAttribute('aria-pressed', String(is3d));
+    $('#mode-2d').setAttribute('aria-pressed', String(!is3d));
+    $('#navigation-hint').innerHTML = is3d
+      ? '<span>DRAG</span> rotate <b>·</b> <span>SHIFT + DRAG</span> pan <b>·</b> <span>SCROLL</span> zoom <b>·</b> double-click to focus'
+      : '<span>DRAG</span> pan <b>·</b> <span>SCROLL</span> zoom <b>·</b> double-click to focus';
+    fitGraph();
+  }
+
   function fitGraph(only = null) {
     const fitNodes = state.nodes.filter(node => visible(node) && (!only || only.has(node.id)));
     if (!fitNodes.length) { draw(); return; }
-    const width = canvas.clientWidth, height = canvas.clientHeight;
-    const minX = Math.min(...fitNodes.map(node => node.x));
-    const maxX = Math.max(...fitNodes.map(node => node.x));
-    const minY = Math.min(...fitNodes.map(node => node.y));
-    const maxY = Math.max(...fitNodes.map(node => node.y));
+    const bounds = (values) => values.reduce((b, value) => [Math.min(b[0], value), Math.max(b[1], value)], [Infinity, -Infinity]);
+    if (state.is3d) {
+      const bx = bounds(fitNodes.map(n => n._x3 || 0)), by = bounds(fitNodes.map(n => n._y3 || 0)), bz = bounds(fitNodes.map(n => n._z3 || 0));
+      state.cameraTarget = {x:(bx[0]+bx[1])/2,y:(by[0]+by[1])/2,z:(bz[0]+bz[1])/2};
+      const t = state.cameraTarget;
+      state.cameraDistance = fitNodes.reduce((distance,n) => Math.max(distance, Math.hypot(n._x3-t.x,n._y3-t.y,n._z3-t.z)*3),200);
+    }
+    const projected = fitNodes.map(projectNode);
+    const bx = bounds(projected.map(n => n.x)), by = bounds(projected.map(n => n.y));
     const padding = 56;
-    state.scale = Math.min(
-      1,
-      (width - padding * 2) / Math.max(1, maxX - minX),
-      (height - padding * 2) / Math.max(1, maxY - minY),
-    );
-    state.x = -(minX + maxX) / 2 * state.scale;
-    state.y = -(minY + maxY) / 2 * state.scale;
+    state.scale = Math.max(.03, Math.min(1, Math.max(1,canvas.clientWidth-padding*2)/Math.max(1,bx[1]-bx[0]), Math.max(1,canvas.clientHeight-padding*2)/Math.max(1,by[1]-by[0])));
+    state.x = -(bx[0]+bx[1])/2*state.scale;
+    state.y = -(by[0]+by[1])/2*state.scale;
     draw();
   }
 
@@ -340,6 +378,15 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       const radius = Math.sqrt((hash >>> 4) % 10000) / 100 * spread;
       node.x = Math.cos(angle) * (150 + Math.sqrt(state.nodes.length) * 8) + Math.cos(localAngle) * radius;
       node.y = Math.sin(angle) * (150 + Math.sqrt(state.nodes.length) * 8) + Math.sin(localAngle) * radius;
+      const sphereY = 1 - 2 * (i + .5) / Math.max(1, state.communities.length);
+      const ring = Math.sqrt(Math.max(0, 1 - sphereY * sphereY));
+      const groupAngle = i * Math.PI * (3 - Math.sqrt(5));
+      const scene = state.communities.length === 1 ? 0 : 150 + Math.sqrt(state.nodes.length) * 8;
+      const localZ = ((hash >>> 12) % 2000) / 1000 - 1;
+      const localRing = Math.sqrt(Math.max(0, 1 - localZ * localZ));
+      node._x3 = Math.cos(groupAngle) * ring * scene + Math.cos(localAngle) * localRing * radius;
+      node._y3 = sphereY * scene + localZ * radius;
+      node._z3 = Math.sin(groupAngle) * ring * scene + Math.sin(localAngle) * localRing * radius;
     }
     const label = byFolder ? 'FOLDERS' : 'COMMUNITIES';
     $('#group-heading').textContent = label;
@@ -395,7 +442,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       const item = document.createElement('button');
       item.className = `search-result ${state.selected?.id === node.id ? 'active' : ''}`;
       item.innerHTML = `<span class="kind">${escapeHtml(node._kind)}</span>${escapeHtml(node.label)}<small>${escapeHtml(node.source_file || '')}${node.source_location ? ':' + escapeHtml(node.source_location) : ''}</small>`;
-      item.addEventListener('click', () => { select(node); state.x = -node.x * state.scale; state.y = -node.y * state.scale; draw(); renderSearchResults(); });
+      item.addEventListener('click', () => { select(node); centerNode(node); draw(); renderSearchResults(); });
       box.append(item);
     }
     if (!matches.length) box.innerHTML = '<div class="search-more">No matches with the current filters.</div>';
@@ -469,11 +516,37 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
   function escapeHtml(value) { return String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
   function isDocument(node) { return node.file_type === 'document'; }
   function visible(node) { return (state.view !== 'docs' || isDocument(node)) && passesFilters(node) && (!state.focus || state.focus.ids.has(node.id)) && (!state.highlightOnly || !state.highlight || state.highlight.nodes.has(node.id)) && (state.activeCommunity === null || node._group === state.activeCommunity) && (!state.query || `${node.label} ${node.source_file || ''} ${node.community_name || ''}`.toLowerCase().includes(state.query)); }
+  function updateEmptyState(visibleCount) {
+    const empty = visibleCount === 0 && state.nodes.length > 0;
+    $('#graph-empty').classList.toggle('hidden', !empty);
+    if (!empty) return;
+    const noDocuments = state.view === 'docs' && !state.nodes.some(isDocument);
+    $('#graph-empty-title').textContent = noDocuments ? 'No documentation indexed' : 'No nodes match these filters';
+    $('#graph-empty-detail').textContent = noDocuments
+      ? `This graph contains ${format(state.nodes.length)} code and symbol nodes, but no document nodes. Choose All graph to explore the code.`
+      : 'Try clearing the search, choosing another node kind, or showing all graph nodes.';
+    $('#graph-empty-reset').textContent = noDocuments ? 'Show all graph' : 'Clear filters and show graph';
+  }
+
+  function recoverGraph() {
+    const noDocuments = state.view === 'docs' && !state.nodes.some(isDocument);
+    state.query = ''; $('#search').value = ''; state.kind = 'all'; $('#kind-filter').value = 'all';
+    state.highlightOnly = false;
+    if (!noDocuments) {
+      setFilter('hideTests', 'hide-tests', false);
+      setFilter('hideGenerated', 'hide-generated', false);
+    }
+    setView('all');
+    renderSearchResults();
+  }
+
   function draw() {
     if (!canvas.width) return;
     const width = canvas.clientWidth, height = canvas.clientHeight;
     ctx.clearRect(0, 0, width, height);
-    const visibleNodes = state.nodes.filter(visible);
+    const visibleNodes = state.nodes.filter(visible).map(projectNode).sort((a,b) => a.depth - b.depth);
+    updateEmptyState(visibleNodes.length);
+    const projectedById = new Map(visibleNodes.map(node => [node.id, node]));
     const visibleIds = new Set(visibleNodes.map(n => n.id));
     if (state.focus) $('#focus-count').textContent = `${format(visibleNodes.length)} nodes shown`;
     $('#visible-count').textContent = state.focus ? `Focus · ${format(visibleNodes.length)} nodes` : state.query ? `${format(visibleNodes.length)} matches` : state.activeCommunity ? `${format(visibleNodes.length)} nodes` : state.view === 'docs' ? `${format(visibleNodes.length)} docs` : 'All nodes';
@@ -483,7 +556,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     const routeEdges = state.highlight?.routeEdges || null;
     for (const edge of state.links) {
       if (!visibleIds.has(edge.source) || !visibleIds.has(edge.target)) continue;
-      const a = state.nodeById.get(edge.source), b = state.nodeById.get(edge.target);
+      const a = projectedById.get(edge.source), b = projectedById.get(edge.target);
       const focus = state.selected && (a.id === state.selected.id || b.id === state.selected.id);
       const onRoute = routeEdges && (routeEdges.has(`${a.id}|${b.id}`) || routeEdges.has(`${b.id}|${a.id}`));
       if (state.selected && !focus && !onRoute) continue;
@@ -499,8 +572,10 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       const level = hl ? hl.get(node.id) : undefined;
       const lit = level !== undefined;
       const base = state.view === 'docs' ? (selected ? 6 : neighbor ? 4.5 : 2.7) / state.scale : selected ? 5.7 : neighbor ? 4.1 : state.scale < .5 ? 1.7 : 2.5;
-      const radius = lit ? Math.max(base, (level === 0 ? 7 : level === 1 ? 4.8 : 3.6) / Math.max(state.scale, .5)) : base;
+      const depthSize = state.is3d ? Math.max(.55, Math.min(1.8, node.perspective)) : 1;
+      const radius = depthSize * (lit ? Math.max(base, (level === 0 ? 7 : level === 1 ? 4.8 : 3.6) / Math.max(state.scale, .5)) : base);
       ctx.globalAlpha = hl && !lit && !selected && !neighbor ? .08 : state.selected && !selected && !neighbor && !lit ? .18 : state.query && !match ? .22 : 1;
+      if (state.is3d && !selected && !lit) ctx.globalAlpha *= Math.max(.3, Math.min(1, node.perspective * .8));
       ctx.fillStyle = node.file_type === 'document' ? '#45c4df' : colorFor(state.groupIndex.get(node._group));
       ctx.beginPath(); ctx.arc(node.x, node.y, radius, 0, Math.PI * 2); ctx.fill();
       if (lit && (level === 0 || state.highlight.seeds.has(node.id))) { ctx.globalAlpha = 1; ctx.strokeStyle = '#f4c95d'; ctx.lineWidth = 2 / Math.max(state.scale, .5); ctx.beginPath(); ctx.arc(node.x, node.y, radius + 3 / Math.max(state.scale, .5), 0, Math.PI * 2); ctx.stroke(); }
@@ -523,7 +598,19 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
   }
 
   function screenPoint(event) { const rect = canvas.getBoundingClientRect(); return { x: event.clientX - rect.left - rect.width / 2 - state.x, y: event.clientY - rect.top - rect.height / 2 - state.y }; }
-  function findNode(event) { const point = screenPoint(event); const radius = 10 / state.scale; let best = null, bestDistance = radius; for (const node of state.nodes) { if (!visible(node)) continue; const distance = Math.hypot(node.x - point.x / state.scale, node.y - point.y / state.scale); if (distance < bestDistance) { best = node; bestDistance = distance; } } return best; }
+  function findNode(event) {
+    const point = screenPoint(event);
+    let best = null, bestDistance = 10 / state.scale, bestDepth = -Infinity;
+    for (const node of state.nodes) {
+      if (!visible(node)) continue;
+      const p = projectNode(node);
+      const distance = Math.hypot(p.x-point.x/state.scale,p.y-point.y/state.scale);
+      if (distance < bestDistance || (Math.abs(distance-bestDistance)<.01 && p.depth>bestDepth)) {
+        best=node; bestDistance=distance; bestDepth=p.depth;
+      }
+    }
+    return best;
+  }
   function renderDetails(node) {
     const panel = $('#details-panel');
     document.querySelector('.app-shell').classList.toggle('has-selection', Boolean(node));
@@ -670,9 +757,27 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     fitGraph();
   }
 
-  canvas.addEventListener('pointerdown', event => { state.dragging = true; state.moved = false; state.lastX = event.clientX; state.lastY = event.clientY; canvas.classList.add('dragging'); canvas.setPointerCapture(event.pointerId); });
-  canvas.addEventListener('pointermove', event => { if (state.dragging) { const dx = event.clientX - state.lastX, dy = event.clientY - state.lastY; if (Math.abs(dx) + Math.abs(dy) > 2) state.moved = true; state.x += dx; state.y += dy; state.lastX = event.clientX; state.lastY = event.clientY; draw(); } else { state.hovered = findNode(event); canvas.style.cursor = state.hovered ? 'pointer' : 'grab'; draw(); } });
-  canvas.addEventListener('pointerup', event => { state.dragging = false; canvas.classList.remove('dragging'); if (!state.moved) select(findNode(event)); });
+  canvas.addEventListener('contextmenu', event => event.preventDefault());
+  canvas.addEventListener('pointerdown', event => {
+    state.dragging=true; state.moved=false; state.startX=state.lastX=event.clientX; state.startY=state.lastY=event.clientY;
+    state.dragMode=state.is3d && !event.shiftKey && event.button!==2 ? 'orbit' : 'pan';
+    canvas.classList.add('dragging'); canvas.setPointerCapture(event.pointerId);
+  });
+  canvas.addEventListener('pointermove', event => {
+    if (state.dragging) {
+      const dx=event.clientX-state.lastX,dy=event.clientY-state.lastY;
+      if(Math.hypot(event.clientX-state.startX,event.clientY-state.startY)>3) state.moved=true;
+      if(state.dragMode==='orbit') {state.yaw+=dx*.007;state.pitch=Math.max(-1.5,Math.min(1.5,state.pitch+dy*.007));}
+      else {state.x+=dx;state.y+=dy;}
+      state.lastX=event.clientX;state.lastY=event.clientY; draw();
+    } else {state.hovered=findNode(event);canvas.style.cursor=state.hovered?'pointer':'grab';draw();}
+  });
+  canvas.addEventListener('pointerup', event => {state.dragging=false;canvas.classList.remove('dragging');if(!state.moved && event.button===0)select(findNode(event));});
+  canvas.addEventListener('pointercancel', () => {state.dragging=false;canvas.classList.remove('dragging');});
+  $('#graph-empty-reset').addEventListener('click', recoverGraph);
+  $('#mode-3d').addEventListener('click', () => setDimension(true));
+  $('#mode-2d').addEventListener('click', () => setDimension(false));
+  setDimension(state.is3d);
   canvas.addEventListener('wheel', event => { event.preventDefault(); const rect = canvas.getBoundingClientRect(); const beforeX = event.clientX - rect.left - rect.width / 2 - state.x, beforeY = event.clientY - rect.top - rect.height / 2 - state.y; const next = Math.max(.12, Math.min(5, state.scale * Math.exp(-event.deltaY * .001))); state.x -= beforeX / state.scale * (next - state.scale); state.y -= beforeY / state.scale * (next - state.scale); state.scale = next; draw(); }, { passive: false });
   $('#search').addEventListener('input', event => { state.query = event.target.value.trim().toLowerCase(); draw(); renderSearchResults(); });
   $('#kind-filter').addEventListener('change', event => {
@@ -684,7 +789,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     b.setAttribute('aria-pressed', String(b.dataset.groupBy === state.groupBy));
     b.addEventListener('click', () => setGroupBy(b.dataset.groupBy));
   });
-  $('#search').addEventListener('keydown', event => { if (event.key === 'Enter') { const node = state.nodes.find(n => visible(n)); if (node) { select(node); state.x = -node.x * state.scale; state.y = -node.y * state.scale; draw(); } } if (event.key === 'Escape') { event.target.value = ''; state.query = ''; draw(); } });
+  $('#search').addEventListener('keydown', event => { if (event.key === 'Enter') { const node = state.nodes.find(n => visible(n)); if (node) { select(node); centerNode(node); draw(); } } if (event.key === 'Escape') { event.target.value = ''; state.query = ''; draw(); } });
   document.addEventListener('keydown', event => { if (event.key === '/' && !['INPUT','TEXTAREA'].includes(document.activeElement.tagName)) { event.preventDefault(); $('#search').focus(); } });
   $('#original-source').addEventListener('click', () => loadLocalGraph());
   const loadedGraphs = new Map();
@@ -727,6 +832,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     state.activeCommunity = null; state.selected = null; state.hovered = null;
     state.query = ''; $('#search').value = '';
     renderDetails(null);
+    if (state.view === 'docs' && !entry.raw.nodes.some(isDocument)) setView('all');
     normalizeGraph(entry.raw);
     loadBenchmark(entry.raw.benchmark ?? entry.raw.graph?.benchmark ?? null);
     $('#graph-selector').value = id;
@@ -802,7 +908,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     event.target.value = '';
   });
 
-  $('#reset-view').addEventListener('click', () => { state.focus = null; $('#focus-bar').classList.add('hidden'); state.activeCommunity = null; state.query = ''; $('#search').value = ''; renderCommunityList(); fitGraph(); });
+  $('#reset-view').addEventListener('click', () => { state.yaw=.45; state.pitch=-.25; state.focus = null; $('#focus-bar').classList.add('hidden'); state.activeCommunity = null; state.query = ''; $('#search').value = ''; renderCommunityList(); fitGraph(); });
   canvas.addEventListener('dblclick', event => { const node = findNode(event); if (node) enterFocus(node, state.focus?.depth || 1); });
   document.addEventListener('keydown', event => { if (event.key === 'Escape' && state.focus && document.activeElement !== $('#search')) exitFocus(); });
   $('#focus-1').addEventListener('click', () => state.focus && enterFocus(state.nodeById.get(state.focus.id), 1));
@@ -1110,7 +1216,8 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     }
   }
   loadBenchmark(null);
-  if (serverToken) initServer(); else loadLocalGraph();
+  if (window.GRAPHIFY_DATA) switchGraph(addGraph(window.GRAPHIFY_DATA, window.GRAPHIFY_DATA.project_name || 'Project graph'));
+  else if (serverToken) initServer(); else loadLocalGraph();
   if (!serverToken && 'serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
     window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(error => console.warn('Offline app shell is unavailable:', error)));
   }

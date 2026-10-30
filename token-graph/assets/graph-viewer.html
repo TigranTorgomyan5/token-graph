@@ -8,7 +8,7 @@
     <title>Token Graph Viewer</title>
     <style>
 :root{color-scheme:dark;--bg:#0b1020;--panel:#10172a;--panel2:#131c31;--line:#222d43;--text:#edf1fa;--muted:#7f8ba3;--indigo:#8877ff;--cyan:#52c9e8;--green:#55d6a2;--mono:ui-monospace,SFMono-Regular,Menlo,monospace;--sans:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13px}.app-shell{min-height:100vh;display:grid;grid-template-columns:248px minmax(540px,1fr) 278px}.sidebar,.details{background:#0d1425;border-color:#1b263b}.sidebar{border-right:1px solid var(--line);padding:24px 16px 18px;display:flex;flex-direction:column;gap:31px}.brand{display:flex;align-items:center;gap:11px;text-decoration:none;color:inherit;padding:2px 8px}.brand-mark{width:34px;height:34px;border:1px solid #7167e4;border-radius:11px;display:grid;place-items:center;background:linear-gradient(145deg,#7568ec,#423b9b);font-weight:700;font-size:19px;box-shadow:0 5px 18px #554bd744}.brand strong{font-size:14px;display:block;letter-spacing:.02em}.brand small{font:9px var(--mono);color:#7e89a2;letter-spacing:.16em;display:block;margin-top:3px}.sidebar-section{display:flex;flex-direction:column;gap:12px}.eyebrow{font:10px var(--mono);letter-spacing:.12em;color:#7f8ba3}.sidebar-section>.eyebrow{padding-left:8px}.search-box{height:38px;display:flex;align-items:center;gap:9px;border:1px solid #26334c;border-radius:8px;background:#111a2d;padding:0 10px;color:#7f8ba3}.search-box>span{font-size:19px}.search-box input{background:transparent;border:0;outline:none;color:var(--text);width:100%;font:12px var(--sans)}.search-box input::placeholder{color:#66738c}.search-box kbd{font:10px var(--mono);padding:2px 5px;border:1px solid #34405a;border-radius:4px;color:#8491a9}.section-heading{display:flex;justify-content:space-between;padding:0 8px}.muted{color:var(--muted);font-size:11px}.community-list{display:flex;flex-direction:column;gap:3px;max-height:calc(100vh - 395px);overflow:auto}.community-item{width:100%;border:0;background:transparent;color:#aeb8cb;padding:8px;border-radius:7px;text-align:left;display:flex;align-items:center;gap:9px;cursor:pointer;font:12px var(--sans)}.community-item:hover,.community-item.active{background:#19233a;color:#f3f5ff}.community-item.active{box-shadow:inset 2px 0 #9184ff}.community-item .swatch{width:8px;height:8px;border-radius:50%;flex:none}.community-item .community-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}.community-item .community-size{font:10px var(--mono);color:#77839b}.sidebar-bottom{margin-top:auto;border-top:1px solid var(--line);padding:17px 8px 0;display:flex;flex-direction:column;gap:9px}.data-row{display:flex;align-items:center;gap:8px;color:#b3bfd2;font-size:12px}.live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 10px #55d6a277;display:inline-block}.upload-button{cursor:pointer;border:1px solid #2c3953;border-radius:7px;padding:8px 10px;color:#c7d0e1;font-size:11px}.upload-button span{float:right;color:#8693aa}.upload-button:hover{background:#151e33}.data-footnote{font-size:10px;line-height:1.5;color:#68758d}.workspace{padding:0 26px 22px;min-width:0}.topbar{height:91px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}.breadcrumb{font:9px var(--mono);letter-spacing:.1em;color:#72809b}.breadcrumb span{padding:0 7px;color:#414d65}.breadcrumb b{color:#9f94ff;font-weight:400}.topbar h1{font-size:21px;margin:8px 0 0;letter-spacing:-.03em}.topbar-actions{display:flex;align-items:center;gap:11px}.snapshot{font:10px var(--mono);color:#8e9ab0;border:1px solid #27334b;border-radius:20px;padding:6px 9px}.icon-button{background:#141d31;border:1px solid #293650;color:#acb7ca;width:31px;height:31px;border-radius:7px;font-size:19px;cursor:pointer}.overview{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;padding:20px 0}.benchmark-strip{min-height:58px;display:flex;align-items:center;gap:13px;padding:10px 14px;margin:0 0 14px;border:1px solid #25334a;border-radius:9px;background:linear-gradient(100deg,#111a2c,#121b2b 55%,#10202a)}.benchmark-mark{width:30px;height:30px;display:grid;place-items:center;border-radius:8px;background:#17362f;color:#63ddb0;font-size:19px}.benchmark-main{display:flex;flex-direction:column;gap:3px}.benchmark-label{font:9px var(--mono);letter-spacing:.1em;color:#8b99b0}.benchmark-main strong{font-size:18px;color:#71e0b4;line-height:1}.benchmark-detail{margin-left:auto;color:#bec9db;font:11px var(--mono)}.benchmark-source{padding-left:12px;border-left:1px solid #334057;color:#8190a7;font-size:10px;white-space:nowrap}.metric-card{height:80px;background:#11192b;border:1px solid #202b41;border-radius:9px;display:flex;align-items:center;padding:13px;gap:11px;position:relative}.metric-icon{width:30px;height:30px;display:grid;place-items:center;border-radius:8px;font-size:15px;background:#20223f}.metric-icon.indigo{color:#aa9cff;background:#242346}.metric-icon.cyan{color:#61d4ef;background:#16303a}.metric-icon.violet{color:#c38fff;background:#2b203d}.metric-icon.green{color:#64ddb0;background:#18352f}.metric-label{font:9px var(--mono);letter-spacing:.1em;color:#8190aa}.metric-card strong{font-size:19px;display:block;margin-top:3px;font-weight:600}.metric-note{margin-left:auto;align-self:flex-end;padding-bottom:2px;font-size:9px;color:#71809b}.graph-panel{position:relative;border:1px solid #232e45;background:#0e1525;border-radius:10px;overflow:hidden;min-height:calc(100vh - 214px);display:flex;flex-direction:column}.graph-toolbar{height:46px;flex:none;border-bottom:1px solid #202b40;display:flex;align-items:center;justify-content:space-between;padding:0 14px}.graph-title{display:flex;align-items:center;gap:9px}.graph-title strong{font-size:11px;font-weight:600}.graph-title .live-dot{width:6px;height:6px}.help-button{border:1px solid #35415a;background:#151f33;color:#c4cde0;border-radius:5px;padding:5px 8px;font:10px var(--sans);cursor:pointer}.help-button:hover,.help-button[aria-expanded="true"]{border-color:#8176df;color:#e3deff}.graph-help{position:absolute;z-index:4;top:52px;left:14px;width:min(390px,calc(100% - 28px));padding:16px 36px 14px 15px;border:1px solid #485672;border-radius:9px;background:#111a2df5;box-shadow:0 12px 32px #0008;color:#d7deec}.graph-help strong{font-size:12px}.graph-help p{margin:9px 0 0;font-size:11px;line-height:1.55;color:#aeb9cc}.help-close{position:absolute;right:8px;top:7px;width:24px;height:24px;border:0;background:transparent;color:#aeb9cc;font-size:17px;cursor:pointer}.legend{display:flex;gap:15px;color:#8c99b0;font-size:10px}.legend span{display:flex;align-items:center;gap:6px}.legend-dot{width:7px;height:7px;border-radius:50%;display:inline-block}.code-dot{background:conic-gradient(#8e7cff,#51c6e3,#e58bd4,#e6ad63,#61d3aa,#6f9cff,#f07883,#8e7cff)}.doc-dot{background:#42bfdc}.legend-line{width:13px;border-top:1px solid #536078}.toolbar-right{display:flex;align-items:center;gap:14px}.view-toggle{display:flex;gap:3px;padding:3px;border:1px solid #27334b;border-radius:7px;background:#0b1120}.view-button{border:0;border-radius:5px;background:transparent;color:#8290a8;padding:5px 8px;font:10px var(--sans);cursor:pointer}.view-button:hover{color:#e5e9f4}.view-button.active{background:#252347;color:#c9c1ff}.hidden{display:none!important}.canvas-wrap{position:relative;flex:1;min-height:440px;overflow:hidden;background-color:#0b1120;background-image:radial-gradient(#29344b 1px,transparent 1px);background-size:22px 22px}.canvas-wrap canvas{width:100%;height:100%;display:block;cursor:grab}.canvas-wrap canvas.dragging{cursor:grabbing}.canvas-hint{position:absolute;bottom:13px;left:14px;padding:8px 10px;border:1px solid #29344b;border-radius:6px;background:#11192bdf;color:#8794aa;font-size:10px;pointer-events:none}.canvas-hint span{font:9px var(--mono);color:#b7c0d0}.canvas-hint b{padding:0 7px;color:#44516a}.canvas-loading{position:absolute;inset:0;display:grid;place-items:center;background:#0b1120;color:#929fba;font-size:12px}.canvas-loading.hidden{display:none}.graph-footer{height:34px;flex:none;border-top:1px solid #202b40;padding:0 13px;display:flex;align-items:center;justify-content:space-between;color:#7f8ba3;font-size:10px}.graph-footer>span:first-child{display:flex;align-items:center;gap:7px}.graph-footer .live-dot{width:6px;height:6px}.details{border-left:1px solid var(--line);padding:25px 17px;min-height:100vh}.details-empty{margin-top:35vh;text-align:center;color:#78859d;padding:0 13px}.detail-orbit{font-size:33px;color:#766de3}.details-empty h2{font-size:13px;color:#d8deeb;font-weight:600;margin:12px 0 7px}.details-empty p{font-size:11px;line-height:1.6;margin:0}.detail-header{display:flex;align-items:center;gap:9px;padding-bottom:18px;border-bottom:1px solid var(--line)}.node-kind{height:26px;min-width:28px;padding:0 6px;border-radius:6px;background:#242346;color:#a99aff;display:grid;place-items:center;font:10px var(--mono)}.node-kind.doc{background:#15313b;color:#68d2eb}.detail-title{font-size:14px;font-weight:600;overflow-wrap:anywhere;flex:1}.detail-close{border:1px solid #2c3953;background:#141d31;color:#b9c4d6;border-radius:5px;width:24px;height:24px;font-size:17px;line-height:1;cursor:pointer;flex:none}.detail-close:hover{background:#222d43;color:#fff}.detail-label{font:9px var(--mono);letter-spacing:.11em;color:#77849c;margin:21px 0 8px}.detail-value{font-size:11px;color:#c0c9d9;line-height:1.55;overflow-wrap:anywhere}.node-description{white-space:pre-wrap}.source-excerpt{max-height:38vh;overflow:auto;margin:0;padding:10px;border:1px solid #25314a;border-radius:6px;background:#0a1120;color:#c0c9d9;font:10px/1.55 var(--mono);white-space:pre;tab-size:2}.detail-code{font:10px var(--mono);color:#a7b3c9;background:#121c30;border:1px solid #25314a;padding:8px;border-radius:6px}.detail-connection{width:100%;display:flex;gap:8px;align-items:center;background:none;border:0;color:#b4c0d1;text-align:left;padding:6px 2px;cursor:pointer;font:11px var(--sans)}.detail-connection:hover{color:#aaa0ff}.detail-connection .relation{font:9px var(--mono);color:#77849b}.detail-connection .neighbor{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.connection-list{max-height:42vh;overflow:auto}.empty-result{padding:12px;color:#76839a;font-size:11px}.error-state{color:#f3a0a0;line-height:1.6}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13px}.app-shell{min-height:100vh;display:grid;grid-template-columns:248px minmax(540px,1fr) 278px}.sidebar,.details{background:#0d1425;border-color:#1b263b}.sidebar{border-right:1px solid var(--line);padding:24px 16px 18px;display:flex;flex-direction:column;gap:31px}.brand{display:flex;align-items:center;gap:11px;text-decoration:none;color:inherit;padding:2px 8px}.brand-mark{width:34px;height:34px;border:1px solid #7167e4;border-radius:11px;display:grid;place-items:center;background:linear-gradient(145deg,#7568ec,#423b9b);font-weight:700;font-size:19px;box-shadow:0 5px 18px #554bd744}.brand strong{font-size:14px;display:block;letter-spacing:.02em}.brand small{font:9px var(--mono);color:#7e89a2;letter-spacing:.16em;display:block;margin-top:3px}.sidebar-section{display:flex;flex-direction:column;gap:12px}.eyebrow{font:10px var(--mono);letter-spacing:.12em;color:#7f8ba3}.sidebar-section>.eyebrow{padding-left:8px}.search-box{height:38px;display:flex;align-items:center;gap:9px;border:1px solid #26334c;border-radius:8px;background:#111a2d;padding:0 10px;color:#7f8ba3}.search-box>span{font-size:19px}.search-box input{background:transparent;border:0;outline:none;color:var(--text);width:100%;font:12px var(--sans)}.search-box input::placeholder{color:#66738c}.search-box kbd{font:10px var(--mono);padding:2px 5px;border:1px solid #34405a;border-radius:4px;color:#8491a9}.section-heading{display:flex;justify-content:space-between;padding:0 8px}.muted{color:var(--muted);font-size:11px}.community-list{display:flex;flex-direction:column;gap:3px;max-height:calc(100vh - 395px);overflow:auto}.community-item{width:100%;border:0;background:transparent;color:#aeb8cb;padding:8px;border-radius:7px;text-align:left;display:flex;align-items:center;gap:9px;cursor:pointer;font:12px var(--sans)}.community-item:hover,.community-item.active{background:#19233a;color:#f3f5ff}.community-item.active{box-shadow:inset 2px 0 #9184ff}.community-item .swatch{width:8px;height:8px;border-radius:50%;flex:none}.community-item .community-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}.community-item .community-size{font:10px var(--mono);color:#77839b}.sidebar-bottom{margin-top:auto;border-top:1px solid var(--line);padding:17px 8px 0;display:flex;flex-direction:column;gap:9px}.data-row{display:flex;align-items:center;gap:8px;color:#b3bfd2;font-size:12px}.live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 10px #55d6a277;display:inline-block}.upload-button{cursor:pointer;border:1px solid #2c3953;border-radius:7px;padding:8px 10px;color:#c7d0e1;font-size:11px}.upload-button span{float:right;color:#8693aa}.upload-button:hover{background:#151e33}.source-choice{display:grid;gap:6px}.source-button{display:block;width:100%;text-align:left;cursor:pointer;border:1px solid #2c3953;border-radius:7px;padding:8px 10px;background:#111a2d;color:#aeb8cb;font:11px var(--sans)}.source-button:hover{background:#151e33}.source-button.active{border-color:#665bd0;background:#252347;color:#d0c8ff}.data-footnote{font-size:10px;line-height:1.5;color:#68758d}.workspace{padding:0 26px 22px;min-width:0}.topbar{height:91px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}.breadcrumb{font:9px var(--mono);letter-spacing:.1em;color:#72809b}.breadcrumb span{padding:0 7px;color:#414d65}.breadcrumb b{color:#9f94ff;font-weight:400}.topbar h1{font-size:21px;margin:8px 0 0;letter-spacing:-.03em}.topbar-actions{display:flex;align-items:center;gap:11px}.snapshot{font:10px var(--mono);color:#8e9ab0;border:1px solid #27334b;border-radius:20px;padding:6px 9px}.icon-button{background:#141d31;border:1px solid #293650;color:#acb7ca;width:31px;height:31px;border-radius:7px;font-size:19px;cursor:pointer}.overview{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;padding:20px 0}.benchmark-strip{min-height:58px;display:flex;align-items:center;gap:13px;padding:10px 14px;margin:0 0 14px;border:1px solid #25334a;border-radius:9px;background:linear-gradient(100deg,#111a2c,#121b2b 55%,#10202a)}.benchmark-mark{width:30px;height:30px;display:grid;place-items:center;border-radius:8px;background:#17362f;color:#63ddb0;font-size:19px}.benchmark-main{display:flex;flex-direction:column;gap:3px}.benchmark-label{font:9px var(--mono);letter-spacing:.1em;color:#8b99b0}.benchmark-main strong{font-size:18px;color:#71e0b4;line-height:1}.benchmark-detail{margin-left:auto;color:#bec9db;font:11px var(--mono)}.benchmark-source{padding-left:12px;border-left:1px solid #334057;color:#8190a7;font-size:10px;white-space:nowrap}.metric-card{height:80px;background:#11192b;border:1px solid #202b41;border-radius:9px;display:flex;align-items:center;padding:13px;gap:11px;position:relative}.metric-icon{width:30px;height:30px;display:grid;place-items:center;border-radius:8px;font-size:15px;background:#20223f}.metric-icon.indigo{color:#aa9cff;background:#242346}.metric-icon.cyan{color:#61d4ef;background:#16303a}.metric-icon.violet{color:#c38fff;background:#2b203d}.metric-icon.green{color:#64ddb0;background:#18352f}.metric-label{font:9px var(--mono);letter-spacing:.1em;color:#8190aa}.metric-card strong{font-size:19px;display:block;margin-top:3px;font-weight:600}.metric-note{margin-left:auto;align-self:flex-end;padding-bottom:2px;font-size:9px;color:#71809b}.graph-panel{position:relative;border:1px solid #232e45;background:#0e1525;border-radius:10px;overflow:hidden;min-height:calc(100vh - 214px);display:flex;flex-direction:column}.graph-toolbar{height:46px;flex:none;border-bottom:1px solid #202b40;display:flex;align-items:center;justify-content:space-between;padding:0 14px}.graph-title{display:flex;align-items:center;gap:9px}.graph-title strong{font-size:11px;font-weight:600}.graph-title .live-dot{width:6px;height:6px}.help-button{border:1px solid #35415a;background:#151f33;color:#c4cde0;border-radius:5px;padding:5px 8px;font:10px var(--sans);cursor:pointer}.help-button:hover,.help-button[aria-expanded="true"]{border-color:#8176df;color:#e3deff}.graph-help{position:absolute;z-index:4;top:52px;left:14px;width:min(390px,calc(100% - 28px));padding:16px 36px 14px 15px;border:1px solid #485672;border-radius:9px;background:#111a2df5;box-shadow:0 12px 32px #0008;color:#d7deec}.graph-help strong{font-size:12px}.graph-help p{margin:9px 0 0;font-size:11px;line-height:1.55;color:#aeb9cc}.help-close{position:absolute;right:8px;top:7px;width:24px;height:24px;border:0;background:transparent;color:#aeb9cc;font-size:17px;cursor:pointer}.legend{display:flex;gap:15px;color:#8c99b0;font-size:10px}.legend span{display:flex;align-items:center;gap:6px}.legend-dot{width:7px;height:7px;border-radius:50%;display:inline-block}.code-dot{background:conic-gradient(#8e7cff,#51c6e3,#e58bd4,#e6ad63,#61d3aa,#6f9cff,#f07883,#8e7cff)}.doc-dot{background:#42bfdc}.legend-line{width:13px;border-top:1px solid #536078}.toolbar-right{display:flex;align-items:center;gap:14px}.view-toggle{display:flex;gap:3px;padding:3px;border:1px solid #27334b;border-radius:7px;background:#0b1120}.view-button{border:0;border-radius:5px;background:transparent;color:#8290a8;padding:5px 8px;font:10px var(--sans);cursor:pointer}.view-button:hover{color:#e5e9f4}.view-button.active{background:#252347;color:#c9c1ff}.hidden{display:none!important}.canvas-wrap{position:relative;flex:1;min-height:440px;overflow:hidden;background-color:#0b1120;background-image:radial-gradient(#29344b 1px,transparent 1px);background-size:22px 22px}.canvas-wrap canvas{width:100%;height:100%;display:block;cursor:grab}.canvas-wrap canvas.dragging{cursor:grabbing}.canvas-hint{position:absolute;bottom:13px;left:14px;padding:8px 10px;border:1px solid #29344b;border-radius:6px;background:#11192bdf;color:#8794aa;font-size:10px;pointer-events:none}.canvas-hint span{font:9px var(--mono);color:#b7c0d0}.canvas-hint b{padding:0 7px;color:#44516a}.canvas-loading{position:absolute;inset:0;display:grid;place-items:center;background:#0b1120;color:#929fba;font-size:12px}.canvas-loading.hidden{display:none}.graph-footer{height:34px;flex:none;border-top:1px solid #202b40;padding:0 13px;display:flex;align-items:center;justify-content:space-between;color:#7f8ba3;font-size:10px}.graph-footer>span:first-child{display:flex;align-items:center;gap:7px}.graph-footer .live-dot{width:6px;height:6px}.details{border-left:1px solid var(--line);padding:25px 17px;min-height:100vh}.details-empty{margin-top:35vh;text-align:center;color:#78859d;padding:0 13px}.detail-orbit{font-size:33px;color:#766de3}.details-empty h2{font-size:13px;color:#d8deeb;font-weight:600;margin:12px 0 7px}.details-empty p{font-size:11px;line-height:1.6;margin:0}.detail-header{display:flex;align-items:center;gap:9px;padding-bottom:18px;border-bottom:1px solid var(--line)}.node-kind{height:26px;min-width:28px;padding:0 6px;border-radius:6px;background:#242346;color:#a99aff;display:grid;place-items:center;font:10px var(--mono)}.node-kind.doc{background:#15313b;color:#68d2eb}.detail-title{font-size:14px;font-weight:600;overflow-wrap:anywhere;flex:1}.detail-close{border:1px solid #2c3953;background:#141d31;color:#b9c4d6;border-radius:5px;width:24px;height:24px;font-size:17px;line-height:1;cursor:pointer;flex:none}.detail-close:hover{background:#222d43;color:#fff}.detail-label{font:9px var(--mono);letter-spacing:.11em;color:#77849c;margin:21px 0 8px}.detail-value{font-size:11px;color:#c0c9d9;line-height:1.55;overflow-wrap:anywhere}.node-description{white-space:pre-wrap}.source-excerpt{max-height:38vh;overflow:auto;margin:0;padding:10px;border:1px solid #25314a;border-radius:6px;background:#0a1120;color:#c0c9d9;font:10px/1.55 var(--mono);white-space:pre;tab-size:2}.detail-code{font:10px var(--mono);color:#a7b3c9;background:#121c30;border:1px solid #25314a;padding:8px;border-radius:6px}.detail-connection{width:100%;display:flex;gap:8px;align-items:center;background:none;border:0;color:#b4c0d1;text-align:left;padding:6px 2px;cursor:pointer;font:11px var(--sans)}.detail-connection:hover{color:#aaa0ff}.detail-connection .relation{font:9px var(--mono);color:#77849b}.detail-connection .neighbor{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.connection-list{max-height:42vh;overflow:auto}.empty-result{padding:12px;color:#76839a;font-size:11px}.error-state{color:#f3a0a0;line-height:1.6}
 @media(max-width:1050px){.app-shell{grid-template-columns:210px minmax(450px,1fr)}.details{display:none}.app-shell.has-selection .details{display:block;position:fixed;z-index:5;right:14px;bottom:14px;width:min(400px,calc(100vw - 28px));max-height:min(58vh,620px);overflow:auto;min-height:0;border:1px solid #35425e;border-radius:10px;padding:16px;background:#0d1425;box-shadow:0 12px 45px #000a}.workspace{padding:0 20px 20px}.overview{gap:8px}.metric-card{padding:10px;gap:8px}.metric-note{display:none}}
 @media(max-width:700px){.app-shell{display:block}.app-shell.has-selection .details{right:10px;bottom:10px;width:calc(100vw - 20px);max-height:55vh;padding:14px}.sidebar{height:auto;border-right:0;border-bottom:1px solid var(--line);padding:13px 14px;gap:14px}.sidebar-section{display:none}.sidebar-bottom{display:none}.brand{padding:0}.workspace{padding:0 12px 12px}.topbar{height:72px}.topbar h1{font-size:18px}.snapshot{display:none}.overview{grid-template-columns:repeat(2,1fr);gap:7px;padding:12px 0}.metric-card{height:67px}.metric-note{display:none}.graph-panel{min-height:calc(100vh - 250px)}.canvas-wrap{min-height:440px}.legend{gap:8px}.legend span:last-child{display:none}.graph-toolbar{height:auto;min-height:68px;flex-wrap:wrap;gap:6px;padding:7px 8px}.graph-title{width:100%;gap:7px;white-space:nowrap}.toolbar-right{width:100%;justify-content:space-between;gap:5px}.help-button{font-size:10px;padding:5px 7px}.view-button{padding:5px 7px}}
 .benchmark-strip{flex-wrap:wrap}
@@ -18,11 +18,68 @@
 
 select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar-bottom{display:flex;margin-top:0}}
     </style>
+    <style>
+      .source-button.primary{border-color:#665bd0;background:#252347;color:#e4deff;font-weight:600}
+      .source-button.primary:hover{background:#2d2a57}
+      .source-button:disabled{opacity:.65;cursor:progress}
+      .filter-toggle{display:flex;gap:6px}
+      .filter-button{border:1px solid #2c3953;border-radius:7px;padding:5px 9px;background:#111a2d;color:#aeb8cb;font:11px var(--sans);cursor:pointer}
+      .filter-button:hover{background:#151e33}
+      .filter-button[aria-pressed="true"]{border-color:#665bd0;background:#252347;color:#d0c8ff}
+      .focus-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 14px;border-bottom:1px solid #222d43;background:#151d33;font-size:12px;color:#c9d1e3}
+      .focus-bar b{color:#f3f5ff;overflow-wrap:anywhere}
+      .focus-bar button{border:1px solid #2c3953;border-radius:6px;padding:3px 8px;background:#111a2d;color:#aeb8cb;font:11px var(--sans);cursor:pointer}
+      .focus-bar button[aria-pressed="true"]{border-color:#665bd0;background:#252347;color:#d0c8ff}
+      .focus-bar .focus-exit{margin-left:auto}
+      .detail-actions{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 2px}
+      .detail-actions button{border:1px solid #2c3953;border-radius:7px;padding:6px 10px;background:#111a2d;color:#d0d7e6;font:11px var(--sans);cursor:pointer}
+      .detail-actions button:hover:not(:disabled){background:#1a2440;border-color:#665bd0}
+      .detail-actions button:disabled{opacity:.5;cursor:not-allowed}
+      .ask-panel{border:1px solid #222d43;border-radius:12px;background:#10172a;padding:12px 14px;margin-bottom:16px}
+      .ask-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+      .ask-modes{display:flex;border:1px solid #2c3953;border-radius:8px;overflow:hidden}
+      .ask-modes button{border:0;background:#111a2d;color:#aeb8cb;font:12px var(--sans);padding:7px 11px;cursor:pointer}
+      .ask-modes button[aria-pressed="true"]{background:#252347;color:#e4deff;font-weight:600}
+      .ask-input-wrap{display:flex;gap:4px;flex:1 1 220px;min-width:0}
+      .ask-input{flex:1;min-width:0;border:1px solid #2c3953;border-radius:8px;background:#0b1020;color:#edf1fa;font:13px var(--sans);padding:8px 10px}
+      .ask-input:focus{outline:none;border-color:#665bd0}
+      .ask-pick{border:1px solid #2c3953;border-radius:8px;background:#111a2d;color:#aeb8cb;cursor:pointer;padding:0 9px;font-size:13px}
+      .ask-go{border:1px solid #665bd0;border-radius:8px;background:#3d3591;color:#fff;font:600 12px var(--sans);padding:8px 16px;cursor:pointer}
+      .ask-go:disabled{opacity:.6;cursor:progress}
+      .ask-depth{border:1px solid #2c3953;border-radius:8px;background:#0b1020;color:#edf1fa;font:12px var(--sans);padding:7px 6px}
+      .ask-result{margin-top:10px}
+      .ask-result-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12px;color:#aeb8cb;margin-bottom:6px}
+      .ask-result-bar b{color:#f4c95d}
+      .ask-result-bar button{border:1px solid #2c3953;border-radius:6px;background:#111a2d;color:#aeb8cb;font:11px var(--sans);padding:3px 8px;cursor:pointer}
+      .ask-result-bar button[aria-pressed="true"]{border-color:#665bd0;background:#252347;color:#d0c8ff}
+      .ask-result-bar .spacer{flex:1}
+      .ask-text{max-height:240px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;margin:0;background:#0b1020;border:1px solid #222d43;border-radius:8px;padding:10px;font:12px/1.5 ui-monospace,Consolas,monospace;color:#d6dcea}
+      .ask-choices{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+      .ask-choices button{border:1px solid #665bd0;border-radius:7px;background:#1b1a3a;color:#d0c8ff;font:11px var(--sans);padding:5px 9px;cursor:pointer;text-align:left}
+      .ask-hint{font-size:11px;color:#7f8ba3;margin-top:6px}
+      .kind-filter{width:100%;margin-top:8px;border:1px solid #2c3953;border-radius:8px;background:#0b1020;color:#cfd6e6;font:12px var(--sans);padding:7px 8px}
+      .search-results{margin-top:8px;max-height:260px;overflow:auto;border:1px solid #222d43;border-radius:8px;background:#0d1426}
+      .search-result{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid #1a2338;background:none;color:#e4e9f5;padding:6px 9px;cursor:pointer;font:12px var(--sans)}
+      .search-result:hover,.search-result.active{background:#1b2440}
+      .search-result small{display:block;color:#7f8ba3;font-size:10.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .search-result .kind{color:#a99cff;margin-right:6px;font-size:10px;text-transform:uppercase;letter-spacing:.04em}
+      .search-more{padding:6px 9px;color:#7f8ba3;font-size:11px}
+      .group-toggle{display:flex;border:1px solid #2c3953;border-radius:8px;overflow:hidden;margin:2px 0 10px}
+      .group-toggle button{flex:1;border:0;background:#111a2d;color:#aeb8cb;font:11px var(--sans);padding:6px;cursor:pointer}
+      .group-toggle button[aria-pressed="true"]{background:#252347;color:#e4deff;font-weight:600}
+      .stale-chip{border:1px solid #8a6d1f;border-radius:999px;background:#2a2410;color:#f4c95d;font:11px var(--sans);padding:6px 11px;cursor:pointer}
+      .stale-chip:hover{background:#3a3115}
+      .stale-chip.fresh{border-color:#22543f;background:#0f2a20;color:#7fdcb2;cursor:default}
+      .topbar-button{border:1px solid #2c3953;border-radius:999px;background:#111a2d;color:#cfd6e6;font:11px var(--sans);padding:6px 11px;cursor:pointer}
+      .topbar-button:hover{background:#18213a}
+      .graph-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;padding:28px;text-align:center;background:#0b1120e8;color:#d9e1f0}.graph-empty strong{font-size:16px}.graph-empty p{max-width:420px;color:#95a3ba;line-height:1.6;margin:0}.graph-empty button{padding:9px 14px;cursor:pointer}
+      .toolbar-right{flex-wrap:wrap;justify-content:flex-end}.graph-toolbar{height:auto;min-height:46px;gap:8px;padding-top:8px;padding-bottom:8px}.canvas-wrap canvas{touch-action:none}.canvas-hint{max-width:calc(100% - 28px);line-height:1.6}
+    </style>
   </head>
   <body>
     <main class="app-shell">
       <aside class="sidebar">
-        <a class="brand" href="./" aria-label="Token Graph Graph Explorer home">
+        <a class="brand" href="./" aria-label="Token Graph Explorer home">
           <span class="brand-mark">G</span>
           <span><strong>Token Graph</strong><small>PROJECT EXPLORER</small></span>
         </a>
@@ -30,28 +87,38 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
         <div class="sidebar-section">
           <label class="eyebrow" for="search">SEARCH THE GRAPH</label>
           <div class="search-box"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Search nodes or files…" autocomplete="off" /><kbd>/</kbd></div>
+          <select id="kind-filter" class="kind-filter" aria-label="Show only one kind of node" title="Show only one kind of node, on the graph and in search"><option value="all">All kinds</option></select>
+          <div class="search-results hidden" id="search-results" role="listbox" aria-label="Search results"></div>
         </div>
 
         <div class="sidebar-section">
-          <div class="section-heading"><span class="eyebrow">COMMUNITIES</span><span id="community-count" class="muted"></span></div>
+          <div class="group-toggle" role="group" aria-label="Group nodes by"><button type="button" data-group-by="community" aria-pressed="true" title="Clusters of closely connected code, found by the graph engine">Communities</button><button type="button" data-group-by="folder" aria-pressed="false" title="Source folders, three levels deep (e.g. internal/place/debit)">Folders</button></div>
+          <div class="section-heading"><span class="eyebrow" id="group-heading">COMMUNITIES</span><span id="community-count" class="muted"></span></div>
           <div id="community-list" class="community-list"></div>
         </div>
 
         <div class="sidebar-bottom">
-          <label class="eyebrow" for="graph-file">GRAPH DATA</label>
-          <div class="data-row"><span class="live-dot"></span><span id="data-status">Loading graph…</span></div>
-          <label class="upload-button" for="graph-file">Add graph JSON files <span aria-hidden="true">↗</span></label>
-          <label class="eyebrow" for="graph-selector">LOADED GRAPHS</label>
+          <div class="eyebrow">PROJECT EXPLORER</div>
+          <div class="source-choice">
+            <button type="button" class="source-button primary hidden" id="build-project" title="Pick a project folder; its graph is built (or updated) and opened here">Choose project &amp; build graph</button>
+            <label class="source-button" for="projects-folder">Choose Projects folder</label>
+            <button type="button" class="source-button" id="original-source">Reload local graph</button>
+            <label class="source-button" id="token-source" for="graph-file">Add graph JSON files</label>
+            <button type="button" class="source-button hidden" id="stop-server" title="Stop the local Token Graph server; the desktop shortcut starts it again">Stop server</button>
+          </div>
+          <label class="eyebrow" for="graph-selector">PROJECTS</label>
           <select id="graph-selector" class="source-button" disabled aria-label="Switch loaded graph"></select>
+          <input id="projects-folder" type="file" webkitdirectory multiple hidden />
           <input id="graph-file" type="file" accept="application/json,.json" multiple hidden />
-          <div class="data-footnote" id="graph-source-note">Select one or more graph JSON files. No data is uploaded.</div>
+          <div class="data-row"><span class="live-dot"></span><span id="data-status">Loading graph…</span></div>
+          <div class="data-footnote" id="graph-source-note">Choose your Projects folder to find all project graphs. Files stay in this browser.</div>
         </div>
       </aside>
 
       <section class="workspace">
         <header class="topbar">
-          <div><div class="breadcrumb">PROJECTS <span>/</span> LOCAL GRAPH <span>/</span> <b id="view-crumb">GRAPH</b></div><h1 id="page-title">Codebase map</h1></div>
-          <div class="topbar-actions"><span class="snapshot" id="snapshot">Graph snapshot</span><button class="icon-button" id="reset-view" title="Reset view" aria-label="Reset view">⟲</button></div>
+          <div><div class="breadcrumb">PROJECTS <span>/</span> <span id="project-name">LOCAL PROJECT</span> <span>/</span> <b id="view-crumb">GRAPH</b></div><h1 id="page-title">Codebase map</h1></div>
+          <div class="topbar-actions"><button type="button" class="stale-chip hidden" id="stale-chip"></button><button type="button" class="topbar-button hidden" id="diff-button" title="What was added, removed or re-connected in the graph by the last build or update">Changes since last build</button><span class="snapshot" id="snapshot">Graph snapshot</span><button class="icon-button" id="reset-view" title="Reset view" aria-label="Reset view">⟲</button></div>
         </header>
 
         <section class="overview" aria-label="Graph summary">
@@ -68,12 +135,36 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
           <span class="benchmark-source" id="benchmark-source">Estimated savings/query</span>
         </section>
 
+        <section class="ask-panel hidden" id="ask-panel" aria-label="Ask the graph">
+          <div class="ask-row">
+            <div class="ask-modes" role="group" aria-label="Question type">
+              <button type="button" data-mode="query" aria-pressed="true" title="Ask about the code in plain words">Question</button>
+              <button type="button" data-mode="path" aria-pressed="false" title="How is A connected to B?">Path A → B</button>
+              <button type="button" data-mode="affected" aria-pressed="false" title="What depends on this and could break if it changes?">Impact</button>
+            </div>
+            <div class="ask-input-wrap"><input class="ask-input" id="ask-a" list="ask-nodes" autocomplete="off" spellcheck="false" placeholder="e.g. how is partial cashout executed" /><button type="button" class="ask-pick hidden" id="ask-a-pick" title="Use the selected node">◎</button></div>
+            <div class="ask-input-wrap hidden" id="ask-b-wrap"><input class="ask-input" id="ask-b" list="ask-nodes" autocomplete="off" spellcheck="false" placeholder="To: class, method or file" /><button type="button" class="ask-pick" id="ask-b-pick" title="Use the selected node">◎</button></div>
+            <select class="ask-depth" id="ask-budget" title="Answer size in estimated tokens. Smaller is cheaper to paste into Claude; raise it when the answer says TRUNCATED and lacks what you need."><option value="400">~400 tokens</option><option value="800" selected>~800 tokens</option><option value="1500">~1,500 tokens</option><option value="3000">~3,000 tokens</option></select>
+            <select class="ask-depth hidden" id="ask-depth" title="How many steps of dependants to follow"><option value="1">1 step</option><option value="2" selected>2 steps</option><option value="3">3 steps</option></select>
+            <button type="button" class="ask-go" id="ask-go">Ask</button>
+          </div>
+          <datalist id="ask-nodes"></datalist>
+          <div class="ask-hint" id="ask-hint">Answers come from this project's graph on your computer. Matching nodes light up on the graph below.</div>
+          <div class="ask-result hidden" id="ask-result">
+            <div class="ask-result-bar"><span id="ask-summary"></span><span class="spacer"></span><button type="button" id="ask-only" aria-pressed="false" title="Hide everything except the answer's nodes">Show only these</button><button type="button" id="ask-copy" title="Copy the answer text, e.g. to paste into Claude">Copy text</button><button type="button" id="ask-clear">Clear</button></div>
+            <pre class="ask-text" id="ask-text"></pre>
+            <div class="ask-choices" id="ask-choices"></div>
+          </div>
+        </section>
+
         <section class="graph-panel">
-          <div class="graph-toolbar"><div class="graph-title"><span class="live-dot"></span><strong id="graph-title">Relationship graph</strong><span id="visible-count" class="muted">All nodes</span><button class="help-button" id="graph-help-toggle" aria-expanded="false" aria-controls="graph-help">How to read this</button></div><div class="toolbar-right"><div class="view-toggle" role="group" aria-label="Graph view"><button class="view-button active" id="all-view" aria-pressed="true">All graph</button><button class="view-button" id="docs-view" aria-pressed="false">Documentation</button></div><div class="legend"><span class="legend-code"><i class="legend-dot code-dot"></i>Community</span><span><i class="legend-dot doc-dot"></i>Docs</span><span><i class="legend-line"></i>Connection</span></div></div></div>
-          <div class="graph-help hidden" id="graph-help"><button class="help-close" id="graph-help-close" aria-label="Close graph guide">×</button><strong>Reading the graph</strong><p>Each dot is an indexed code symbol or documentation section. Colors group nodes by Token Graph community; documentation dots are cyan.</p><p>Lines show relationships between two visible nodes. Select a dot to see its source excerpt and connections. Drag to pan, scroll to zoom, or search for a label/file.</p></div>
+          <div class="graph-toolbar"><div class="graph-title"><span class="live-dot"></span><strong id="graph-title">Relationship graph</strong><span id="visible-count" class="muted">All nodes</span><button class="help-button" id="graph-help-toggle" aria-expanded="false" aria-controls="graph-help">How to read this</button></div><div class="toolbar-right"><div class="view-toggle" role="group" aria-label="Graph dimensions"><button class="view-button active" id="mode-3d" aria-pressed="true">3D</button><button class="view-button" id="mode-2d" aria-pressed="false">2D</button></div><div class="filter-toggle" role="group" aria-label="Hide nodes"><button class="filter-button" id="hide-tests" aria-pressed="false" title="Hide test files (_test.go, *.Tests projects, tests/ folders, *.spec.ts …)">Hide tests</button><button class="filter-button" id="hide-generated" aria-pressed="false" title="Hide generated code (gen/ folders, *.pb.go, *.g.cs, *.Designer.cs, EF Migrations …)">Hide generated</button></div><div class="view-toggle" role="group" aria-label="Graph view"><button class="view-button active" id="all-view" aria-pressed="true">All graph</button><button class="view-button" id="docs-view" aria-pressed="false">Documentation</button></div><div class="legend"><span class="legend-code"><i class="legend-dot code-dot"></i>Community</span><span><i class="legend-dot doc-dot"></i>Docs</span><span><i class="legend-line"></i>Connection</span></div></div></div>
+          <div class="graph-help hidden" id="graph-help"><button class="help-close" id="graph-help-close" aria-label="Close graph guide">×</button><strong>Reading the graph</strong><p>Each dot is an indexed code symbol or documentation section. Colors group nodes by Token Graph community; documentation dots are cyan.</p><p>Lines show relationships between two visible nodes. Select a dot to see its source excerpt and connections. In 3D, drag to orbit and Shift-drag or right-drag to pan. Scroll to zoom. Switch to 2D for a flat map. Search or click a node to inspect it.</p></div>
+          <div class="focus-bar hidden" id="focus-bar"><span>Focus on</span><b id="focus-name"></b><button id="focus-1" aria-pressed="true" title="Direct neighbours only">1 step</button><button id="focus-2" aria-pressed="false" title="Neighbours of neighbours too">2 steps</button><span class="muted" id="focus-count"></span><button class="focus-exit" id="focus-exit" title="Show the whole graph again (Esc)">✕ Exit focus</button></div>
           <div class="canvas-wrap" id="canvas-wrap"><canvas id="graph-canvas" aria-label="Interactive graph of project files and code symbols"></canvas>
-            <div class="canvas-hint"><span>DRAG</span> pan <b>·</b> <span>SCROLL</span> zoom <b>·</b> click a node for details</div>
+            <div class="canvas-hint" id="navigation-hint"><span>DRAG</span> rotate <b>·</b> <span>SHIFT + DRAG</span> pan <b>·</b> <span>SCROLL</span> zoom <b>·</b> double-click to focus</div>
             <div class="canvas-loading" id="loading">Preparing project graph…</div>
+            <div class="graph-empty hidden" id="graph-empty" role="status"><strong id="graph-empty-title"></strong><p id="graph-empty-detail"></p><button class="help-button" id="graph-empty-reset">Show all graph</button></div>
           </div>
           <div class="graph-footer"><span><span class="live-dot"></span> Token Graph snapshot</span><span id="graph-updated">—</span></div>
         </section>
@@ -83,7 +174,9 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
         <div class="details-empty"><div class="detail-orbit">◎</div><h2>Explore the graph</h2><p>Pick any node to inspect its source, community, and nearby connections.</p></div>
       </aside>
     </main>
-    <script>window.GRAPHIFY_DATA=null; window.GRAPHIFY_BENCHMARK=null;</script>
+    <script>
+window.GRAPHIFY_DATA=null;
+    </script>
     <script>
 
 (() => {
@@ -93,7 +186,44 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
   const palette = ['#8e7cff','#51c6e3','#e58bd4','#e6ad63','#61d3aa','#6f9cff','#f07883','#b2d66e','#bb91f4','#e0d56b','#53b9a6','#f09461'];
   const $ = (selector) => document.querySelector(selector);
   const format = (value) => new Intl.NumberFormat().format(value);
+  // Set when the page is served by scripts/explorer_server.py (desktop shortcut); null when opened as a file.
+  const serverToken = location.protocol.startsWith('http') ? new URLSearchParams(location.search).get('token') : null;
+  const api = async (path, body) => {
+    const response = await fetch(path, body === undefined
+      ? { cache: 'no-store', headers: { 'X-Token-Graph': serverToken } }
+      : { method: 'POST', cache: 'no-store', headers: { 'X-Token-Graph': serverToken, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || `Server answered ${response.status}`);
+    return data;
+  };
+  if (serverToken) $('.brand').href = `/?token=${encodeURIComponent(serverToken)}`;
   const colorFor = (id) => palette[Math.abs(Number(id) || 0) % palette.length];
+
+  // Path rules for the "Hide tests" / "Hide generated" toggles (source_file, forward slashes).
+  const TEST_PATH = /(^|\/)(tests?|__tests__|specs?|testdata|test-data|fixtures)(\/|$)|(^|\/)[^\/]+\.(unit|integration|functional|e2e|acceptance)?tests?(\/|$)|_test\.go$|(^|\/)test_[^\/]*\.py$|_test\.py$|\.(test|spec)\.[cm]?[jt]sx?$/i;
+  const CSHARP_TEST_FILE = /[a-z0-9]Tests?\.cs$/;  // case-sensitive: FooTests.cs, not Latest.cs
+  const GENERATED_PATH = /(^|\/)(gen|generated|__generated__)(\/|$)|\.pb(\.gw)?\.go$|_gen\.go$|_pb2(_grpc)?\.pyi?$|\.g(\.i)?\.cs$|\.designer\.cs$|\.generated\.\w+$|(^|\/)migrations\/[^\/]+\.cs$|(^|\/)obj\//i;
+  const stored = (key, fallback = false) => { try { const v = localStorage.getItem(key); return v === null ? fallback : v === '1'; } catch (_) { return fallback; } };
+  const store = (key, on) => { try { localStorage.setItem(key, on ? '1' : '0'); } catch (_) { /* per-viewer convenience only */ } };
+  state.is3d = stored('tokenGraph.is3d', true);
+  state.yaw = .45; state.pitch = -.25; state.cameraTarget = {x:0,y:0,z:0};
+  state.hideTests = stored('tokenGraph.hideTests');
+  state.hideGenerated = stored('tokenGraph.hideGenerated', true);  // same default as /token-graph answers
+  state.focus = null;      // { id, depth, ids } while focus mode is on
+  state.highlight = null;  // { nodes: Map(id -> level), seeds: Set, routeEdges: Set('a|b') } from the ask bar
+  state.highlightOnly = false;
+  state.kind = 'all';      // node-kind filter from the sidebar select
+  state.groupBy = (() => { try { return localStorage.getItem('tokenGraph.groupBy') === 'folder' ? 'folder' : 'community'; } catch (_) { return 'community'; } })();
+  state.groupIndex = new Map();
+  state.editors = { vscode: false, rider: false };
+
+  function tagNode(node) {
+    const file = String(node.source_file || '').replace(/\\/g, '/');
+    node._test = Boolean(file) && (TEST_PATH.test(file) || CSHARP_TEST_FILE.test(file));
+    node._generated = Boolean(file) && GENERATED_PATH.test(file);
+    return node;
+  }
+  function passesFilters(node) { return !(state.hideTests && node._test) && !(state.hideGenerated && node._generated) && (state.kind === 'all' || node._kind === state.kind); }
 
   function resize() {
     const rect = canvas.getBoundingClientRect();
@@ -104,22 +234,55 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     draw();
   }
 
-  function fitGraph() {
-    const fitNodes = state.nodes.filter(visible);
-    if (!fitNodes.length) return;
-    const width = canvas.clientWidth, height = canvas.clientHeight;
-    const minX = Math.min(...fitNodes.map(node => node.x));
-    const maxX = Math.max(...fitNodes.map(node => node.x));
-    const minY = Math.min(...fitNodes.map(node => node.y));
-    const maxY = Math.max(...fitNodes.map(node => node.y));
+  function projectNode(node) {
+    if (!state.is3d) return { ...node, depth: 0, perspective: 1 };
+    const target = state.cameraTarget;
+    const x = (node._x3 || 0) - target.x;
+    const y = (node._y3 || 0) - target.y;
+    const z = (node._z3 || 0) - target.z;
+    const cy = Math.cos(state.yaw), sy = Math.sin(state.yaw);
+    const cp = Math.cos(state.pitch), sp = Math.sin(state.pitch);
+    const rx = x * cy + z * sy, rz = -x * sy + z * cy;
+    const ry = y * cp - rz * sp, depth = y * sp + rz * cp;
+    const distance = state.cameraDistance || 1500;
+    const perspective = distance / Math.max(distance * .25, distance - depth);
+    return { ...node, x: rx * perspective, y: ry * perspective, depth, perspective };
+  }
+
+  function centerNode(node) {
+    const point = projectNode(node);
+    state.x = -point.x * state.scale; state.y = -point.y * state.scale;
+  }
+
+  function setDimension(is3d) {
+    state.is3d = is3d;
+    store('tokenGraph.is3d', is3d);
+    $('#mode-3d').classList.toggle('active', is3d);
+    $('#mode-2d').classList.toggle('active', !is3d);
+    $('#mode-3d').setAttribute('aria-pressed', String(is3d));
+    $('#mode-2d').setAttribute('aria-pressed', String(!is3d));
+    $('#navigation-hint').innerHTML = is3d
+      ? '<span>DRAG</span> rotate <b>·</b> <span>SHIFT + DRAG</span> pan <b>·</b> <span>SCROLL</span> zoom <b>·</b> double-click to focus'
+      : '<span>DRAG</span> pan <b>·</b> <span>SCROLL</span> zoom <b>·</b> double-click to focus';
+    fitGraph();
+  }
+
+  function fitGraph(only = null) {
+    const fitNodes = state.nodes.filter(node => visible(node) && (!only || only.has(node.id)));
+    if (!fitNodes.length) { draw(); return; }
+    const bounds = (values) => values.reduce((b, value) => [Math.min(b[0], value), Math.max(b[1], value)], [Infinity, -Infinity]);
+    if (state.is3d) {
+      const bx = bounds(fitNodes.map(n => n._x3 || 0)), by = bounds(fitNodes.map(n => n._y3 || 0)), bz = bounds(fitNodes.map(n => n._z3 || 0));
+      state.cameraTarget = {x:(bx[0]+bx[1])/2,y:(by[0]+by[1])/2,z:(bz[0]+bz[1])/2};
+      const t = state.cameraTarget;
+      state.cameraDistance = fitNodes.reduce((distance,n) => Math.max(distance, Math.hypot(n._x3-t.x,n._y3-t.y,n._z3-t.z)*3),200);
+    }
+    const projected = fitNodes.map(projectNode);
+    const bx = bounds(projected.map(n => n.x)), by = bounds(projected.map(n => n.y));
     const padding = 56;
-    state.scale = Math.min(
-      1,
-      (width - padding * 2) / Math.max(1, maxX - minX),
-      (height - padding * 2) / Math.max(1, maxY - minY),
-    );
-    state.x = -(minX + maxX) / 2 * state.scale;
-    state.y = -(minY + maxY) / 2 * state.scale;
+    state.scale = Math.max(.03, Math.min(1, Math.max(1,canvas.clientWidth-padding*2)/Math.max(1,bx[1]-bx[0]), Math.max(1,canvas.clientHeight-padding*2)/Math.max(1,by[1]-by[0])));
+    state.x = -(bx[0]+bx[1])/2*state.scale;
+    state.y = -(by[0]+by[1])/2*state.scale;
     draw();
   }
 
@@ -147,7 +310,11 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
   function normalizeGraph(raw) {
     const edges = raw?.links ?? raw?.edges;
     if (!raw || !Array.isArray(raw.nodes) || !Array.isArray(edges)) throw new Error('This file is not a Token Graph graph export. It must include nodes and links or edges.');
-    state.nodes = raw.nodes.map((node) => ({ ...node, x: 0, y: 0 }));
+    state.nodes = raw.nodes.map((node) => tagNode({ ...node, x: 0, y: 0 }));
+    state.focus = null;
+    $('#focus-bar').classList.add('hidden');
+    state.highlight = null; state.highlightOnly = false;
+    $('#ask-result').classList.add('hidden');
     state.links = edges.filter((link) => link.source != null && link.target != null);
     state.nodeById = new Map(state.nodes.map((node) => [node.id, node]));
     state.adjacency = new Map(state.nodes.map((node) => [node.id, []]));
@@ -155,32 +322,24 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       if (state.adjacency.has(link.source)) state.adjacency.get(link.source).push({ nodeId: link.target, relation: link.relation });
       if (state.adjacency.has(link.target)) state.adjacency.get(link.target).push({ nodeId: link.source, relation: link.relation });
     }
-    const groups = new Map();
+    // Community names are always computed: the details panel and search show them in either grouping.
+    const communities = new Map();
     for (const node of state.nodes) {
       const id = String(node.community ?? 'Other');
-      if (!groups.has(id)) groups.set(id, { id, name: node.community_name || `Community ${id}`, nodes: [] });
-      groups.get(id).nodes.push(node);
+      if (!communities.has(id)) communities.set(id, { id, nodes: [] });
+      communities.get(id).nodes.push(node);
     }
-    for (const group of groups.values()) {
-      group.name = nameCommunity(group);
-      for (const node of group.nodes) node.community_name = group.name;
+    for (const group of communities.values()) {
+      const name = nameCommunity(group);
+      for (const node of group.nodes) node.community_name = name;
     }
-    state.communities = [...groups.values()].sort((a, b) => b.nodes.length - a.nodes.length);
-    const indexById = new Map(state.communities.map((group, i) => [group.id, i]));
-    for (const node of state.nodes) {
-      const i = indexById.get(String(node.community ?? 'Other'));
-      const group = state.communities[i];
-      const angle = i / Math.max(1, state.communities.length) * Math.PI * 2;
-      const spread = 58 + Math.sqrt(group.nodes.length) * 9;
-      const hash = hashString(node.id);
-      const localAngle = hash % 6283 / 1000;
-      const radius = Math.sqrt((hash >>> 4) % 10000) / 100 * spread;
-      node.x = Math.cos(angle) * (150 + Math.sqrt(state.nodes.length) * 8) + Math.cos(localAngle) * radius;
-      node.y = Math.sin(angle) * (150 + Math.sqrt(state.nodes.length) * 8) + Math.sin(localAngle) * radius;
-    }
+    const methodTargets = new Set(state.links.filter(link => link.relation === 'method').map(link => link.target));
+    for (const node of state.nodes) node._kind = kindOf(node, methodTargets);
+    fillKindOptions();
+    buildGroups();
     renderCommunityList();
+    renderSearchResults();
     updateMetrics(raw);
-    loadBenchmark(raw.benchmark ?? raw.graph?.benchmark ?? null);
     $('#data-status').textContent = `${format(state.nodes.length)} nodes loaded`;
     $('#snapshot').textContent = raw.built_at_commit ? `Commit ${String(raw.built_at_commit).slice(0, 7)}` : 'Graph snapshot';
     $('#graph-updated').textContent = raw.built_at_commit ? `Built from ${String(raw.built_at_commit).slice(0, 10)}` : 'Token Graph export';
@@ -191,8 +350,109 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     fitGraph();
   }
 
+  // Grouping (sidebar list, colours, layout): Token Graph communities, or source folders.
+  function folderOf(node) {
+    const file = String(node.source_file || '').replace(/\\/g, '/');
+    if (!file) return node.file_type === 'concept' || node.external ? '(external)' : '(no file)';
+    const parts = file.split('/');
+    parts.pop();
+    return parts.slice(0, 3).join('/') || '(project root)';  // three levels: internal/place/debit, src/X.Domain/Entities
+  }
+  function buildGroups() {
+    const byFolder = state.groupBy === 'folder';
+    const groups = new Map();
+    for (const node of state.nodes) {
+      const id = byFolder ? folderOf(node) : String(node.community ?? 'Other');
+      node._group = id;
+      if (!groups.has(id)) groups.set(id, { id, name: byFolder ? id : node.community_name, nodes: [] });
+      groups.get(id).nodes.push(node);
+    }
+    state.communities = [...groups.values()].sort((a, b) => b.nodes.length - a.nodes.length);
+    state.groupIndex = new Map(state.communities.map((group, i) => [group.id, i]));
+    for (const node of state.nodes) {
+      const i = state.groupIndex.get(node._group);
+      const group = state.communities[i];
+      const angle = i / Math.max(1, state.communities.length) * Math.PI * 2;
+      const spread = 58 + Math.sqrt(group.nodes.length) * 9;
+      const hash = hashString(node.id);
+      const localAngle = hash % 6283 / 1000;
+      const radius = Math.sqrt((hash >>> 4) % 10000) / 100 * spread;
+      node.x = Math.cos(angle) * (150 + Math.sqrt(state.nodes.length) * 8) + Math.cos(localAngle) * radius;
+      node.y = Math.sin(angle) * (150 + Math.sqrt(state.nodes.length) * 8) + Math.sin(localAngle) * radius;
+      const sphereY = 1 - 2 * (i + .5) / Math.max(1, state.communities.length);
+      const ring = Math.sqrt(Math.max(0, 1 - sphereY * sphereY));
+      const groupAngle = i * Math.PI * (3 - Math.sqrt(5));
+      const scene = state.communities.length === 1 ? 0 : 150 + Math.sqrt(state.nodes.length) * 8;
+      const localZ = ((hash >>> 12) % 2000) / 1000 - 1;
+      const localRing = Math.sqrt(Math.max(0, 1 - localZ * localZ));
+      node._x3 = Math.cos(groupAngle) * ring * scene + Math.cos(localAngle) * localRing * radius;
+      node._y3 = sphereY * scene + localZ * radius;
+      node._z3 = Math.sin(groupAngle) * ring * scene + Math.sin(localAngle) * localRing * radius;
+    }
+    const label = byFolder ? 'FOLDERS' : 'COMMUNITIES';
+    $('#group-heading').textContent = label;
+    $('.metric-card:nth-child(3) .metric-label').textContent = label;
+    $('.metric-card:nth-child(3) .metric-note').textContent = byFolder ? 'source folders' : 'detected clusters';
+  }
+  function setGroupBy(mode) {
+    if (state.groupBy === mode) return;
+    state.groupBy = mode;
+    try { localStorage.setItem('tokenGraph.groupBy', mode); } catch (_) { /* per-viewer convenience only */ }
+    document.querySelectorAll('[data-group-by]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.groupBy === mode)));
+    if (!state.nodes.length) return;
+    state.activeCommunity = null;
+    buildGroups();
+    updateMetrics({});
+    renderCommunityList();
+    fitGraph();
+  }
+
+  // What a node is, inferred from the graph (the engine stores no explicit class/interface kind).
+  const KIND_NAMES = { type: 'Types (class / struct / interface)', method: 'Methods', function: 'Functions', file: 'Files', document: 'Docs', external: 'External' };
+  function kindOf(node, methodTargets) {
+    const label = String(node.label || '');
+    const file = String(node.source_file || '').replace(/\\/g, '/');
+    if (node.file_type === 'document') return 'document';
+    if (node.file_type === 'concept' || node.external || node.type === 'external') return 'external';
+    if (file && file.split('/').pop() === label) return 'file';
+    if (methodTargets.has(node.id) || /^\..*\)$/.test(label)) return 'method';
+    if (label.endsWith(')')) return 'function';
+    if (node.type === 'namespace' || node.type === 'package') return 'external';
+    return 'type';
+  }
+
+  function fillKindOptions() {
+    const counts = new Map();
+    for (const node of state.nodes) counts.set(node._kind, (counts.get(node._kind) || 0) + 1);
+    if (!counts.has(state.kind)) state.kind = 'all';
+    const select = $('#kind-filter');
+    select.replaceChildren(new Option(`All kinds (${format(state.nodes.length)})`, 'all'));
+    for (const kind of Object.keys(KIND_NAMES)) if (counts.has(kind)) select.append(new Option(`${KIND_NAMES[kind]} (${format(counts.get(kind))})`, kind));
+    select.value = state.kind;
+  }
+
+  // Search results list: what matches the search box, the kind filter and the hide filters.
+  function renderSearchResults() {
+    const box = $('#search-results');
+    if (!state.query) { box.classList.add('hidden'); box.replaceChildren(); return; }
+    const q = state.query;
+    const rank = node => { const label = String(node.label).toLowerCase().replace(/^\.|\(\)$/g, ''); return label === q ? 0 : label.startsWith(q) ? 1 : String(node.label).toLowerCase().includes(q) ? 2 : 3; };
+    const matches = state.nodes.filter(visible).sort((a, b) => rank(a) - rank(b) || (state.adjacency.get(b.id)?.length || 0) - (state.adjacency.get(a.id)?.length || 0));
+    box.replaceChildren();
+    for (const node of matches.slice(0, 40)) {
+      const item = document.createElement('button');
+      item.className = `search-result ${state.selected?.id === node.id ? 'active' : ''}`;
+      item.innerHTML = `<span class="kind">${escapeHtml(node._kind)}</span>${escapeHtml(node.label)}<small>${escapeHtml(node.source_file || '')}${node.source_location ? ':' + escapeHtml(node.source_location) : ''}</small>`;
+      item.addEventListener('click', () => { select(node); centerNode(node); draw(); renderSearchResults(); });
+      box.append(item);
+    }
+    if (!matches.length) box.innerHTML = '<div class="search-more">No matches with the current filters.</div>';
+    else if (matches.length > 40) box.insertAdjacentHTML('beforeend', `<div class="search-more">${format(matches.length - 40)} more — type more of the name</div>`);
+    box.classList.remove('hidden');
+  }
+
   function hashString(value) { let hash = 2166136261; for (let i = 0; i < value.length; i++) hash = Math.imul(hash ^ value.charCodeAt(i), 16777619); return hash >>> 0; }
-  function loadBenchmark(benchmark = null) {
+  function loadBenchmark(benchmark = window.GRAPHIFY_BENCHMARK) {
     if (!benchmark) {
       $('#reduction-total').textContent = 'Not included';
       $('#benchmark-detail').textContent = 'This graph file has no corpus scan data.';
@@ -207,11 +467,21 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     $('#benchmark-strip').title = `${benchmark.method}. Values are estimates, not exact tokens for a particular model.`;
   }
 
+  function setGraphSource(source, filename = '') {
+    const original = source === 'original';
+    $('#project-name').textContent = original ? 'LOCAL PROJECT' : filename.replace(/\.json$/i, '');
+    $('#original-source').classList.toggle('active', original);
+    $('#token-source').classList.toggle('active', !original);
+    $('#graph-source-note').textContent = original
+      ? 'Choose your Projects folder to find all project graphs. Files stay in this browser.'
+      : `Using graph file: ${filename}. Data stays in this browser.`;
+  }
+
   function updateMetrics(raw) {
-    const nodes = state.view === 'docs' ? state.nodes.filter(isDocument) : state.nodes;
+    const nodes = (state.view === 'docs' ? state.nodes.filter(isDocument) : state.nodes).filter(passesFilters);
     const ids = new Set(nodes.map(node => node.id));
-    const links = state.view === 'docs' ? state.links.filter(link => ids.has(link.source) && ids.has(link.target)) : state.links;
-    const groups = new Set(nodes.map(node => String(node.community ?? 'Other')));
+    const links = state.links.filter(link => ids.has(link.source) && ids.has(link.target));
+    const groups = new Set(nodes.map(node => node._group));
     $('#node-total').textContent = format(nodes.length);
     $('#edge-total').textContent = format(links.length);
     $('#group-total').textContent = format(groups.size);
@@ -219,7 +489,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     $('.metric-card:nth-child(1) .metric-label').textContent = state.view === 'docs' ? 'DOCUMENT NODES' : 'NODES';
     $('.metric-card:nth-child(1) .metric-note').textContent = state.view === 'docs' ? 'indexed sections' : 'code + docs';
     $('.metric-card:nth-child(2) .metric-note').textContent = state.view === 'docs' ? 'doc relationships' : 'relationships';
-    $('.metric-card:nth-child(3) .metric-note').textContent = state.view === 'docs' ? 'doc clusters' : 'detected clusters';
+    $('.metric-card:nth-child(3) .metric-note').textContent = state.groupBy === 'folder' ? 'source folders' : state.view === 'docs' ? 'doc clusters' : 'detected clusters';
     $('.metric-card:nth-child(4) .metric-label').textContent = state.view === 'docs' ? 'DOC FILES' : 'SOURCE FILES';
     $('#community-count').textContent = groups.size;
   }
@@ -229,15 +499,16 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     list.innerHTML = '';
     const all = document.createElement('button');
     all.className = `community-item ${state.activeCommunity === null ? 'active' : ''}`;
-    const scopedNodes = state.view === 'docs' ? state.nodes.filter(isDocument) : state.nodes;
-    const scopedGroups = state.view === 'docs' ? state.communities.map(group => ({ ...group, nodes: group.nodes.filter(isDocument) })).filter(group => group.nodes.length) : state.communities;
-    all.innerHTML = `<span class="swatch" style="background:#a2acc1"></span><span class="community-name">All ${state.view === 'docs' ? 'doc' : ''} communities</span><span class="community-size">${format(scopedNodes.length)}</span>`;
+    const inScope = node => (state.view !== 'docs' || isDocument(node)) && passesFilters(node);
+    const scopedNodes = state.nodes.filter(inScope);
+    const scopedGroups = state.communities.map(group => ({ ...group, nodes: group.nodes.filter(inScope) })).filter(group => group.nodes.length);
+    all.innerHTML = `<span class="swatch" style="background:#a2acc1"></span><span class="community-name">All ${state.view === 'docs' ? 'doc ' : ''}${state.groupBy === 'folder' ? 'folders' : 'communities'}</span><span class="community-size">${format(scopedNodes.length)}</span>`;
     all.onclick = () => { state.activeCommunity = null; renderCommunityList(); draw(); };
     list.append(all);
     for (const group of scopedGroups) {
       const button = document.createElement('button');
       button.className = `community-item ${state.activeCommunity === group.id ? 'active' : ''}`;
-      button.innerHTML = `<span class="swatch" style="background:${colorFor(group.id)}"></span><span class="community-name" title="${escapeHtml(group.name)}">${escapeHtml(group.name)}</span><span class="community-size">${format(group.nodes.length)}</span>`;
+      button.innerHTML = `<span class="swatch" style="background:${colorFor(state.groupIndex.get(group.id))}"></span><span class="community-name" title="${escapeHtml(group.name)}">${escapeHtml(group.name)}</span><span class="community-size">${format(group.nodes.length)}</span>`;
       button.onclick = () => { state.activeCommunity = state.activeCommunity === group.id ? null : group.id; renderCommunityList(); draw(); };
       list.append(button);
     }
@@ -245,36 +516,74 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
 
   function escapeHtml(value) { return String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
   function isDocument(node) { return node.file_type === 'document'; }
-  function visible(node) { return (state.view !== 'docs' || isDocument(node)) && (state.activeCommunity === null || String(node.community ?? 'Other') === state.activeCommunity) && (!state.query || `${node.label} ${node.source_file || ''} ${node.community_name || ''}`.toLowerCase().includes(state.query)); }
+  function visible(node) { return (state.view !== 'docs' || isDocument(node)) && passesFilters(node) && (!state.focus || state.focus.ids.has(node.id)) && (!state.highlightOnly || !state.highlight || state.highlight.nodes.has(node.id)) && (state.activeCommunity === null || node._group === state.activeCommunity) && (!state.query || `${node.label} ${node.source_file || ''} ${node.community_name || ''}`.toLowerCase().includes(state.query)); }
+  function updateEmptyState(visibleCount) {
+    const empty = visibleCount === 0 && state.nodes.length > 0;
+    $('#graph-empty').classList.toggle('hidden', !empty);
+    if (!empty) return;
+    const noDocuments = state.view === 'docs' && !state.nodes.some(isDocument);
+    $('#graph-empty-title').textContent = noDocuments ? 'No documentation indexed' : 'No nodes match these filters';
+    $('#graph-empty-detail').textContent = noDocuments
+      ? `This graph contains ${format(state.nodes.length)} code and symbol nodes, but no document nodes. Choose All graph to explore the code.`
+      : 'Try clearing the search, choosing another node kind, or showing all graph nodes.';
+    $('#graph-empty-reset').textContent = noDocuments ? 'Show all graph' : 'Clear filters and show graph';
+  }
+
+  function recoverGraph() {
+    const noDocuments = state.view === 'docs' && !state.nodes.some(isDocument);
+    state.query = ''; $('#search').value = ''; state.kind = 'all'; $('#kind-filter').value = 'all';
+    state.highlightOnly = false;
+    if (!noDocuments) {
+      setFilter('hideTests', 'hide-tests', false);
+      setFilter('hideGenerated', 'hide-generated', false);
+    }
+    setView('all');
+    renderSearchResults();
+  }
+
   function draw() {
     if (!canvas.width) return;
     const width = canvas.clientWidth, height = canvas.clientHeight;
     ctx.clearRect(0, 0, width, height);
-    const visibleNodes = state.nodes.filter(visible);
+    const visibleNodes = state.nodes.filter(visible).map(projectNode).sort((a,b) => a.depth - b.depth);
+    updateEmptyState(visibleNodes.length);
+    const projectedById = new Map(visibleNodes.map(node => [node.id, node]));
     const visibleIds = new Set(visibleNodes.map(n => n.id));
-    $('#visible-count').textContent = state.query ? `${format(visibleNodes.length)} matches` : state.activeCommunity ? `${format(visibleNodes.length)} nodes` : state.view === 'docs' ? `${format(visibleNodes.length)} docs` : 'All nodes';
+    if (state.focus) $('#focus-count').textContent = `${format(visibleNodes.length)} nodes shown`;
+    $('#visible-count').textContent = state.focus ? `Focus · ${format(visibleNodes.length)} nodes` : state.query ? `${format(visibleNodes.length)} matches` : state.activeCommunity ? `${format(visibleNodes.length)} nodes` : state.view === 'docs' ? `${format(visibleNodes.length)} docs` : 'All nodes';
     ctx.save(); ctx.translate(width / 2 + state.x, height / 2 + state.y); ctx.scale(state.scale, state.scale);
     const selectedNeighbors = state.selected ? new Set((state.adjacency.get(state.selected.id) || []).map(e => e.nodeId)) : null;
+    const hl = state.highlight?.nodes || null;
+    const routeEdges = state.highlight?.routeEdges || null;
     for (const edge of state.links) {
       if (!visibleIds.has(edge.source) || !visibleIds.has(edge.target)) continue;
-      const a = state.nodeById.get(edge.source), b = state.nodeById.get(edge.target);
+      const a = projectedById.get(edge.source), b = projectedById.get(edge.target);
       const focus = state.selected && (a.id === state.selected.id || b.id === state.selected.id);
-      if (state.selected && !focus) continue;
-      ctx.strokeStyle = focus ? '#aa9dffdd' : '#91a0bb55'; ctx.lineWidth = state.view === 'docs' ? (focus ? 1.8 : 1) / state.scale : (focus ? 1.5 : .7);
+      const onRoute = routeEdges && (routeEdges.has(`${a.id}|${b.id}`) || routeEdges.has(`${b.id}|${a.id}`));
+      if (state.selected && !focus && !onRoute) continue;
+      if (hl && !focus && !onRoute && !(hl.has(a.id) && hl.has(b.id))) continue;
+      ctx.strokeStyle = onRoute ? '#f4c95d' : focus ? '#aa9dffdd' : hl ? '#f4c95d66' : '#91a0bb55';
+      ctx.lineWidth = onRoute ? 3 / Math.max(state.scale, .35) : state.view === 'docs' ? (focus ? 1.8 : 1) / state.scale : (focus ? 1.5 : .7);
       ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
     }
     for (const node of visibleNodes) {
       const match = state.query && `${node.label} ${node.source_file || ''}`.toLowerCase().includes(state.query);
       const selected = state.selected?.id === node.id;
       const neighbor = selectedNeighbors?.has(node.id);
-      const radius = state.view === 'docs' ? (selected ? 6 : neighbor ? 4.5 : 2.7) / state.scale : selected ? 5.7 : neighbor ? 4.1 : state.scale < .5 ? 1.7 : 2.5;
-      ctx.globalAlpha = state.selected && !selected && !neighbor ? .18 : state.query && !match ? .22 : 1;
-      ctx.fillStyle = node.file_type === 'document' ? '#45c4df' : colorFor(node.community);
+      const level = hl ? hl.get(node.id) : undefined;
+      const lit = level !== undefined;
+      const base = state.view === 'docs' ? (selected ? 6 : neighbor ? 4.5 : 2.7) / state.scale : selected ? 5.7 : neighbor ? 4.1 : state.scale < .5 ? 1.7 : 2.5;
+      const depthSize = state.is3d ? Math.max(.55, Math.min(1.8, node.perspective)) : 1;
+      const radius = depthSize * (lit ? Math.max(base, (level === 0 ? 7 : level === 1 ? 4.8 : 3.6) / Math.max(state.scale, .5)) : base);
+      ctx.globalAlpha = hl && !lit && !selected && !neighbor ? .08 : state.selected && !selected && !neighbor && !lit ? .18 : state.query && !match ? .22 : 1;
+      if (state.is3d && !selected && !lit) ctx.globalAlpha *= Math.max(.3, Math.min(1, node.perspective * .8));
+      ctx.fillStyle = node.file_type === 'document' ? '#45c4df' : colorFor(state.groupIndex.get(node._group));
       ctx.beginPath(); ctx.arc(node.x, node.y, radius, 0, Math.PI * 2); ctx.fill();
+      if (lit && (level === 0 || state.highlight.seeds.has(node.id))) { ctx.globalAlpha = 1; ctx.strokeStyle = '#f4c95d'; ctx.lineWidth = 2 / Math.max(state.scale, .5); ctx.beginPath(); ctx.arc(node.x, node.y, radius + 3 / Math.max(state.scale, .5), 0, Math.PI * 2); ctx.stroke(); }
       if (selected || match) { ctx.globalAlpha = 1; ctx.strokeStyle = selected ? '#eeeaff' : '#ffffff'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(node.x, node.y, radius + 3, 0, Math.PI * 2); ctx.stroke(); }
     }
     ctx.globalAlpha = 1;
-    const labelNodes = new Set([state.selected?.id, state.hovered?.id].filter(Boolean));
+    const labelNodes = new Set([state.selected?.id, state.hovered?.id, ...(state.highlight?.labelIds || [])].filter(Boolean));
     if (labelNodes.size) {
       ctx.font = '600 12px ui-sans-serif, system-ui, sans-serif';
       for (const node of visibleNodes) if (labelNodes.has(node.id)) {
@@ -290,14 +599,33 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
   }
 
   function screenPoint(event) { const rect = canvas.getBoundingClientRect(); return { x: event.clientX - rect.left - rect.width / 2 - state.x, y: event.clientY - rect.top - rect.height / 2 - state.y }; }
-  function findNode(event) { const point = screenPoint(event); const radius = 10 / state.scale; let best = null, bestDistance = radius; for (const node of state.nodes) { if (!visible(node)) continue; const distance = Math.hypot(node.x - point.x / state.scale, node.y - point.y / state.scale); if (distance < bestDistance) { best = node; bestDistance = distance; } } return best; }
+  function findNode(event) {
+    const point = screenPoint(event);
+    let best = null, bestDistance = 10 / state.scale, bestDepth = -Infinity;
+    for (const node of state.nodes) {
+      if (!visible(node)) continue;
+      const p = projectNode(node);
+      const distance = Math.hypot(p.x-point.x/state.scale,p.y-point.y/state.scale);
+      if (distance < bestDistance || (Math.abs(distance-bestDistance)<.01 && p.depth>bestDepth)) {
+        best=node; bestDistance=distance; bestDepth=p.depth;
+      }
+    }
+    return best;
+  }
   function renderDetails(node) {
     const panel = $('#details-panel');
     document.querySelector('.app-shell').classList.toggle('has-selection', Boolean(node));
     if (!node) { panel.innerHTML = '<div class="details-empty"><div class="detail-orbit">◎</div><h2>Explore the graph</h2><p>Pick any node to inspect its source, community, and nearby connections.</p></div>'; return; }
     const kind = node.file_type === 'document' ? 'DOC' : node.file_type === 'code' ? 'CODE' : String(node.file_type || 'NODE').toUpperCase();
     const neighbors = (state.adjacency.get(node.id) || []).map(edge => ({ ...edge, node: state.nodeById.get(edge.nodeId) })).filter(edge => edge.node).slice(0, 18);
+    const canOpen = Boolean(serverToken && state.projectPath && node.source_file);
+    const editorButton = (editor, name) => {
+      const ready = canOpen && state.editors[editor];
+      const why = !canOpen ? 'Available when opened from the Token Graph desktop shortcut' : !state.editors[editor] ? `${name} is not installed on this computer` : `Open ${node.source_file} at this line in ${name}`;
+      return `<button data-open="${editor}" ${ready ? '' : 'disabled'} title="${escapeHtml(why)}">Open in ${name}${state.editors[editor] || !canOpen ? '' : ' (not installed)'}</button>`;
+    };
     panel.innerHTML = `<div class="detail-header"><span class="node-kind ${kind === 'DOC' ? 'doc' : ''}">${kind}</span><strong class="detail-title">${escapeHtml(node.label)}</strong><button class="detail-close" aria-label="Close node details">×</button></div>
+      <div class="detail-actions"><button data-focus title="Show only this node and its neighbours (double-click a node does the same)">${state.focus?.id === node.id ? 'Focused' : 'Focus here'}</button><button data-copy title="Copy this node, its connections and the visible source lines as short text to paste into Claude">Copy for Claude</button>${node.source_file ? editorButton('vscode', 'VS Code') + editorButton('rider', 'Rider') : ''}</div>
       <div class="detail-label">SOURCE FILE</div><div class="detail-value detail-code">${escapeHtml(node.source_file || 'External / unavailable')}</div>
       ${node.source_location ? `<div class="detail-label">LOCATION</div><div class="detail-value">${escapeHtml(node.source_location)}</div>` : ''}
       <div class="detail-label">COMMUNITY</div><div class="detail-value">${escapeHtml(node.community_name || 'Unassigned')}</div>
@@ -306,12 +634,114 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       <div class="detail-label">CONNECTED NODES <span class="muted">(${(state.adjacency.get(node.id) || []).length})</span></div>
       <div class="connection-list">${neighbors.length ? neighbors.map(edge => `<button class="detail-connection" data-node="${escapeHtml(edge.node.id)}"><span class="relation">${escapeHtml(edge.relation || 'links')}</span><span class="neighbor">${escapeHtml(edge.node.label)}</span></button>`).join('') : '<div class="empty-result">No indexed connections.</div>'}</div>`;
     panel.querySelector('.detail-close').addEventListener('click', () => select(null));
+    panel.querySelector('[data-focus]').addEventListener('click', () => enterFocus(node, state.focus?.depth || 1));
+    panel.querySelector('[data-copy]').addEventListener('click', async event => {
+      const button = event.currentTarget;
+      button.textContent = await copyText(nodeContext(node)) ? 'Copied ✓' : 'Copy failed';
+      setTimeout(() => { button.textContent = 'Copy for Claude'; }, 1500);
+    });
+    panel.querySelectorAll('[data-open]').forEach(button => button.addEventListener('click', async () => {
+      const label = button.textContent;
+      button.disabled = true;
+      try {
+        await api('/api/open', { editor: button.dataset.open, project: state.projectPath, file: node.source_file, line: node.source_location || '' });
+        button.textContent = 'Opened ✓';
+      } catch (error) {
+        button.textContent = label;
+        $('#data-status').textContent = `Could not open the file: ${error.message}`;
+        $('#data-status').classList.add('error-state');
+      }
+      setTimeout(() => { button.textContent = label; button.disabled = false; }, 1500);
+    }));
     panel.querySelectorAll('[data-node]').forEach(button => button.addEventListener('click', () => select(state.nodeById.get(button.dataset.node))));
+    if (node.source_file && !window.GRAPHIFY_DATA && location.protocol !== 'file:') {
+      const sourceUrl = `/api/source?file=${encodeURIComponent(node.source_file)}&line=${encodeURIComponent(node.source_location || '')}&project=${encodeURIComponent(state.projectPath || '')}`;
+      fetch(sourceUrl, { headers: { 'X-Token-Graph': serverToken || '' } }).then(response => { if (!response.ok) throw new Error('Source excerpt unavailable'); return response.json(); }).then(source => {
+        if (state.selected?.id !== node.id) return;
+        const excerpt = $('#source-excerpt');
+        if (excerpt) excerpt.textContent = source.lines.map((line, index) => `${String(source.start + index).padStart(4, ' ')}  ${line}`).join('\n') || '(empty file)';
+      }).catch(() => {
+        if (state.selected?.id === node.id && $('#source-excerpt')) $('#source-excerpt').textContent = 'Source content could not be loaded.';
+      });
+    }
   }
   function select(node) { state.selected = node || null; renderDetails(state.selected); draw(); }
 
+  // "Copy for Claude": the node, its connections and the loaded source lines, as compact text.
+  function nodeContext(node) {
+    const where = node.source_file ? `${node.source_file}${node.source_location ? ':' + node.source_location : ''}` : 'no source file';
+    const lines = [
+      `Project: ${$('#project-name').textContent}`,
+      `Node: ${node.label} (${KIND_NAMES[node._kind] || node._kind})`,
+      `Location: ${where}`,
+      `Community: ${node.community_name || '-'} · Folder: ${folderOf(node)}`,
+    ];
+    if (node.description || node.rationale) lines.push(`Description: ${node.description || node.rationale}`);
+    const edges = state.links.filter(l => l.source === node.id || l.target === node.id);
+    lines.push('', `Connections (${edges.length}${edges.length > 60 ? ', first 60' : ''}):`);
+    for (const l of edges.slice(0, 60)) {
+      const other = state.nodeById.get(l.source === node.id ? l.target : l.source);
+      const text = other ? `${other.label}${other.source_file ? ` (${other.source_file}${other.source_location ? ':' + other.source_location : ''})` : ''}` : (l.source === node.id ? l.target : l.source);
+      lines.push(l.source === node.id ? `  --${l.relation || 'links'}--> ${text}` : `  <--${l.relation || 'links'}-- ${text}`);
+    }
+    const excerpt = $('#source-excerpt')?.textContent || '';
+    if (excerpt && !/not embedded|could not be loaded|No source file/i.test(excerpt)) lines.push('', 'Source excerpt:', excerpt);
+    return lines.join('\n');
+  }
+  async function copyText(text) {
+    try { await navigator.clipboard.writeText(text); return true; } catch (_) {
+      const area = Object.assign(document.createElement('textarea'), { value: text });
+      document.body.append(area); area.select();
+      const ok = document.execCommand('copy'); area.remove();
+      return ok;
+    }
+  }
+
+  // Focus mode: only a node and its neighbours up to `depth` steps (filters still apply).
+  function enterFocus(node, depth = 1) {
+    if (!node) return;
+    const ids = new Set([node.id]);
+    let frontier = [node.id];
+    for (let step = 0; step < depth; step++) {
+      const next = [];
+      for (const id of frontier) for (const edge of state.adjacency.get(id) || []) if (!ids.has(edge.nodeId)) { ids.add(edge.nodeId); next.push(edge.nodeId); }
+      frontier = next;
+    }
+    state.focus = { id: node.id, depth, ids };
+    state.activeCommunity = null;
+    state.query = ''; $('#search').value = '';
+    $('#focus-bar').classList.remove('hidden');
+    $('#focus-name').textContent = node.label;
+    $('#focus-1').setAttribute('aria-pressed', String(depth === 1));
+    $('#focus-2').setAttribute('aria-pressed', String(depth === 2));
+    renderCommunityList();
+    select(node);
+    fitGraph();
+  }
+  function exitFocus() {
+    if (!state.focus) return;
+    state.focus = null;
+    $('#focus-bar').classList.add('hidden');
+    renderCommunityList();
+    if (state.selected) renderDetails(state.selected);
+    fitGraph();
+  }
+  function setFilter(key, buttonId, on) {
+    state[key] = on;
+    store(`tokenGraph.${key}`, on);
+    $(buttonId).setAttribute('aria-pressed', String(on));
+    $('#ask-hint').textContent = `Answers come from this project’s graph on your computer. ${askScopeNote()}`;
+    if (state.selected && !visible(state.selected)) select(null);
+    updateMetrics({});
+    renderCommunityList();
+    fitGraph();
+    renderSearchResults();
+  }
+
   function setView(view) {
     state.view = view;
+    state.focus = null;
+    $('#focus-bar').classList.add('hidden');
     state.activeCommunity = null;
     state.selected = null;
     renderDetails(null);
@@ -328,22 +758,56 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     fitGraph();
   }
 
-  canvas.addEventListener('pointerdown', event => { state.dragging = true; state.moved = false; state.lastX = event.clientX; state.lastY = event.clientY; canvas.classList.add('dragging'); canvas.setPointerCapture(event.pointerId); });
-  canvas.addEventListener('pointermove', event => { if (state.dragging) { const dx = event.clientX - state.lastX, dy = event.clientY - state.lastY; if (Math.abs(dx) + Math.abs(dy) > 2) state.moved = true; state.x += dx; state.y += dy; state.lastX = event.clientX; state.lastY = event.clientY; draw(); } else { state.hovered = findNode(event); canvas.style.cursor = state.hovered ? 'pointer' : 'grab'; draw(); } });
-  canvas.addEventListener('pointerup', event => { state.dragging = false; canvas.classList.remove('dragging'); if (!state.moved) select(findNode(event)); });
+  canvas.addEventListener('contextmenu', event => event.preventDefault());
+  canvas.addEventListener('pointerdown', event => {
+    state.dragging=true; state.moved=false; state.startX=state.lastX=event.clientX; state.startY=state.lastY=event.clientY;
+    state.dragMode=state.is3d && !event.shiftKey && event.button!==2 ? 'orbit' : 'pan';
+    canvas.classList.add('dragging'); canvas.setPointerCapture(event.pointerId);
+  });
+  canvas.addEventListener('pointermove', event => {
+    if (state.dragging) {
+      const dx=event.clientX-state.lastX,dy=event.clientY-state.lastY;
+      if(Math.hypot(event.clientX-state.startX,event.clientY-state.startY)>3) state.moved=true;
+      if(state.dragMode==='orbit') {state.yaw+=dx*.007;state.pitch=Math.max(-1.5,Math.min(1.5,state.pitch+dy*.007));}
+      else {state.x+=dx;state.y+=dy;}
+      state.lastX=event.clientX;state.lastY=event.clientY; draw();
+    } else {state.hovered=findNode(event);canvas.style.cursor=state.hovered?'pointer':'grab';draw();}
+  });
+  canvas.addEventListener('pointerup', event => {state.dragging=false;canvas.classList.remove('dragging');if(!state.moved && event.button===0)select(findNode(event));});
+  canvas.addEventListener('pointercancel', () => {state.dragging=false;canvas.classList.remove('dragging');});
+  $('#graph-empty-reset').addEventListener('click', recoverGraph);
+  $('#mode-3d').addEventListener('click', () => setDimension(true));
+  $('#mode-2d').addEventListener('click', () => setDimension(false));
+  setDimension(state.is3d);
   canvas.addEventListener('wheel', event => { event.preventDefault(); const rect = canvas.getBoundingClientRect(); const beforeX = event.clientX - rect.left - rect.width / 2 - state.x, beforeY = event.clientY - rect.top - rect.height / 2 - state.y; const next = Math.max(.12, Math.min(5, state.scale * Math.exp(-event.deltaY * .001))); state.x -= beforeX / state.scale * (next - state.scale); state.y -= beforeY / state.scale * (next - state.scale); state.scale = next; draw(); }, { passive: false });
-  $('#search').addEventListener('input', event => { state.query = event.target.value.trim().toLowerCase(); draw(); });
-  $('#search').addEventListener('keydown', event => { if (event.key === 'Enter') { const node = state.nodes.find(n => visible(n)); if (node) { select(node); state.x = -node.x * state.scale; state.y = -node.y * state.scale; draw(); } } if (event.key === 'Escape') { event.target.value = ''; state.query = ''; draw(); } });
+  $('#search').addEventListener('input', event => { state.query = event.target.value.trim().toLowerCase(); draw(); renderSearchResults(); });
+  $('#kind-filter').addEventListener('change', event => {
+    state.kind = event.target.value;
+    if (state.selected && !visible(state.selected)) select(null);
+    updateMetrics({}); renderCommunityList(); fitGraph(); renderSearchResults();
+  });
+  document.querySelectorAll('[data-group-by]').forEach(b => {
+    b.setAttribute('aria-pressed', String(b.dataset.groupBy === state.groupBy));
+    b.addEventListener('click', () => setGroupBy(b.dataset.groupBy));
+  });
+  $('#search').addEventListener('keydown', event => { if (event.key === 'Enter') { const node = state.nodes.find(n => visible(n)); if (node) { select(node); centerNode(node); draw(); } } if (event.key === 'Escape') { event.target.value = ''; state.query = ''; draw(); } });
   document.addEventListener('keydown', event => { if (event.key === '/' && !['INPUT','TEXTAREA'].includes(document.activeElement.tagName)) { event.preventDefault(); $('#search').focus(); } });
+  $('#original-source').addEventListener('click', () => loadLocalGraph());
   const loadedGraphs = new Map();
   let graphSequence = 0;
 
-  function addGraph(raw, name) {
-    if (!raw || !Array.isArray(raw.nodes) || !Array.isArray(raw.links ?? raw.edges)) {
+  // raw may be null for a server project; switchGraph then fetches it on first view.
+  function addGraph(raw, name, path = null) {
+    if (raw !== null && (!raw || !Array.isArray(raw.nodes) || !Array.isArray(raw.links ?? raw.edges))) {
       throw new Error(`${name}: expected a graph JSON with nodes and links or edges.`);
     }
+    if (path) {
+      for (const [existingId, entry] of loadedGraphs) {
+        if (entry.path === path) { entry.raw = raw; return existingId; }
+      }
+    }
     const id = String(++graphSequence);
-    loadedGraphs.set(id, { raw, name });
+    loadedGraphs.set(id, { raw, name, path });
     const option = document.createElement('option');
     option.value = id;
     option.textContent = name;
@@ -352,19 +816,79 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     return id;
   }
 
-  function switchGraph(id) {
+  async function switchGraph(id) {
     const entry = loadedGraphs.get(id);
     if (!entry) return;
+    if (!entry.raw && entry.path) {
+      $('#data-status').textContent = `Loading ${entry.name}…`;
+      try {
+        entry.raw = await api(`/api/graph?project=${encodeURIComponent(entry.path)}`);
+      } catch (error) {
+        $('#data-status').textContent = `${entry.name}: ${error.message}`;
+        $('#data-status').classList.add('error-state');
+        return;
+      }
+    }
+    state.projectPath = entry.path || null;
     state.activeCommunity = null; state.selected = null; state.hovered = null;
     state.query = ''; $('#search').value = '';
     renderDetails(null);
+    if (state.view === 'docs' && !entry.raw.nodes.some(isDocument)) setView('all');
     normalizeGraph(entry.raw);
     loadBenchmark(entry.raw.benchmark ?? entry.raw.graph?.benchmark ?? null);
     $('#graph-selector').value = id;
     $('#graph-source-note').textContent = `Viewing ${entry.name}. ${loadedGraphs.size} graph(s) loaded in this tab. Data stays in this browser.`;
     const project = document.querySelector('#project-name');
     if (project) project.textContent = entry.name;
+    $('#diff-button').classList.toggle('hidden', !(serverToken && state.projectPath));
+    checkStale();
   }
+
+  async function importProjectFolder(files) {
+    const ignored = new Set(['node_modules', '.git', '.venv', 'vendor', '.next', 'bin', 'obj']);
+    const byPath = new Map(Array.from(files).map(file => [file.webkitRelativePath, file]));
+    const graphs = [...byPath].filter(([path]) => {
+      const parts = path.split('/');
+      return parts.slice(-2).join('/') === 'graphify-out/graph.json' && !parts.some(part => ignored.has(part));
+    }).sort(([a], [b]) => a.localeCompare(b));
+    if (!graphs.length) {
+      $('#data-status').textContent = 'No graphify-out/graph.json files found in this folder.';
+      return;
+    }
+    let firstId;
+    const errors = [];
+    const entries = [];
+    for (const [path, file] of graphs) {
+      const project = path.split('/').slice(1, -2).join('/') || path.split('/')[0];
+      try {
+        const raw = JSON.parse(await file.text());
+        if (!Array.isArray(raw.nodes) || !Array.isArray(raw.links ?? raw.edges)) throw new Error('Invalid graph format');
+        const benchmarkFile = byPath.get(path.replace(/graph\.json$/, 'benchmark.json'));
+        if (!raw.benchmark && !raw.graph?.benchmark && benchmarkFile) {
+          try { raw.benchmark = JSON.parse(await benchmarkFile.text()); } catch (_) { /* Graph remains usable without benchmark. */ }
+        }
+        entries.push({ raw, project });
+      } catch (error) { errors.push(`${project}: ${error.message}`); }
+    }
+    if (entries.length) {
+      loadedGraphs.clear();
+      $('#graph-selector').replaceChildren();
+      for (const entry of entries) {
+        const id = addGraph(entry.raw, entry.project);
+        firstId ||= id;
+      }
+      switchGraph(firstId);
+    }
+    if (errors.length) {
+      $('#data-status').textContent = `${entries.length} projects loaded. ${errors.join(' ')}`;
+      $('#data-status').classList.add('error-state');
+    }
+  }
+  $('#projects-folder').addEventListener('change', async event => {
+    $('#data-status').textContent = 'Finding project graphs…';
+    await importProjectFolder(event.target.files || []);
+    event.target.value = '';
+  });
 
   $('#graph-selector').addEventListener('change', event => switchGraph(event.target.value));
   $('#graph-file').addEventListener('change', async event => {
@@ -385,20 +909,319 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     event.target.value = '';
   });
 
-  $('#reset-view').addEventListener('click', () => { state.activeCommunity = null; state.query = ''; $('#search').value = ''; renderCommunityList(); fitGraph(); });
+  $('#reset-view').addEventListener('click', () => { state.yaw=.45; state.pitch=-.25; state.focus = null; $('#focus-bar').classList.add('hidden'); state.activeCommunity = null; state.query = ''; $('#search').value = ''; renderCommunityList(); fitGraph(); });
+  canvas.addEventListener('dblclick', event => { const node = findNode(event); if (node) enterFocus(node, state.focus?.depth || 1); });
+  document.addEventListener('keydown', event => { if (event.key === 'Escape' && state.focus && document.activeElement !== $('#search')) exitFocus(); });
+  $('#focus-1').addEventListener('click', () => state.focus && enterFocus(state.nodeById.get(state.focus.id), 1));
+  $('#focus-2').addEventListener('click', () => state.focus && enterFocus(state.nodeById.get(state.focus.id), 2));
+  $('#focus-exit').addEventListener('click', exitFocus);
+  $('#hide-tests').setAttribute('aria-pressed', String(state.hideTests));
+  $('#hide-generated').setAttribute('aria-pressed', String(state.hideGenerated));
+  $('#hide-tests').addEventListener('click', () => setFilter('hideTests', '#hide-tests', !state.hideTests));
+  $('#hide-generated').addEventListener('click', () => setFilter('hideGenerated', '#hide-generated', !state.hideGenerated));
   $('#graph-help-toggle').addEventListener('click', () => { const help = $('#graph-help'); const open = help.classList.contains('hidden'); help.classList.toggle('hidden', !open); $('#graph-help-toggle').setAttribute('aria-expanded', String(open)); });
   $('#graph-help-close').addEventListener('click', () => { $('#graph-help').classList.add('hidden'); $('#graph-help-toggle').setAttribute('aria-expanded', 'false'); });
   $('#all-view').addEventListener('click', () => setView('all'));
   $('#docs-view').addEventListener('click', () => setView('docs'));
   window.addEventListener('resize', () => { resize(); fitGraph(); });
-  loadBenchmark();
-  const graphData = window.GRAPHIFY_DATA
-    ? Promise.resolve(window.GRAPHIFY_DATA)
-    : Promise.reject(new Error('Choose a local Token Graph graph.json file.'));
-  graphData.then(raw => switchGraph(addGraph(raw, raw.project_name || raw.graph?.project_name || 'Project graph'))).catch(() => {
-    $('#loading').textContent = 'Choose a local graph.json with “Load another graph”.';
-    $('#data-status').textContent = 'Waiting for local graph';
+  // ---- ask bar: question / path A→B / impact, answered by scripts/ask_engine.py ----
+  const ASK_MODES = {
+    query: { a: 'e.g. how is partial cashout executed', pickA: false },
+    path: { a: 'From: class, method or file', pickA: true },
+    affected: { a: 'Class, method or file that would change', pickA: true },
+  };
+  let askMode = 'query';
+
+  function setAskMode(mode) {
+    askMode = mode;
+    document.querySelectorAll('.ask-modes [data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
+    $('#ask-a').placeholder = ASK_MODES[mode].a;
+    $('#ask-a-pick').classList.toggle('hidden', !ASK_MODES[mode].pickA);
+    $('#ask-b-wrap').classList.toggle('hidden', mode !== 'path');
+    $('#ask-depth').classList.toggle('hidden', mode !== 'affected');
+    $('#ask-budget').classList.toggle('hidden', mode !== 'query');
+    $('#ask-a').focus();
+  }
+  function askScopeNote() {
+    const skipped = [state.hideTests && 'tests', state.hideGenerated && 'generated code'].filter(Boolean);
+    return skipped.length ? `Answers skip ${skipped.join(' and ')} (Hide buttons above the graph).` : 'Answers include tests and generated code.';
+  }
+
+  // Suggest node ids while typing a name; a picked suggestion sends the exact id, so it is never ambiguous.
+  function suggestNodes(text) {
+    const list = $('#ask-nodes');
+    list.replaceChildren();
+    const q = text.trim().toLowerCase();
+    if (askMode === 'query' || q.length < 2 || state.nodeById.has(text.trim())) return;
+    const hits = state.nodes.filter(n => passesFilters(n) && String(n.label).toLowerCase().includes(q))
+      .sort((x, y) => String(x.label).length - String(y.label).length).slice(0, 25);
+    for (const n of hits) {
+      const option = document.createElement('option');
+      option.value = n.id;
+      option.label = `${n.label} — ${n.source_file || 'no file'}`;
+      list.append(option);
+    }
+  }
+
+  function clearHighlight() {
+    state.highlight = null;
+    state.highlightOnly = false;
+    $('#ask-only').setAttribute('aria-pressed', 'false');
+    $('#ask-result').classList.add('hidden');
+    draw();
+  }
+
+  function showAskResult(result) {
+    const nodes = new Map(Object.entries(result.nodes || {}).filter(([id]) => state.nodeById.has(id)).map(([id, level]) => [id, Number(level)]));
+    const route = (result.route || []).filter(id => state.nodeById.has(id));
+    const routeEdges = new Set(route.slice(1).map((id, i) => `${route[i]}|${id}`));
+    const seeds = new Set((result.seeds || []).filter(id => state.nodeById.has(id)));
+    state.highlight = nodes.size ? { nodes, seeds, routeEdges, labelIds: [...(route.length ? route : seeds)].slice(0, 14) } : null;
+    $('#ask-result').classList.remove('hidden');
+    $('#ask-text').textContent = result.text || '(no answer text)';
+    const hidden = [...nodes.keys()].filter(id => !passesFilters(state.nodeById.get(id))).length;
+    $('#ask-summary').innerHTML = nodes.size
+      ? `<b>${format(nodes.size)}</b> node${nodes.size === 1 ? '' : 's'} highlighted${route.length ? ` · path of ${route.length - 1} step${route.length === 2 ? '' : 's'}` : ''}${hidden ? ` · ${hidden} hidden by filters` : ''}`
+      : 'Nothing to highlight';
+    // Ambiguous name: offer the candidates the engine listed as one-click choices.
+    const choices = $('#ask-choices');
+    choices.replaceChildren();
+    if (result.ambiguous) {
+      for (const [, id] of String(result.text).matchAll(/id: (\S+)/g)) {
+        const node = state.nodeById.get(id);
+        const button = document.createElement('button');
+        button.textContent = node ? `${node.label} — ${node.source_file || id}` : id;
+        button.addEventListener('click', () => {
+          const field = result.ambiguous === 'target' ? '#ask-b' : '#ask-a';
+          $(field).value = id;
+          runAsk();
+        });
+        choices.append(button);
+      }
+    }
+    state.focus = null; $('#focus-bar').classList.add('hidden');
+    state.activeCommunity = null; renderCommunityList();
+    if (state.highlight) fitGraph(new Set(nodes.keys())); else draw();
+  }
+
+  async function runAsk() {
+    if (!state.projectPath) { $('#ask-hint').textContent = 'Open a project graph first.'; return; }
+    const request = { project: state.projectPath, mode: askMode, a: $('#ask-a').value, b: $('#ask-b').value, depth: $('#ask-depth').value,
+      budget: $('#ask-budget').value, hideTests: state.hideTests, hideGenerated: state.hideGenerated };
+    const go = $('#ask-go');
+    go.disabled = true; go.textContent = 'Asking…';
+    $('#ask-hint').textContent = 'Searching the graph…';
+    try {
+      showAskResult(await api('/api/ask', request));
+      $('#ask-hint').textContent = `Answers come from this project’s graph on your computer. ${askScopeNote()}`;
+    } catch (error) {
+      $('#ask-hint').textContent = error.message;
+    } finally {
+      go.disabled = false; go.textContent = 'Ask';
+    }
+  }
+
+  document.querySelectorAll('.ask-modes [data-mode]').forEach(b => b.addEventListener('click', () => setAskMode(b.dataset.mode)));
+  $('#ask-go').addEventListener('click', runAsk);
+  for (const id of ['#ask-a', '#ask-b']) {
+    $(id).addEventListener('keydown', event => { if (event.key === 'Enter') runAsk(); });
+    $(id).addEventListener('input', event => suggestNodes(event.target.value));
+  }
+  $('#ask-a-pick').addEventListener('click', () => { if (state.selected) $('#ask-a').value = state.selected.id; });
+  $('#ask-b-pick').addEventListener('click', () => { if (state.selected) $('#ask-b').value = state.selected.id; });
+  $('#ask-clear').addEventListener('click', clearHighlight);
+  $('#ask-only').addEventListener('click', () => {
+    state.highlightOnly = !state.highlightOnly;
+    $('#ask-only').setAttribute('aria-pressed', String(state.highlightOnly));
+    fitGraph(state.highlight ? new Set(state.highlight.nodes.keys()) : null);
   });
+  $('#ask-copy').addEventListener('click', async () => {
+    $('#ask-copy').textContent = await copyText($('#ask-text').textContent) ? 'Copied ✓' : 'Copy failed';
+    setTimeout(() => { $('#ask-copy').textContent = 'Copy text'; }, 1500);
+  });
+
+  // ---- graph freshness (7) and changes since the last build (9) ----
+  const when = seconds => new Date(seconds * 1000).toLocaleString();
+  async function checkStale() {
+    const chip = $('#stale-chip');
+    if (!serverToken || !state.projectPath) { chip.classList.add('hidden'); return; }
+    try {
+      const s = await api(`/api/stale?project=${encodeURIComponent(state.projectPath)}`);
+      const n = s.changed + s.deleted;
+      chip.dataset.stale = n ? '1' : '';
+      chip.classList.toggle('fresh', !n);
+      chip.textContent = n ? `${format(n)} file${n === 1 ? '' : 's'} changed since this graph · Update` : 'Graph is up to date';
+      chip.title = n ? `Graph built ${when(s.built)}. Changed or deleted since:\n${s.examples.join('\n')}${n > s.examples.length ? '\n…' : ''}\n\nClick to update the graph.` : `Graph built ${when(s.built)}; no source file changed since.`;
+      chip.classList.remove('hidden');
+    } catch (_) { chip.classList.add('hidden'); }
+  }
+  $('#stale-chip').addEventListener('click', () => { if ($('#stale-chip').dataset.stale && state.projectPath) buildProject(state.projectPath); });
+
+  async function showDiff() {
+    if (!state.projectPath) return;
+    let d;
+    try { d = await api(`/api/diff?project=${encodeURIComponent(state.projectPath)}`); }
+    catch (error) { $('#ask-hint').textContent = error.message; return; }
+    if (!d.available) {
+      showAskResult({ text: 'No earlier version of this graph is stored yet.\nFrom the next “Update current graph” (or rebuild) on, the previous version is kept and this shows what changed.', nodes: {} });
+      return;
+    }
+    const list = (items, sign) => items.map(n => `  ${sign} ${n.label}${n.file ? ` — ${n.file}` : ''}`).join('\n');
+    const text = [
+      `Changes between graph builds`,
+      `Previous: ${when(d.previous_built)}   Current: ${when(d.built)}`,
+      '',
+      `New nodes: ${format(d.added_count)}   Removed nodes: ${format(d.removed_count)}   Connections: +${format(d.links_added)} / -${format(d.links_removed)}`,
+      d.added_count ? `\nNew (${format(d.added_count)}${d.added_count > d.added.length ? `, first ${d.added.length}` : ''}):\n${list(d.added, '+')}` : '',
+      d.removed_count ? `\nRemoved (${format(d.removed_count)}${d.removed_count > d.removed.length ? `, first ${d.removed.length}` : ''}):\n${list(d.removed, '-')}` : '',
+      d.links_added_sample.length ? `\nNew connections (sample):\n${d.links_added_sample.map(s => '  + ' + s).join('\n')}` : '',
+      d.links_removed_sample.length ? `\nRemoved connections (sample):\n${d.links_removed_sample.map(s => '  - ' + s).join('\n')}` : '',
+      !d.added_count && !d.removed_count && !d.links_added && !d.links_removed ? '\nNothing changed in the graph.' : '',
+    ].filter(Boolean).join('\n');
+    // New nodes are ringed; existing nodes whose connections changed are lit without a ring.
+    const nodes = Object.fromEntries([...d.touched.map(id => [id, 1]), ...d.added.map(n => [n.id, 0])]);
+    showAskResult({ text, nodes, seeds: d.added.map(n => n.id) });
+  }
+  $('#diff-button').addEventListener('click', showDiff);
+
+  // ---- server mode: pick a project folder, build/update its graph, open it ----
+  const buildButton = $('#build-project');
+  let polling = null;
+
+  function setBuilding(text) {
+    buildButton.disabled = Boolean(text);
+    buildButton.textContent = text || 'Choose project & build graph';
+  }
+
+  async function openServerProject(path, name) {
+    const raw = await api(`/api/graph?project=${encodeURIComponent(path)}`);
+    await switchGraph(addGraph(raw, name || raw.project_name || path, path));
+  }
+
+  function watchJob() {
+    clearInterval(polling);
+    polling = setInterval(async () => {
+      let job;
+      try { ({ job } = await api('/api/status')); } catch (error) { return; }
+      if (!job) return;
+      const name = job.project.split(/[\\/]/).pop();
+      const seconds = Math.round(((job.finished || Date.now() / 1000) - job.started));
+      if (job.state === 'running') {
+        setBuilding(`Building ${name}… ${seconds}s`);
+        $('#data-status').classList.remove('error-state');
+        $('#data-status').textContent = `${name}: ${job.step} (${seconds}s)`;
+        if (!state.nodes.length) { $('#loading').classList.remove('hidden'); $('#loading').textContent = `Building the graph for ${name}… ${job.step}, ${seconds}s`; }
+        return;
+      }
+      clearInterval(polling);
+      setBuilding('');
+      if (job.state === 'error') {
+        $('#data-status').textContent = `${name}: graph build failed. ${job.message}`;
+        $('#data-status').classList.add('error-state');
+        if (!state.nodes.length) $('#loading').textContent = `Graph build failed for ${name}. See graphify-out/token-graph.log in the project.`;
+        return;
+      }
+      try {
+        await openServerProject(job.project, name);
+        $('#data-status').textContent = `${name}: graph ${job.mode === 'update' ? 'updated' : 'built'} in ${seconds}s · ${format(state.nodes.length)} nodes`;
+      } catch (error) {
+        $('#data-status').textContent = `${name}: ${error.message}`;
+        $('#data-status').classList.add('error-state');
+      }
+    }, 1000);
+  }
+
+  async function buildProject(path) {
+    try {
+      if (!path) {
+        setBuilding('Choose a folder in the dialog…');
+        const picked = await api('/api/pick', { start: state.projectPath || '' });
+        path = picked.manual ? prompt('Enter the full path to your project folder:', state.projectPath || '') : picked.path;
+        if (!path) { setBuilding(''); $('#data-status').textContent = 'No folder chosen.'; return; }
+      }
+      await api('/api/build', { project: path });
+      watchJob();
+    } catch (error) {
+      setBuilding('');
+      $('#data-status').textContent = error.message;
+      $('#data-status').classList.add('error-state');
+    }
+  }
+
+  async function stopServer() {
+    if (!confirm('Stop the Token Graph server?\n\nThe graph on screen stays visible; building and switching projects stop working until you reopen the desktop shortcut.')) return;
+    try {
+      await api('/api/shutdown', {});
+    } catch (error) {
+      $('#data-status').textContent = error.message;
+      $('#data-status').classList.add('error-state');
+      return;
+    }
+    clearInterval(polling);
+    buildButton.disabled = true;
+    $('#stop-server').disabled = true;
+    $('#original-source').disabled = true;
+    $('#stop-server').textContent = 'Server stopped';
+    $('#data-status').classList.remove('error-state');
+    $('#data-status').textContent = 'Server stopped. Open the desktop shortcut to start it again.';
+  }
+
+  async function initServer() {
+    buildButton.classList.remove('hidden');
+    buildButton.addEventListener('click', () => buildProject());
+    $('#stop-server').classList.remove('hidden');
+    $('#stop-server').addEventListener('click', stopServer);
+    $('#ask-panel').classList.remove('hidden');
+    setInterval(checkStale, 60000);
+    $('#original-source').textContent = 'Update current graph';
+    $('#original-source').title = 'Re-scan the current project; only changed files are re-parsed';
+    $('#graph-source-note').textContent = 'Choose a project folder: its graph is built or updated, then opened here. Everything stays on this computer.';
+    try {
+      const [{ projects }, { job }, editors] = await Promise.all([api('/api/projects'), api('/api/status'), api('/api/editors').catch(() => state.editors)]);
+      state.editors = editors;
+      let firstId = null;
+      for (const project of projects.filter(p => p.has_graph)) {
+        const id = addGraph(null, project.name, project.path);
+        firstId ||= id;
+      }
+      if (job && job.state === 'running') watchJob();
+      if (firstId) { await switchGraph(firstId); return; }
+      $('#loading').textContent = 'Click “Choose project & build graph” in the sidebar to build your first project graph.';
+      $('#data-status').textContent = 'No project graphs yet';
+    } catch (error) {
+      $('#loading').textContent = `Token Graph server is not answering (${error.message}). Reopen the desktop shortcut.`;
+      $('#data-status').textContent = 'Server unavailable';
+      $('#data-status').classList.add('error-state');
+    }
+  }
+
+  async function loadLocalGraph() {
+    if (serverToken) {
+      if (state.projectPath) return buildProject(state.projectPath);
+      return;
+    }
+    try {
+      if (location.protocol === 'file:') {
+        $('#loading').textContent = 'Choose your Projects folder in the sidebar to explore all project graphs.';
+        $('#data-status').textContent = 'Choose a Projects folder or graph JSON files';
+        return;
+      }
+      const response = await fetch('./graphify-out/graph.json', { cache: 'no-store' });
+      if (!response.ok) throw new Error('Local graph unavailable');
+      const graph = await response.json();
+      switchGraph(addGraph(graph, 'Local project'));
+      $('#original-source').classList.add('active');
+    } catch (error) {
+      $('#loading').textContent = 'Could not load graphify-out/graph.json. Choose a graph JSON file.';
+      $('#data-status').textContent = 'Graph not found';
+    }
+  }
+  loadBenchmark(null);
+  if (window.GRAPHIFY_DATA) switchGraph(addGraph(window.GRAPHIFY_DATA, window.GRAPHIFY_DATA.project_name || 'Project graph'));
+  else if (serverToken) initServer(); else loadLocalGraph();
+  if (!serverToken && 'serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(error => console.warn('Offline app shell is unavailable:', error)));
+  }
 })();
 
     

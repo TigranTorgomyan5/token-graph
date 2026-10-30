@@ -47,7 +47,7 @@ The page has four areas: the sidebar (search, groups, projects), the summary at 
 | Summary cards | Nodes, connections, communities or folders, source files | Size of what is currently shown (filters apply) |
 | Context-reduction strip | Estimated savings, e.g. 14.4× | A rough heuristic — see Limits |
 | Ask bar | Question / Path A → B / Impact | Ask the graph; answers light up on the canvas |
-| Graph canvas | Dots = nodes, lines = relationships, colour = group | Drag to pan, scroll to zoom, click for details, double-click to focus |
+| Graph canvas | Dots = nodes, lines = relationships, colour = group | Drag to rotate in 3D, Shift-drag to pan, scroll to zoom, click for details, double-click to focus; use 2D for a flat map |
 | Details panel | Location, community, description, source lines, connections | Focus, open in editor, copy for Claude |
 
 Press `/` anywhere to jump to the search box.

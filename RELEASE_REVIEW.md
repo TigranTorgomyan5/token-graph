@@ -30,8 +30,8 @@ Dependency installation may access PyPI only when explicitly requested. Analysis
 ## Artifact
 
 - File: `token-graph.zip`
-- Size: 1,646,296 bytes
-- SHA-256: `864413791aab584a4af38cc4341facd0364114cac499375d2e3a50e91cb512d3`
+- Size: 1,661,726 bytes
+- SHA-256: `78b189b314a213a6e69d4f7f7529786b9ef534661e1539c7dd350a4bf8943082`
 - Recipient instructions: `token-graph/INSTALL.md` inside the ZIP.
 
 ## Reviewed changes merged on 2026-10-30
@@ -41,3 +41,11 @@ Added Windows audit compatibility, graph questions/highlighting, generated/test 
 Fixed four reproduced merge issues: private server state/history is excluded by a distribution allowlist; packaging never overwrites viewer sources; scoped graph caches use unique atomic temporary files; and a reused server honors --no-browser. Also aligned filters/budgets across CLI query entrypoints, validated request bodies, and added manual path entry when Tk is absent.
 
 All 21 unit/regression tests passed. An additional HTTP smoke test of the actual ZIP passed authorization checks, build, benchmark, graph query/highlights, source preview, update, graph diff and shutdown. No browser was opened. JavaScript syntax and skill validation passed. Native Windows testing remains outstanding; the Windows changes have not been represented as verified on Windows.
+
+## 3D viewer update — 2026-10-30
+
+All three viewers now use a shared, self-contained perspective-projected 3D scene by default, with orbit, Shift/right-drag pan, scroll zoom, depth-sorted points, projected hit testing and a persistent 2D fallback. Existing project switching, filters, highlighting, focus and selection remain available. No remote graphics libraries or new runtime dependencies were added. The embedded single-project template now shares the same interface.
+
+All 22 tests passed. The added frontend tests initialize each viewer with DOM/canvas doubles and exercise 3D coordinates, projection, orbit, hit testing, pan, zoom, selection, 2D fallback and a single-node graph. These mathematical/runtime checks are not a substitute for manual browser visual testing.
+
+Documentation empty-state fix: code-only graphs now show an explanatory overlay with a Show all graph recovery button. Switching from Documentation to a project with no document nodes restores All graph. Regression checks passed in all three viewer variants.
