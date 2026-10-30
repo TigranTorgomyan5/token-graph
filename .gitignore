@@ -1,0 +1,16 @@
+
+graphify-out/
+
+token-graph/.runtime/
+**/__pycache__/
+
+**/.explorer-*.json
+
+.claude/
+.DS_Store
+.env
+.env.*
+*.env
+**/.runtime/
+*.pyc
+*.pyo

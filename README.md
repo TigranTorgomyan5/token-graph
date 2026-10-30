@@ -1,0 +1,68 @@
+# Token Graph
+
+A local code knowledge graph skill for **Codex** and **Claude Code**, with a multi-project browser viewer.
+
+Build graphs of files, classes, functions, imports and calls. Query the relevant code, trace relationships, inspect change impact, and explore projects from one place.
+
+**No separate Graphify installation, account, or server is required.** The engine source is bundled. Normal code analysis needs no Ollama or additional AI model.
+
+## Install the skill
+
+Download [token-graph.zip](token-graph.zip), extract it, and copy the complete `token-graph` directory to:
+
+| Assistant | Directory | Invocation |
+|---|---|---|
+| Codex | `~/.codex/skills/token-graph/` | `$token-graph` |
+| Claude Code | `~/.claude/skills/token-graph/` | `/token-graph` |
+
+Prepare the parser dependencies once, using Python 3.11+ with venv/pip support:
+
+```sh
+python3 /path/to/token-graph/scripts/setup_runtime.py --download-deps
+```
+
+This installs parser libraries from PyPI into the skill's own runtime. It does not install the Graphify package or upload project files. Offline installation from local wheels is also supported.
+
+Read the [user guide](token-graph/README.md), [installation details](token-graph/INSTALL.md), or [Windows instructions](token-graph/INSTALL-WINDOWS.md).
+
+## Explore projects
+
+Open [index.html](index.html) locally in a browser. Choose your Projects folder to discover existing `graphify-out/graph.json` files and switch projects. Existing Graphify graphs remain compatible.
+
+For building, updating and asking graph questions from the viewer, start the optional loopback server:
+
+```sh
+python3 /path/to/token-graph/scripts/explorer_server.py --no-browser
+```
+
+Open the printed URL manually. It includes a private per-run access token. The server listens only on `127.0.0.1`.
+
+## Work from source
+
+```sh
+git clone https://github.com/TigranTorgomyan5/token-graph.git
+cd token-graph
+python3 token-graph/scripts/setup_runtime.py --download-deps
+python3 token-graph/scripts/token_graph.py launch /path/to/project
+```
+
+Run tests and build the shareable ZIP:
+
+```sh
+python3 -m unittest discover -s tests -v
+python3 token-graph/scripts/package_skill.py
+```
+
+The skill's canonical packaged project viewer is `token-graph/assets/project-explorer.html`. Keep the root `index.html` in sync when editing it; packaging does not overwrite either file.
+
+## Privacy and scope
+
+Graph analysis runs locally through a bundled runner that blocks external network connections and hosted model backends. Dependency downloads happen only during an explicitly requested setup step. Optional local Ollama processing is separate from the normal code workflow.
+
+Codex/Claude still handles its normal conversation through its configured provider; selected graph-query context is part of that conversation. The Python offline policy is not an OS sandbox for arbitrary untrusted programs.
+
+Context-reduction figures are heuristic estimates, not measured token usage or guaranteed savings. Cloud and remote database integrations are disabled. Some document/media features require optional local packages.
+
+The release has 21 passing automated tests and a local-server HTTP smoke test on macOS/Python 3.14. Native Windows/Linux validation is still outstanding. See the [review report](RELEASE_REVIEW.md) for details.
+
+The bundled engine's attribution and license files are preserved under [token-graph/vendor](token-graph/vendor).
