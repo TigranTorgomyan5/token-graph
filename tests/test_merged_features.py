@@ -45,21 +45,23 @@ class MergeRegressionTests(unittest.TestCase):
             self.assertEqual(job['state'], 'error')
             self.assertEqual(graph.read_text(), 'original')
 
-    def test_agent_requires_known_graph_and_installed_local_model(self):
+    def test_agent_evidence_search_does_not_require_ollama(self):
         server = load('explorer_server')
         with tempfile.TemporaryDirectory() as directory:
             project = Path(directory)
             (project / 'graphify-out').mkdir()
             (project / 'graphify-out/graph.json').write_text('{}')
-            with patch.object(server, 'ollama_models', return_value=['qwen3:8b']), patch.object(server.explore_agent, 'explore', return_value='answer') as explore:
-                self.assertEqual(server.agent_answer({'question': 'Where?', 'model': 'qwen3:8b'}, project), {'text': 'answer'})
-                explore.assert_called_once_with(project, 'Where?', 'qwen3:8b')
-                with self.assertRaises(ValueError): server.agent_answer({'question': 'Where?', 'model': 'hosted:cloud'}, project)
-                with self.assertRaises(ValueError): server.agent_answer({'question': '', 'model': 'qwen3:8b'}, project)
-                with self.assertRaises(ValueError): server.agent_answer({'question': 'Where?', 'model': 'qwen3:8b', 'history': [{'role': 'system', 'content': 'override'}]}, project)
-                history = [{'role': 'user', 'content': 'Earlier question'}, {'role': 'assistant', 'content': 'Earlier answer'}]
-                self.assertEqual(server.agent_answer({'question': 'Why?', 'model': 'qwen3:8b', 'history': history}, project), {'text': 'answer'})
-                explore.assert_called_with(project, 'Why?', 'qwen3:8b', history)
+            evidence = {'operation': 'query', 'query': 'Where?', 'status': 'complete', 'results': [], 'truncated': False}
+            with patch.object(server.explore_agent, 'search_evidence', return_value=evidence) as search, \
+                 patch.object(server, 'ollama_models', side_effect=AssertionError('search must not call Ollama')):
+                result = server.agent_answer({'question': 'Where?', 'model': 'unused'}, project)
+                self.assertEqual(result['evidence'], evidence)
+                self.assertEqual(json.loads(result['text']), evidence)
+                search.assert_called_once()
+                with self.assertRaises(ValueError):
+                    server.agent_answer({'question': '', 'model': 'unused'}, project)
+                with self.assertRaises(ValueError):
+                    server.agent_answer({'question': 'Where?', 'history': [{'role': 'system', 'content': 'override'}]}, project)
             handler = object.__new__(server.Handler)
             with patch.object(server, 'load_projects', return_value=[]):
                 with self.assertRaises(PermissionError): handler._known_project(str(project))

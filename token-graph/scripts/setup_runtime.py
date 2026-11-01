@@ -28,6 +28,8 @@ def main(argv=None) -> int:
     parser.add_argument('--locked', action='store_true', help='use the exact dependency versions tested with Python 3.14')
     parser.add_argument('--extras', nargs='+', choices=sorted(EXTRAS), default=[], help='optional local features to prepare')
     parser.add_argument('--installer', choices=['auto', 'pip', 'uv'], default='auto', help='pip needs no separate installer; uv can also use an existing local package cache')
+    parser.add_argument('--agent-project', type=Path, help='register the Codex exploration agent for this project instead of globally')
+    parser.add_argument('--no-agent', action='store_true', help='skip registering the optional Codex exploration agent')
     args = parser.parse_args(argv)
     if sys.version_info < (3, 11):
         parser.error('Python 3.11 or newer is required. Python 3.14 is the tested runtime.')
@@ -85,6 +87,12 @@ def main(argv=None) -> int:
             print('No network download was attempted. On a fresh machine run setup_runtime.py --download-deps, or provide --wheel-dir /path/to/wheels for offline setup. Graphify is not required.', file=sys.stderr)
         return 1
     print('Token Graph runtime ready. Graphify was not installed. No model was downloaded.')
+    codex_home = Path(os.environ.get('CODEX_HOME', Path.home() / '.codex')).expanduser().resolve()
+    if not args.no_agent and ROOT.resolve() == (codex_home / 'skills' / 'token-graph').resolve():
+        command = [sys.executable, str(ROOT / 'scripts' / 'install_explorer_agent.py')]
+        if args.agent_project:
+            command += ['--project', str(args.agent_project)]
+        subprocess.run(command, check=False)
     return 0
 
 

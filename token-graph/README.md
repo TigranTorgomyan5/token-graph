@@ -35,6 +35,18 @@ python3 "$HOME/.claude/skills/token-graph/scripts/setup_runtime.py" --download-d
 
 Setup creates a private `.runtime` folder and downloads the parser libraries from PyPI. It does not install Graphify, download AI models, or read/upload your project files. You do not need uv.
 
+For the Codex installation, setup can optionally register a separate `token_graph_explorer` agent wrapper. This is not needed for deterministic evidence search. To install the wrapper later or register it for a particular project, run:
+
+```sh
+python3 "$HOME/.codex/skills/token-graph/scripts/install_explorer_agent.py" --global
+# Or, for one project:
+python3 "$HOME/.codex/skills/token-graph/scripts/install_explorer_agent.py" --project /path/to/project
+```
+
+Project registration puts the role in the project's `.codex/config.toml`; its optional Ollama provider configuration lives in the user's Codex directory. Existing Token Graph agent and provider entries are never overwritten. Restart Codex, then ask it to use the `token_graph_explorer` wrapper. It relays deterministic evidence results; the parent assistant keeps its own configuration. Model and Codex version compatibility vary. Claude Code's Ollama integration configures the session provider, so this installer does not change Claude's provider or register an Ollama-backed Claude subagent.
+
+During initial runtime setup, pass `--agent-project /path/to/project` for project registration, or `--no-agent` to skip agent registration. Registration is optional and does not affect normal runtime setup or evidence search.
+
 For offline installation from local wheels, Windows notes, and optional features, see [INSTALL.md](INSTALL.md). This release was tested on macOS with Python 3.14; Windows and Linux have not been verified.
 
 ### 3. Use the skill in your project
@@ -83,6 +95,8 @@ Files are read locally by the browser. When a Projects folder is selected, click
 ## Ask about a loaded graph
 
 The **Question**, **Path A → B**, and **Impact** controls are available directly in the file-based viewer. They search the loaded JSON locally using node-name matching and graph traversal, then highlight matching nodes. Browser results can differ from the bundled engine's ranking; treat them as navigation hints and verify the source. The hide-tests and hide-generated toggles apply to these answers.
+
+For deterministic source-backed evidence, start the local server and use **Evidence**. Results include source paths, line citations, source types and verification status. Tests, evaluation fixtures and generated code are hidden by default; use the matching `--include-*` flag when needed. This browser evidence search does not use Ollama. The standalone CLI `scripts/explore_agent.py <project> <question>` does use local Ollama, defaults to `qwen3.8:27b-q4_K_M`, and can be pointed at another installed model with `--model`.
 
 ## Optional local server
 
@@ -157,6 +171,9 @@ python3 scripts/token_graph.py update /path/to/project
 
 # Calculate and save a context reduction estimate
 python3 scripts/token_graph.py benchmark /path/to/project
+
+# Ask the local Ollama exploration agent
+python3 scripts/explore_agent.py /path/to/project 'How is authentication enforced?'
 ```
 
 Replace `/path/to/project` with your project's local path. Quote paths that contain spaces. None of these commands opens HTML automatically.

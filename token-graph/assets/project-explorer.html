@@ -165,19 +165,19 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
               <button type="button" data-mode="query" aria-pressed="true" title="Ask about the code in plain words">Question</button>
               <button type="button" data-mode="path" aria-pressed="false" title="How is A connected to B?">Path A → B</button>
               <button type="button" data-mode="affected" aria-pressed="false" title="What depends on this and could break if it changes?">Impact</button>
-              <button type="button" data-mode="agent" aria-pressed="false" title="Explore with a local Ollama model">Local agent</button>
+              <button type="button" data-mode="agent" aria-pressed="false" title="Search the local graph and verify source without an LLM">Evidence</button>
             </div>
             <div class="ask-input-wrap"><input class="ask-input" id="ask-a" list="ask-nodes" autocomplete="off" spellcheck="false" placeholder="e.g. how is partial cashout executed" /><button type="button" class="ask-pick hidden" id="ask-a-pick" title="Use the selected node">◎</button></div>
             <div class="ask-input-wrap hidden" id="ask-b-wrap"><input class="ask-input" id="ask-b" list="ask-nodes" autocomplete="off" spellcheck="false" placeholder="To: class, method or file" /><button type="button" class="ask-pick" id="ask-b-pick" title="Use the selected node">◎</button></div>
             <select class="ask-depth" id="ask-budget" title="Estimated answer size; increase it when the result is truncated."><option value="400">~400 tokens</option><option value="800" selected>~800 tokens</option><option value="1500">~1,500 tokens</option><option value="3000">~3,000 tokens</option></select>
             <select class="ask-depth hidden" id="ask-depth" title="How many steps of dependants to follow"><option value="1">1 step</option><option value="2" selected>2 steps</option><option value="3">3 steps</option></select>
-            <select class="ask-depth hidden" id="agent-model" aria-label="Local Ollama model"><option value="">Checking Ollama…</option></select>
+            <select class="ask-depth hidden" id="agent-model" aria-label="Ollama model for AI graph generation" title="Used only by Generate AI graph"><option value="">Checking Ollama…</option></select>
             <button type="button" class="ask-go hidden" id="agent-build" title="Build a graph using the local model for document semantics">Generate AI graph</button>
             <button type="button" class="ask-go" id="ask-go">Ask</button>
           </div>
           <datalist id="ask-nodes"></datalist>
           <div class="ask-hint" id="ask-hint">Answers come from this project's graph on your computer. Matching nodes light up on the graph below.</div>
-          <div id="agent-chat" class="agent-chat hidden" aria-live="polite" aria-label="Local agent conversation"></div>
+          <div id="agent-chat" class="agent-chat hidden" aria-live="polite" aria-label="Evidence search history"></div>
           <button type="button" class="ask-pick hidden" id="agent-clear">New conversation</button>
           <div class="ask-result hidden" id="ask-result">
             <div class="ask-result-bar"><span id="ask-summary"></span><span class="spacer"></span><button type="button" id="ask-only" aria-pressed="false" title="Hide everything except the answer's nodes">Show only these</button><button type="button" id="ask-copy" title="Copy the answer text, e.g. to paste into Claude">Copy text</button><button type="button" id="ask-clear">Clear</button></div>
@@ -1021,11 +1021,12 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     query: { a: 'e.g. how is partial cashout executed', pickA: false },
     path: { a: 'From: class, method or file', pickA: true },
     affected: { a: 'Class, method or file that would change', pickA: true },
-    agent: { a: 'Ask the local agent about this project', pickA: false },
+    agent: { a: 'Find files, symbols, references, callers or source evidence', pickA: false },
   };
   let askMode = 'query';
   let agentHistory = [];
   let agentProject = null;
+  let buildModelPickerOpen = false;
 
   function clearAgentChat() {
     agentHistory = []; agentProject = state.projectPath;
@@ -1033,7 +1034,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
   }
   function appendAgentMessage(role, content) {
     const item = document.createElement('div'); item.className = `agent-message ${role}`;
-    const label = document.createElement('strong'); label.textContent = role === 'user' ? 'You' : 'Local agent';
+    const label = document.createElement('strong'); label.textContent = role === 'user' ? 'You' : 'Evidence';
     const body = document.createElement('div'); body.textContent = content;
     item.append(label, body); $('#agent-chat').append(item); item.scrollIntoView?.({block:'nearest'});
   }
@@ -1046,11 +1047,11 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     $('#ask-b-wrap').classList.toggle('hidden', mode !== 'path');
     $('#ask-depth').classList.toggle('hidden', mode !== 'affected');
     $('#ask-budget').classList.toggle('hidden', mode !== 'query');
-    $('#agent-model').classList.toggle('hidden', mode !== 'agent');
+    $('#agent-model').classList.toggle('hidden', mode !== 'agent' || !buildModelPickerOpen);
     $('#agent-build').classList.toggle('hidden', mode !== 'agent');
     $('#agent-chat').classList.toggle('hidden', mode !== 'agent');
     $('#agent-clear').classList.toggle('hidden', mode !== 'agent');
-    if (mode === 'agent') checkAgent();
+    if (mode === 'agent') $('#ask-hint').textContent = 'Deterministic graph evidence with source citations. No Ollama model is used for search.';
     else $('#ask-hint').textContent = answerHint();
     $('#ask-a').focus();
   }
@@ -1201,21 +1202,20 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     const go = $('#ask-go');
     if (askMode === 'agent') {
       if (!serverToken) { showServerInstructions(); return; }
-      if (!request.a.trim()) { $('#ask-hint').textContent = 'Enter a question for the local agent.'; return; }
-      if (!$('#agent-model').value) { await checkAgent(); if (!$('#agent-model').value) return; }
+      if (!request.a.trim()) { $('#ask-hint').textContent = 'Enter a search term or question.'; return; }
       const project = state.projectPath;
       if (agentProject !== project) clearAgentChat();
-      go.disabled = true; go.textContent = 'Exploring…';
-      $('#ask-hint').textContent = 'The local agent is exploring the graph and source. This can take a few minutes.';
+      go.disabled = true; go.textContent = 'Searching…';
+      $('#ask-hint').textContent = 'Searching the local graph and checking source locations…';
       try {
         const history = agentHistory.slice(-12);
-        const result = await api('/api/agent', {project, question: request.a, model: $('#agent-model').value, history});
+        const result = await api('/api/agent', {project, question: request.a, operation: 'query', limit: 10, hideTests: state.hideTests, hideGenerated: state.hideGenerated, history});
         if (state.projectPath !== project) return;
         appendAgentMessage('user', request.a);
         appendAgentMessage('assistant', result.text);
         agentHistory.push({role:'user', content:request.a}, {role:'assistant', content:result.text.slice(0,8000)});
         $('#ask-a').value = '';
-        $('#ask-hint').textContent = 'Answer generated locally. Verify important claims against the source.';
+        $('#ask-hint').textContent = 'Evidence retrieved locally. Each result identifies its source type and verification status.';
       } catch (error) { $('#ask-hint').textContent = error.message; }
       finally { go.disabled = false; go.textContent = 'Ask'; }
       return;
@@ -1239,10 +1239,10 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     try {
       const {models} = await api('/api/agent/status');
       select.replaceChildren();
-      if (!models.length) { select.add(new Option('No local models installed', '')); $('#ask-hint').textContent = 'Install a local model in Ollama, then select Local agent again.'; return; }
+      if (!models.length) { select.add(new Option('No local models installed', '')); $('#ask-hint').textContent = 'Install a local model in Ollama to generate a semantic graph.'; return; }
       for (const model of models) select.add(new Option(model, model));
       if (models.includes('qwen3:8b')) select.value = 'qwen3:8b';
-      $('#ask-hint').textContent = 'Ollama is ready. The agent uses the graph and may read project source files.';
+      $('#ask-hint').textContent = 'Ollama is ready for optional AI graph generation.';
     } catch (error) { select.replaceChildren(new Option('Ollama unavailable', '')); $('#ask-hint').textContent = error.message; }
   }
 
@@ -1423,6 +1423,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
   $('#agent-build').addEventListener('click', async () => {
     if (!serverToken) { showServerInstructions(); return; }
     if (!state.projectPath) { $('#ask-hint').textContent = 'Open a project first.'; return; }
+    buildModelPickerOpen = true; $('#agent-model').classList.remove('hidden');
     if (!$('#agent-model').value) { await checkAgent(); if (!$('#agent-model').value) return; }
     setBuilding('Starting AI graph…');
     try {

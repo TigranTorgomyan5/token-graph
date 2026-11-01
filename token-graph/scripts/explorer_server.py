@@ -141,27 +141,35 @@ def ollama_models() -> list[str]:
 
 
 def agent_answer(body: dict, project: Path) -> dict:
-    question = str(body.get('question') or '').strip()
-    model = str(body.get('model') or '').strip()
+    """Return deterministic evidence for the viewer; this path never calls Ollama."""
+    question = str(body.get("question") or "").strip()
     if not question or len(question) > 4000:
-        raise ValueError('Enter a question of up to 4,000 characters.')
+        raise ValueError("Enter a question of up to 4,000 characters.")
     if not graph_path(project).is_file():
-        raise ValueError('This project has no graph yet; build it first.')
-    if model not in ollama_models():
-        raise ValueError('Select an installed local Ollama model and try again.')
-    history = body.get('history', [])
+        raise ValueError("This project has no graph yet; build it first.")
+    operation = str(body.get("operation") or "query")
+    history = body.get("history", [])
     if not isinstance(history, list) or len(history) > 12 or any(
-        not isinstance(item, dict) or item.get('role') not in ('user', 'assistant')
-        or not isinstance(item.get('content'), str) or len(item['content']) > 8000 for item in history
+        not isinstance(item, dict) or item.get("role") not in ("user", "assistant")
+        or not isinstance(item.get("content"), str) or len(item["content"]) > 8000 for item in history
     ):
-        raise ValueError('Invalid conversation history.')
-    history = [{'role': item['role'], 'content': item['content']} for item in history]
+        raise ValueError("Invalid conversation history.")
     try:
-        if history:
-            return {'text': explore_agent.explore(project, question, model, history)}
-        return {'text': explore_agent.explore(project, question, model)}
+        limit = min(100, max(1, int(body.get("limit") or 10)))
+        evidence = explore_agent.search_evidence(
+            project,
+            question,
+            operation=operation,
+            target=str(body.get("target") or "") or None,
+            line=int(body["line"]) if body.get("line") is not None else None,
+            limit=limit,
+            include_tests=not bool(body.get("hideTests")),
+            include_evaluation=bool(body.get("includeEvaluation")),
+            include_generated=not bool(body.get("hideGenerated")),
+        )
     except (OSError, ValueError, KeyError, subprocess.TimeoutExpired) as error:
-        raise ValueError(f'Agent failed: {error}') from error
+        raise ValueError(f"Evidence search failed: {error}") from error
+    return {"text": json.dumps(evidence, ensure_ascii=False, indent=2), "evidence": evidence}
 
 
 def engine_python() -> str:

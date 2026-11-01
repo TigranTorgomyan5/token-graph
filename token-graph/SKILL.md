@@ -42,6 +42,8 @@ Keep answers small — every line of tool output costs the user tokens:
 
 The source engine is bundled under `vendor/`. Local compatibility commands are available through `scripts/offline_engine.py`; only local analysis operations are exposed. Normal skill use should go through the launcher, which creates the offline viewer and benchmark alongside the graph.
 
+The standalone `scripts/explore_agent.py <project> <question>` CLI is a read-only Ollama agent. It defaults to local model `qwen3.8:27b-q4_K_M`; pass `--model` to select another installed local model. It queries the graph, reads bounded source excerpts, and returns a cited answer. Requests go only to `127.0.0.1:11434`. The viewer's **Evidence** control uses deterministic source-cited retrieval instead and does not use Ollama. Building and ordinary graph queries remain model-free. Add `--build` to the agent only when the graph needs to be built or refreshed.
+
 ## Output and privacy
 
 - Keep each project's graph separate. Output uses `graphify-out/` for compatibility with existing project graphs; this folder name does not imply any external service.

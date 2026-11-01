@@ -1,4 +1,4 @@
 interface:
   display_name: "Token Graph"
   short_description: "Build and query a private local project graph in one invocation"
-  default_prompt: "Use $token-graph to build or query this project locally. For questions, answer from its focused local graph context instead of reading the full repository."
+  default_prompt: "Use the deterministic Token Graph Explorer for repository questions. Return its structured, source-cited evidence without interpreting it; the parent assistant handles conclusions."
