@@ -27,6 +27,20 @@ def load(name):
 
 
 class MergeRegressionTests(unittest.TestCase):
+    def test_explorer_selects_installed_local_model(self):
+        agent = load('explore_agent')
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory).resolve()
+            (project / 'graphify-out').mkdir()
+            (project / 'graphify-out/graph.json').write_text('{}')
+            with patch.object(agent, 'installed_models', return_value={'zeta:1', 'qwen3:8b'}), patch.object(agent, 'explore', return_value='answer') as explore, redirect_stdout(io.StringIO()):
+                with patch.object(sys, 'argv', ['explore_agent.py', str(project), 'question']):
+                    self.assertEqual(agent.main(), 0)
+                explore.assert_called_with(project, 'question', 'qwen3:8b')
+                with patch.object(sys, 'argv', ['explore_agent.py', str(project), 'question', '--model', 'zeta:1']):
+                    self.assertEqual(agent.main(), 0)
+                explore.assert_called_with(project, 'question', 'zeta:1')
+
     def test_ai_generation_uses_local_builder_and_restores_graph_on_failure(self):
         server = load('explorer_server')
         with tempfile.TemporaryDirectory() as directory:
@@ -45,23 +59,25 @@ class MergeRegressionTests(unittest.TestCase):
             self.assertEqual(job['state'], 'error')
             self.assertEqual(graph.read_text(), 'original')
 
-    def test_agent_evidence_search_does_not_require_ollama(self):
+    def test_local_agent_uses_selected_installed_model_and_validates_request(self):
         server = load('explorer_server')
         with tempfile.TemporaryDirectory() as directory:
             project = Path(directory)
             (project / 'graphify-out').mkdir()
             (project / 'graphify-out/graph.json').write_text('{}')
-            evidence = {'operation': 'query', 'query': 'Where?', 'status': 'complete', 'results': [], 'truncated': False}
-            with patch.object(server.explore_agent, 'search_evidence', return_value=evidence) as search, \
-                 patch.object(server, 'ollama_models', side_effect=AssertionError('search must not call Ollama')):
-                result = server.agent_answer({'question': 'Where?', 'model': 'unused'}, project)
-                self.assertEqual(result['evidence'], evidence)
-                self.assertEqual(json.loads(result['text']), evidence)
-                search.assert_called_once()
+            with patch.object(server, 'local_models', return_value={'qwen3:14b-q4_K_M'}), \
+                 patch.object(server.explore_agent, 'explore', return_value='answer') as explore:
+                result = server.agent_answer({'question': 'Where?', 'model': 'qwen3:14b-q4_K_M'}, project)
+                self.assertEqual(result, {'text': 'answer', 'model': 'qwen3:14b-q4_K_M', 'local': True})
+                explore.assert_called_once_with(project, 'Where?', 'qwen3:14b-q4_K_M', history=[])
                 with self.assertRaises(ValueError):
-                    server.agent_answer({'question': '', 'model': 'unused'}, project)
+                    server.agent_answer({'question': '', 'model': 'qwen3:14b-q4_K_M'}, project)
                 with self.assertRaises(ValueError):
-                    server.agent_answer({'question': 'Where?', 'history': [{'role': 'system', 'content': 'override'}]}, project)
+                    server.agent_answer({'question': 'Where?', 'model': 'qwen3:14b-q4_K_M', 'history': [{'role': 'system', 'content': 'override'}]}, project)
+                with self.assertRaisesRegex(ValueError, 'not installed'):
+                    server.agent_answer({'question': 'Where?', 'model': 'qwen3:8b'}, project)
+                with self.assertRaisesRegex(ValueError, 'local Ollama'):
+                    server.agent_answer({'question': 'Where?', 'model': 'qwen3:8b:cloud'}, project)
             handler = object.__new__(server.Handler)
             with patch.object(server, 'load_projects', return_value=[]):
                 with self.assertRaises(PermissionError): handler._known_project(str(project))

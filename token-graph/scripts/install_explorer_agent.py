@@ -61,11 +61,9 @@ def install(codex_home: Path, skill: Path, project: Path | None = None, selected
     if ROLE in role_data.get('agents', {}):
         raise ValueError('The Token Graph agent already exists; configuration unchanged.')
     instructions = (
-        'Retrieve repository evidence only. For all exploration, invoke the deterministic Explorer script at '
+        'Retrieve repository evidence only. For exploration, invoke the read-only local Explorer script at '
         + str(skill.resolve() / 'scripts' / 'explore_agent.py')
-        + ' with the selected project, query, and an operation such as query, find_symbol, find_files, '
-        'find_references, find_callers, find_callees, find_dependencies, find_docs, find_source, '
-        'find_relationships, path, or affected. Relay its structured JSON without adding interpretations. '
+        + ' with the selected project and question. Relay its results without adding unsupported interpretations. '
         'Do not infer project purpose, business requirements, developer intent, or architecture from isolated evidence. '
         'Graph results are candidates; only source-verified results are verified. Preserve source_type, verification, '
         'file, line range, excerpt, and graph_only labels. If evidence is absent or stale, relay that status. '

@@ -77,11 +77,13 @@ def _source_path(project: Path, source_file: str) -> Path | None:
         relative = candidate.relative_to(project.resolve())
     except ValueError:
         return None
-    forbidden = {".git", ".hg", ".svn", "node_modules", "vendor", "graphify-out", ".runtime", ".venv", "venv"}
+    if _is_ignored(project.resolve(), relative.as_posix()):
+        return None
+    forbidden = {".git", ".hg", ".svn", ".aws", ".ssh", ".azure", ".kube", ".config", "node_modules", "vendor", "graphify-out", ".runtime", ".venv", "venv"}
     if any(part.casefold() in forbidden or part.casefold().startswith(".env") for part in relative.parts):
         return None
     name = candidate.name.casefold()
-    if name.endswith((".pem", ".key", ".p12", ".pfx")) or any(secret in name for secret in ("credential", "secret", "id_rsa", "id_ed25519")):
+    if name in {'.npmrc', '.netrc', '.pypirc'} or name.endswith((".pem", ".key", ".p12", ".pfx", '.env')) or any(secret in name for secret in ("credential", "secret", "id_rsa", "id_ed25519")):
         return None
     return candidate
 
@@ -228,6 +230,7 @@ def _query_graph(project: Path, question: str, budget: int) -> dict[str, Any]:
         completed = subprocess.run(
             [python, str(ASK_ENGINE), str(project), "query", question, str(budget)],
             capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=180, check=False,
+            env=dict(os.environ, PYTHONDONTWRITEBYTECODE='1', GRAPHIFY_QUERY_LOG_DISABLE='1'),
         )
     except subprocess.TimeoutExpired:
         return {"error": "Graph query timed out."}
@@ -270,10 +273,31 @@ def _rank_nodes(nodes: list[dict[str, Any]], query: str) -> list[tuple[int, dict
 def _is_ignored(project: Path, relative: str) -> bool:
     """Apply simple gitignore-style Graphify patterns during documentation discovery."""
     rules: list[tuple[bool, str]] = []
-    try:
-        raw_rules = (project / ".graphifyignore").read_text(encoding="utf-8").splitlines()
-    except (OSError, UnicodeError):
-        raw_rules = []
+    raw_rules = []
+    for rules_file in (project / '.gitignore', project / '.graphifyignore', project / '.git' / 'info' / 'exclude'):
+        try:
+            raw_rules.extend(rules_file.read_text(encoding='utf-8').splitlines())
+        except (OSError, UnicodeError):
+            pass
+    # Nested .gitignore patterns are relative to the directory containing them.
+    for parent in reversed(Path(relative).parents):
+        if str(parent) == '.':
+            continue
+        try:
+            nested = (project / parent / '.gitignore').read_text(encoding='utf-8').splitlines()
+        except (OSError, UnicodeError):
+            continue
+        for raw in nested:
+            rule = raw.strip()
+            if not rule or rule.startswith('#'):
+                continue
+            negated = rule.startswith('!')
+            pattern = rule[1:] if negated else rule
+            # A basename pattern matches at any depth below its .gitignore.
+            prefixed = (parent / pattern.lstrip('/')).as_posix()
+            raw_rules.append(('!' if negated else '') + prefixed)
+            if '/' not in pattern.strip('/'):
+                raw_rules.append(('!' if negated else '') + (parent / '**' / pattern).as_posix())
     for raw in raw_rules:
         rule = raw.strip()
         if not rule or rule.startswith("#"):

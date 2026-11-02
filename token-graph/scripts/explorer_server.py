@@ -24,6 +24,7 @@ SKILL = Path(__file__).resolve().parents[1]
 SCRIPTS = SKILL / "scripts"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
+from local_inference import local_models, DEFAULT_MODEL
 import explore_agent
 PAGE = SKILL / "assets" / "project-explorer.html"
 STATE = SKILL / ".explorer-server.json"      # port + token of the running server
@@ -129,25 +130,25 @@ def ask(body: dict, project: Path) -> dict:
 
 def ollama_models() -> list[str]:
     """List installed local models, excluding Ollama's hosted model entries."""
-    req = urllib.request.Request('http://127.0.0.1:11434/api/tags')
     try:
-        with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(req, timeout=3) as response:
-            data = json.load(response)
+        models = local_models()
     except (OSError, ValueError) as error:
         raise ValueError('Ollama is not responding. Start the Ollama app and try again.') from error
-    return [item['name'] for item in data.get('models', [])
-            if isinstance(item, dict) and isinstance(item.get('name'), str)
-            and ':cloud' not in item['name'].lower() and not item.get('remote_model') and not item.get('remote_host')]
+    return sorted(models)
 
 
 def agent_answer(body: dict, project: Path) -> dict:
-    """Return deterministic evidence for the viewer; this path never calls Ollama."""
+    """Ask the selected local model to explore the project using verified graph/source evidence."""
     question = str(body.get("question") or "").strip()
     if not question or len(question) > 4000:
         raise ValueError("Enter a question of up to 4,000 characters.")
     if not graph_path(project).is_file():
         raise ValueError("This project has no graph yet; build it first.")
-    operation = str(body.get("operation") or "query")
+    model = str(body.get("model") or DEFAULT_MODEL)
+    if ':cloud' in model.lower() or '://' in model:
+        raise ValueError("Only an installed local Ollama model can be used.")
+    if model not in local_models():
+        raise ValueError(f"Local model {model!r} is not installed. Refresh Ollama models and try again.")
     history = body.get("history", [])
     if not isinstance(history, list) or len(history) > 12 or any(
         not isinstance(item, dict) or item.get("role") not in ("user", "assistant")
@@ -155,21 +156,10 @@ def agent_answer(body: dict, project: Path) -> dict:
     ):
         raise ValueError("Invalid conversation history.")
     try:
-        limit = min(100, max(1, int(body.get("limit") or 10)))
-        evidence = explore_agent.search_evidence(
-            project,
-            question,
-            operation=operation,
-            target=str(body.get("target") or "") or None,
-            line=int(body["line"]) if body.get("line") is not None else None,
-            limit=limit,
-            include_tests=not bool(body.get("hideTests")),
-            include_evaluation=bool(body.get("includeEvaluation")),
-            include_generated=not bool(body.get("hideGenerated")),
-        )
-    except (OSError, ValueError, KeyError, subprocess.TimeoutExpired) as error:
+        answer = explore_agent.explore(project, question, model, history=history)
+    except (OSError, ValueError, KeyError, subprocess.TimeoutExpired, TimeoutError) as error:
         raise ValueError(f"Evidence search failed: {error}") from error
-    return {"text": json.dumps(evidence, ensure_ascii=False, indent=2), "evidence": evidence}
+    return {"text": answer, "model": model, "local": True}
 
 
 def engine_python() -> str:

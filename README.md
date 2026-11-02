@@ -41,14 +41,16 @@ Open the printed URL manually. It includes a private per-run access token. The s
 
 ## Local exploration agent
 
-The standalone command-line explorer uses a local Ollama model to query the project's graph and inspect bounded source excerpts. It defaults to `qwen3.8:27b-q4_K_M`; select another installed local model with `--model`. The agent only connects to Ollama at `127.0.0.1:11434` and cannot edit project files or run shell commands:
+The standalone command-line explorer and the viewer's **Local Agent** chat use a local Ollama model to query the project's graph and inspect bounded source excerpts. They prefer `qwen3:14b-q4_K_M` when installed; select a different installed model with `--model` or the viewer's model menu. Broad architecture and overview questions receive focused entry-point and wiring excerpts automatically. The agent only connects to Ollama at `127.0.0.1:11434` and cannot edit project files or run shell commands:
 
 ```sh
 python3 token-graph/scripts/explore_agent.py /path/to/project 'Where is authentication enforced?'
 python3 token-graph/scripts/explore_agent.py /path/to/project 'Where is authentication enforced?' --model qwen3:14b
 ```
 
-Start Ollama first and confirm the selected model is installed. Use `--build` to build a missing code graph locally before exploration. The viewer's **Evidence** control remains deterministic graph and source retrieval; it does not call Ollama. The static viewer's question/path/impact controls are local navigation hints.
+Start Ollama first and confirm the selected model is installed. Build a missing code graph separately with `python3 token-graph/scripts/token_graph.py build /path/to/project`; the explorer itself is read-only. The viewer's **Local Agent** chat uses Ollama; its question/path/impact controls use the deterministic graph engine.
+
+To analyze a local log file, run `python3 token-graph/scripts/log_analyzer.py /path/to/application.log 'What failed?'`. Use `--no-llm` for deterministic statistics only. The script redacts common secrets before local inference, but redaction is not exhaustive; inspect its output before sharing. See the [skill guide](token-graph/README.md) for limits and Codex/Claude usage.
 
 Ollama remains optional for the separate AI graph-generation workflow. Choose **Generate AI graph** in the viewer, or run:
 
@@ -56,7 +58,7 @@ Ollama remains optional for the separate AI graph-generation workflow. Choose **
 python3 token-graph/scripts/generate_agent.py /path/to/project
 ```
 
-The generator detects an installed local model (preferring `qwen3:8b`); use `--model` to choose another. Install its optional Python dependency once with `python3 token-graph/scripts/setup_runtime.py --download-deps --extras ollama`. The parser extracts code structure, while Ollama analyzes supported documents and labels communities. A code-only project may have no document semantics to extract. The operation updates graph artifacts and ignore settings in the project; a failed generation restores an existing graph JSON. Model-generated relationships can be inaccurate. Audio and video require a separately prepared local transcription model, and image analysis is not enabled by this button.
+The generator uses an installed local model; use `--model` to choose another. Install its optional Python dependency once with `python3 token-graph/scripts/setup_runtime.py --download-deps --extras ollama`. The parser extracts code structure, while Ollama analyzes supported documents and labels communities. A code-only project may have no document semantics to extract. The operation updates graph artifacts and ignore settings in the project; a failed generation restores an existing graph JSON. Model-generated relationships can be inaccurate. Audio and video require a separately prepared local transcription model, and image analysis is not enabled by this button.
 
 The evidence explorer is read-only unless `--build` is supplied. It excludes common secret files, but source code may contain embedded sensitive information. Use the source paths and line citations to verify findings in the project.
 

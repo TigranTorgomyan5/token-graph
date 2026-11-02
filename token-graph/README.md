@@ -35,7 +35,7 @@ python3 "$HOME/.claude/skills/token-graph/scripts/setup_runtime.py" --download-d
 
 Setup creates a private `.runtime` folder and downloads the parser libraries from PyPI. It does not install Graphify, download AI models, or read/upload your project files. You do not need uv.
 
-For the Codex installation, setup can optionally register a separate `token_graph_explorer` agent wrapper. This is not needed for deterministic evidence search. To install the wrapper later or register it for a particular project, run:
+For the Codex installation, setup can optionally register a separate `token_graph_explorer` agent wrapper. To install the wrapper later or register it for a particular project, run:
 
 ```sh
 python3 "$HOME/.codex/skills/token-graph/scripts/install_explorer_agent.py" --global
@@ -96,7 +96,21 @@ Files are read locally by the browser. When a Projects folder is selected, click
 
 The **Question**, **Path A → B**, and **Impact** controls are available directly in the file-based viewer. They search the loaded JSON locally using node-name matching and graph traversal, then highlight matching nodes. Browser results can differ from the bundled engine's ranking; treat them as navigation hints and verify the source. The hide-tests and hide-generated toggles apply to these answers.
 
-For deterministic source-backed evidence, start the local server and use **Evidence**. Results include source paths, line citations, source types and verification status. Tests, evaluation fixtures and generated code are hidden by default; use the matching `--include-*` flag when needed. This browser evidence search does not use Ollama. The standalone CLI `scripts/explore_agent.py <project> <question>` does use local Ollama, defaults to `qwen3.8:27b-q4_K_M`, and can be pointed at another installed model with `--model`.
+For deterministic source-backed retrieval, use the viewer's regular question/path/impact controls or `scripts/explorer_evidence.py`. The viewer's **Local Agent** chat and standalone CLI `scripts/explore_agent.py <project> <question>` use local Ollama; the viewer selects an installed model, preferring `qwen3:14b-q4_K_M`. Broad architecture questions get focused entry-point and wiring excerpts. The agent is read-only: build a missing graph separately with `token_graph.py build`.
+
+## Local log analysis for Codex and Claude Code
+
+Both assistants can invoke the same scripts from the installed skill folder. For example:
+
+```sh
+python3 /path/to/token-graph/scripts/explore_agent.py /path/to/project 'Where is authentication enforced?' --metrics
+python3 /path/to/token-graph/scripts/log_analyzer.py /path/to/application.log 'What failures occurred?'
+python3 /path/to/token-graph/scripts/log_analyzer.py /path/to/application.log --no-llm --service api
+```
+
+The log analyzer reads at most 200,000 physical lines, retains bounded groups and snippets, redacts common credential patterns, and derives counts and timestamp ordering deterministically. Only the bounded redacted summary goes to loopback Ollama. Redaction is best effort: inspect output before sharing it, and avoid logs with secrets that cannot be safely redacted. Nested Loki response envelopes must first be converted to line-delimited events. Naive timestamps cannot be ordered across services; time correlation does not establish causation. Both scripts default to an 8K model context, temperature 0.1 and a 768-token output limit. These two scripts coordinate inference across their processes using a loopback socket; other Ollama clients are not coordinated. `--endpoint` accepts only a loopback HTTP origin. Local model output is untrusted and should be checked against source or original logs.
+
+The shared Token Graph skill instructions describe both CLIs for Codex and Claude Code. No Claude-specific provider configuration is installed; the optional Codex explorer wrapper remains separate and requires explicit registration. These integrations have not been validated in a live Claude session.
 
 ## Optional local server
 
