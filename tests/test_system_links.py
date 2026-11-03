@@ -28,6 +28,17 @@ def edges(result):
 
 
 class ScannerTests(unittest.TestCase):
+    def test_go_method_routes_and_http_requests_link(self):
+        server = [('controller.go', '.go', 'const TokenRoute = "api/v1/auth/token"\nfunc mount(r chi.Router) { r.Method(http.MethodPost, "/"+TokenRoute, handler) }')]
+        client = [('client.go', '.go', 'func send(ctx context.Context) { http.NewRequestWithContext(ctx, http.MethodPost, "/api/v1/auth/token", nil) }')]
+        services = []
+        for name, files in [('gateway', client), ('sport', server)]:
+            endpoints = system_links.extract(files, system_links.collect_consts(files))
+            services.append({'name': name, 'scan': {'endpoints': endpoints}})
+        result = system_links.link(services)
+        self.assertEqual([(e['source'], e['target'], e['tech']) for e in result], [(0, 1, 'http')])
+        self.assertEqual(result[0]['channels'][0]['name'], '/api/v1/auth/token')
+
     @classmethod
     def setUpClass(cls):
         cls.result = system_links.scan_system([{'path': str(FIXTURE / s)} for s in SERVICES])

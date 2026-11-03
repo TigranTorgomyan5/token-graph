@@ -524,7 +524,14 @@ def extract(files, consts: dict) -> list[dict]:
                     if resolved and too_broad(channel):
                         continue
                     add(t, r, channel, resolved, rel, text, nl, m.start())
-            scan_routes(text, rel, nl, add)
+            scan_routes(text, rel, nl, add, consts, ext)
+            if ext == ".go":
+                # net/http request constructors take the URL after the method.
+                request = re.compile(rf"\bhttp\.NewRequest(?:WithContext)?\s*\(\s*(?:[^,\n]+,\s*)?(?:http\.Method\w+|{STR})\s*,\s*(?P<arg>{STR}|{IDENT})\s*,")
+                for m in request.finditer(text):
+                    got = resolve(m.group('arg'), consts)
+                    if got and got[1] and got[0].startswith('/'):
+                        add('http', 'out', got[0], True, rel, text, nl, m.start(), kind='path')
         # URLs anywhere (code and config): the host may name another service.
         for m in URL.finditer(text):
             host = m.group("host").lower()
@@ -539,12 +546,24 @@ def extract(files, consts: dict) -> list[dict]:
     return endpoints
 
 
-def scan_routes(text: str, rel: str, nl: list[int], add) -> None:
+def scan_routes(text: str, rel: str, nl: list[int], add, consts: dict, ext: str) -> None:
     for rx in HTTP_SERVER:
         for m in rx.finditer(text):
             value = literal(m.group("arg"), {})
             if value:
                 add("http", "in", value, True, rel, text, nl, m.start(), kind="route")
+    if ext == ".go":
+        # chi's Method takes the HTTP verb first; route expressions commonly join
+        # a slash with a named constant. Resolve only unambiguous literal parts.
+        term = rf"(?:{STR}|{IDENT})"
+        route = re.compile(rf"\.Method\s*\(\s*(?:http\.Method\w+|{STR})\s*,\s*(?P<route>{term}(?:\s*\+\s*{term})*)\s*,")
+        for m in route.finditer(text):
+            parts = re.split(r"\s*\+\s*", m.group("route"))
+            values = [resolve(part, consts) for part in parts]
+            if all(value and value[1] for value in values):
+                path = ''.join(value[0] for value in values)
+                if path.startswith('/'):
+                    add("http", "in", path, True, rel, text, nl, m.start(), kind="route")
     events = []
     for rx in ROUTE_PREFIX:
         events += [("pre", m.start(), m) for m in rx.finditer(text)]
