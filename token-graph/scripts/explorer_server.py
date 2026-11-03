@@ -60,13 +60,80 @@ sys.stdout.write(path or '')
 """
 
 
+APPLE_FOLDER_PICKER = r'''on run argv
+set startFolder to item 1 of argv
+try
+    if startFolder is "" then
+        set chosenFolder to choose folder with prompt "Choose a project folder for Token Graph"
+    else
+        set chosenFolder to choose folder with prompt "Choose a project folder for Token Graph" default location (POSIX file startFolder)
+    end if
+on error number -128
+    return ""
+end try
+return POSIX path of chosenFolder
+end run'''
+
+WINDOWS_FOLDER_PICKER = r'''
+Add-Type -AssemblyName System.Windows.Forms
+$dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+$dialog.Description = 'Choose a project folder for Token Graph'
+$dialog.SelectedPath = $env:TOKEN_GRAPH_FOLDER_START
+$dialog.ShowNewFolderButton = $false
+if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { [Console]::Out.Write($dialog.SelectedPath) }
+'''
+
+
+def _run_folder_picker(command: list[str], *, env: dict | None = None) -> subprocess.CompletedProcess | None:
+    try:
+        return subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                              creationflags=NO_WINDOW, timeout=600, env=env, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+
+
+def _picked_path(result: subprocess.CompletedProcess | None) -> tuple[str, bool] | None:
+    """Return (path, cancelled), or None when the dialog command is unavailable/broken."""
+    if result is None:
+        return None
+    if result.returncode == 0:
+        return result.stdout.strip(), not result.stdout.strip()
+    return None
+
+
 def pick_folder(start: str) -> dict:
-    picked = subprocess.run([sys.executable.replace("pythonw.exe", "python.exe"), "-I", "-c", PICK_FOLDER, start],
-                            capture_output=True, text=True, encoding="utf-8", creationflags=NO_WINDOW, check=False)
-    if picked.returncode:
-        return {"path": "", "manual": True}
-    path = picked.stdout.strip()
-    return {"path": str(Path(path).resolve()) if path else "", "manual": False}
+    """Open a native chooser on macOS/Windows/Linux, then Tk if installed; otherwise allow path entry."""
+    result = None
+    if sys.platform == "darwin" and shutil.which("osascript"):
+        result = _run_folder_picker([shutil.which("osascript"), "-e", APPLE_FOLDER_PICKER, start])
+    elif os.name == "nt":
+        powershell = shutil.which("powershell.exe") or shutil.which("powershell") or shutil.which("pwsh.exe") or shutil.which("pwsh")
+        if powershell:
+            env = os.environ.copy()
+            env["TOKEN_GRAPH_FOLDER_START"] = start
+            result = _run_folder_picker([powershell, "-NoProfile", "-STA", "-Command", WINDOWS_FOLDER_PICKER], env=env)
+    else:
+        zenity, kdialog = shutil.which("zenity"), shutil.which("kdialog")
+        if zenity:
+            start_dir = str(Path(start).resolve())
+            result = _run_folder_picker([zenity, "--file-selection", "--directory", "--title=Choose a project folder for Token Graph",
+                                         f"--filename={start_dir.rstrip(os.sep)}{os.sep}"])
+        elif kdialog:
+            result = _run_folder_picker([kdialog, "--getexistingdirectory", start, "--title", "Choose a project folder for Token Graph"])
+
+    picked = _picked_path(result)
+    if picked is not None:
+        path, _cancelled = picked
+        return {"path": str(Path(path).resolve()) if path else "", "manual": False}
+
+    # Tk is a useful portable fallback, but several Python distributions omit _tkinter.
+    executable = sys.executable.replace("pythonw.exe", "python.exe")
+    tk_result = _run_folder_picker([executable, "-I", "-c", PICK_FOLDER, start])
+    picked = _picked_path(tk_result)
+    if picked is not None:
+        path, _cancelled = picked
+        return {"path": str(Path(path).resolve()) if path else "", "manual": False}
+    return {"path": "", "manual": True}
 
 
 def find_rider() -> str | None:

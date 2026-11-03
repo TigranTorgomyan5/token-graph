@@ -9,9 +9,15 @@
   // Set when the page is served by scripts/explorer_server.py (desktop shortcut); null when opened as a file.
   const serverToken = location.protocol.startsWith('http') ? new URLSearchParams(location.search).get('token') : null;
   const api = async (path, body) => {
-    const response = await fetch(path, body === undefined
-      ? { cache: 'no-store', headers: { 'X-Token-Graph': serverToken } }
-      : { method: 'POST', cache: 'no-store', headers: { 'X-Token-Graph': serverToken, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    let response;
+    try {
+      response = await fetch(path, body === undefined
+        ? { cache: 'no-store', headers: { 'X-Token-Graph': serverToken } }
+        : { method: 'POST', cache: 'no-store', headers: { 'X-Token-Graph': serverToken, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    } catch (error) {
+      if (error instanceof TypeError) throw new Error('Token Graph server is not reachable. Restart the local server and reopen the viewer.');
+      throw error;
+    }
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || `Server answered ${response.status}`);
     return data;

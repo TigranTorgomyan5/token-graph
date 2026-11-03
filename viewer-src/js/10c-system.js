@@ -2,7 +2,7 @@
   // The server scans every service for NATS / Kafka / RabbitMQ / MassTransit / gRPC / HTTP endpoints
   // and links producer to consumer (scripts/system_links.py). This page draws the service map and
   // shows the code lines behind each connection; a service opens as a normal code graph.
-  const sysState = { list: [], current: null, scan: null, loading: false, error: '', note: '', editing: null, selected: null, hidden: new Set(), pos: new Map(), drag: null, noClick: false, graphIds: new Map(), building: false };
+  const sysState = { list: [], current: null, scan: null, loading: false, error: '', note: '', editing: null, selected: null, projectQuery: '', hidden: new Set(), pos: new Map(), drag: null, noClick: false, graphIds: new Map(), building: false };
   const TECH_COLOR = { nats: '#52c9e8', http: '#8877ff', grpc: '#55d6a2', kafka: '#e6ad63', rabbitmq: '#f09461', masstransit: '#e58bd4', redis: '#f07883', websocket: '#b2d66e', mqtt: '#e0d56b', sqs: '#6f9cff', servicebus: '#53b9a6' };
   const TECH_LABEL = { nats: 'NATS', http: 'HTTP', grpc: 'gRPC', kafka: 'Kafka', rabbitmq: 'RabbitMQ', masstransit: 'MassTransit', redis: 'Redis', websocket: 'WebSocket', mqtt: 'MQTT', sqs: 'SQS/SNS', servicebus: 'Service Bus', pubsub: 'Pub/Sub', zeromq: 'ZeroMQ', jms: 'JMS' };
   const MATCH_NOTE = { exact: 'same subject/topic text on both sides', 'shared name': 'both sides use the same constant name', route: 'client path matches a server route', url: 'a URL names this service (caller side only)', 'config key': 'a config key names this service (caller side only)' };
@@ -41,7 +41,7 @@
 
   function selectSystem(id) {
     sysState.current = sysState.list.find(s => s.id === id) || null;
-    sysState.scan = null; sysState.selected = null;
+    sysState.scan = null; sysState.selected = null; sysState.projectQuery = '';
     try { localStorage.setItem('tokenGraph.system', id); } catch (_) { /* per-viewer convenience only */ }
     renderSystem();
     scanSystem(false);
@@ -59,6 +59,8 @@
   // ---- service map (SVG) ----
   function mapSvg() {
     const { services, edges } = sysState.scan;
+    const query = sysState.projectQuery.trim().toLocaleLowerCase();
+    const matchesService = s => !query || `${s.name} ${s.path}`.toLocaleLowerCase().includes(query);
     const P = i => sysState.pos.get(services[i].path);
     const degree = services.map(() => 0);
     edges.forEach(e => { degree[e.source]++; degree[e.target]++; });
@@ -81,7 +83,7 @@
       const s = toward(a, c, radius(e.source) + 3), t = toward(b, c, radius(e.target) + 9);
       const d = `M${s.x.toFixed(1)},${s.y.toFixed(1)} Q${c.x.toFixed(1)},${c.y.toFixed(1)} ${t.x.toFixed(1)},${t.y.toFixed(1)}`;
       const on = sel?.type === 'edge' && sel.index === index;
-      const dim = sel && !on && !(sel.type === 'service' && (e.source === sel.index || e.target === sel.index));
+      const dim = (sel && !on && !(sel.type === 'service' && (e.source === sel.index || e.target === sel.index))) || (query && !matchesService(services[e.source]) && !matchesService(services[e.target]));
       const color = techColor(e.tech);
       lines += `<g class="sys-edge${on ? ' on' : ''}${dim ? ' dim' : ''}" data-sys="edge" data-i="${index}"><path d="${d}" class="hit"/><path d="${d}" stroke="${color}" marker-end="url(#sys-arrow-${e.tech.replace(/\W/g, '')})"${e.confidence.every(x => x === 'url' || x === 'config key' || x === 'shared name') ? ' stroke-dasharray="6 4"' : ''}/><title>${escapeHtml(`${services[e.source].name} → ${services[e.target].name} · ${techLabel(e.tech)}\n${e.channels.map(ch => ch.name).join('\n')}`)}</title></g>`;
       const m = { x: 0.25 * s.x + 0.5 * c.x + 0.25 * t.x, y: 0.25 * s.y + 0.5 * c.y + 0.25 * t.y };
@@ -90,7 +92,7 @@
     }
     const nodes = services.map((s, i) => {
       const p = P(i), on = sel?.type === 'service' && sel.index === i;
-      const dim = sel && !on && !(sel.type === 'edge' && [edges[sel.index].source, edges[sel.index].target].includes(i)) && !(sel.type === 'service' && edges.some(e => (e.source === sel.index && e.target === i) || (e.target === sel.index && e.source === i)));
+      const dim = (sel && !on && !(sel.type === 'edge' && [edges[sel.index].source, edges[sel.index].target].includes(i)) && !(sel.type === 'service' && edges.some(e => (e.source === sel.index && e.target === i) || (e.target === sel.index && e.source === i)))) || (query && !matchesService(s));
       return `<g class="sys-node${on ? ' on' : ''}${dim ? ' dim' : ''}${s.missing ? ' missing' : ''}" data-sys="node" data-i="${i}" transform="translate(${p.x.toFixed(1)},${p.y.toFixed(1)})"><circle r="${radius(i)}"/><text class="sys-node-icon" y="4">${escapeHtml(s.name.slice(0, 2).toUpperCase())}</text><text class="sys-node-name" y="${radius(i) + 16}">${escapeHtml(s.name)}</text><text class="sys-node-sub" y="${radius(i) + 29}">${escapeHtml(s.missing ? 'folder not found' : `${format(s.files)} files`)}</text><title>${escapeHtml(s.path)}</title></g>`;
     }).join('');
     const techs = [...new Set(edges.map(e => e.tech))];
@@ -209,7 +211,7 @@
 
   async function pickFolder() {
     const picked = await api('/api/pick', { start: sysState.editing.root || state.projectPath || '' });
-    if (picked.manual) { sysState.note = 'No folder dialog here: paste the path instead.'; renderSystem(); $('#sys-path')?.focus(); return ''; }
+    if (picked.manual) { sysState.note = 'A native folder picker is unavailable; paste the full folder path instead.'; renderSystem(); $('#sys-path')?.focus(); return ''; }
     return picked.path;
   }
 
@@ -290,6 +292,7 @@
     }
     const options = sysState.list.map(s => `<option value="${escapeHtml(s.id)}"${s.id === sysState.current?.id ? ' selected' : ''}>${escapeHtml(s.name)} (${s.services.length})</option>`).join('');
     toolbar.innerHTML = `${sysState.list.length ? `<label class="eyebrow" for="sys-select">SYSTEM</label><select id="sys-select" class="project-select">${options}</select>` : ''}
+      ${sysState.scan ? `<label class="eyebrow" for="sys-project-search">FIND PROJECT</label><input id="sys-project-search" class="sys-project-search" type="search" placeholder="Search service or project name…" value="${escapeHtml(sysState.projectQuery)}" autocomplete="off" aria-label="Search project or service names in this system">` : ''}
       <button type="button" class="dash-link primary" data-sys="new">New system</button>
       ${sysState.current && sysState.scan ? `<button type="button" class="dash-link primary" data-sys="system-graph"${sysState.building ? ' disabled' : ''} title="All services' code in one 2D/3D graph, with NATS / HTTP / gRPC … links between the code that sends and the code that receives">Open as graph</button>` : ''}
       ${sysState.current ? `<button type="button" class="dash-link" data-sys="edit">Edit services</button><button type="button" class="dash-link" data-sys="rescan"${sysState.loading ? ' disabled' : ''}>${sysState.loading ? 'Scanning…' : 'Rescan'}</button><button type="button" class="dash-link" data-sys="delete">Delete</button>` : ''}
@@ -350,6 +353,25 @@
     if (event.target.id === 'sys-select') selectSystem(event.target.value);
     else if (event.target.dataset.sys === 'toggle') onSystemAction(event.target);
   });
+  $('#system-page').addEventListener('input', event => {
+    if (event.target.id !== 'sys-project-search') return;
+    sysState.projectQuery = event.target.value;
+    if (sysState.scan) sysEl('map').innerHTML = mapSvg();
+  });
   $('#system-page').addEventListener('keydown', event => {
     if (event.key === 'Enter' && event.target.id === 'sys-path') onSystemAction({ dataset: { sys: 'add-path' } });
+    if (event.key === 'Enter' && event.target.id === 'sys-project-search' && sysState.scan) {
+      event.preventDefault();
+      const query = sysState.projectQuery.trim().toLocaleLowerCase();
+      if (!query) return;
+      const services = sysState.scan.services;
+      const index = services.findIndex(s => s.name.toLocaleLowerCase() === query || s.path.toLocaleLowerCase() === query);
+      const match = index >= 0 ? index : services.findIndex(s => `${s.name} ${s.path}`.toLocaleLowerCase().includes(query));
+      if (match >= 0) {
+        sysState.selected = { type: 'service', index: match };
+        renderSystem();
+        const input = sysEl('toolbar').querySelector('#sys-project-search');
+        input?.focus(); input?.setSelectionRange(input.value.length, input.value.length);
+      }
+    }
   });
