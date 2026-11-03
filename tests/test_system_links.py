@@ -28,6 +28,33 @@ def edges(result):
 
 
 class ScannerTests(unittest.TestCase):
+    def test_go_http_helper_follows_route_arguments(self):
+        source = '''package gateway
+const tokenPath = "api/v1/auth/token"
+func (c *Client) issue(ctx context.Context) { c.token(ctx, tokenPath) }
+func (c *Client) token(ctx context.Context, path string) { c.send(ctx, path) }
+func (c *Client) send(ctx context.Context, path string) { http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+path, nil) }
+'''
+        files = [('client.go', '.go', source)]
+        endpoints = system_links.extract(files, system_links.collect_consts(files))
+        outgoing = [e for e in endpoints if e['tech'] == 'http' and e['role'] == 'out']
+        self.assertEqual([(e['channel'], e['line']) for e in outgoing], [('api/v1/auth/token', 3)])
+
+    def test_env_endpoint_is_redacted_and_links_by_host(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            gateway, sport = root / 'gateway', root / 'sport-go'
+            gateway.mkdir(); sport.mkdir()
+            (gateway / '.env.local').write_text('SPORT_URL=http://sport-go:8080/private?token=secret\nAPI_KEY=secret-value\n')
+            result = system_links.scan_system([{'path': str(gateway)}, {'path': str(sport)}])
+            self.assertEqual(edges(result)[('gateway', 'sport-go', 'http')], ['SPORT_URL'])
+            self.assertNotIn('secret', json.dumps(result))
+            scan = system_links.scan_service(gateway)
+            self.assertNotIn('secret', repr(scan))
+
+    def test_ambiguous_service_name_does_not_pick_first(self):
+        self.assertIsNone(system_links.service_for_tokens(['sport'], [['sport'], ['sport']], -1))
+
     def test_go_method_routes_and_http_requests_link(self):
         server = [('controller.go', '.go', 'const TokenRoute = "api/v1/auth/token"\nfunc mount(r chi.Router) { r.Method(http.MethodPost, "/"+TokenRoute, handler) }')]
         client = [('client.go', '.go', 'func send(ctx context.Context) { http.NewRequestWithContext(ctx, http.MethodPost, "/api/v1/auth/token", nil) }')]

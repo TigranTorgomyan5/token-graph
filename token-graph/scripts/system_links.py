@@ -36,6 +36,7 @@ import time
 import uuid
 from collections import defaultdict
 from pathlib import Path
+from urllib.parse import urlsplit
 
 SKILL = Path(__file__).resolve().parents[1]
 HOME_DIR = Path(os.environ.get("TOKEN_GRAPH_HOME") or Path.home() / ".token-graph")
@@ -385,6 +386,8 @@ def code_only(text: str, ext: str) -> str:
 def collect_consts(files, consts: dict | None = None) -> dict[str, set]:
     consts = consts if consts is not None else defaultdict(set)
     for _rel, ext, text in files:
+        if Path(_rel).name.lower().startswith('.env'):
+            continue  # Never put environment values in the constants cache.
         text = code_only(text, ext)
         for rx in (ASSIGN, NAMEOF):
             for m in rx.finditer(text):
@@ -478,6 +481,24 @@ def extract(files, consts: dict) -> list[dict]:
     for rel, ext, text in files:
         text = code_only(text, ext)
         nl = [m.start() for m in re.finditer("\n", text)]
+        if Path(rel).name.lower().startswith('.env'):
+            # Read only endpoint URL settings; omit values from evidence and cache.
+            for m in re.finditer(r'(?m)^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([^\r\n]*)', text):
+                key, value = m.group(1), m.group(2).strip().strip('"\'')
+                if not re.search(r'(?i)(?:URL|URI|ENDPOINT|ADDRESS)$', key) or re.search(r'(?i)secret|password|token|api.?key|credential', key):
+                    continue
+                try:
+                    parsed = urlsplit(value)
+                    host = parsed.hostname
+                except ValueError:
+                    continue
+                if parsed.scheme not in ('http', 'https', 'grpc', 'grpcs', 'ws', 'wss') or not host or parsed.username or parsed.password:
+                    continue
+                tech = 'grpc' if parsed.scheme.startswith('grpc') else 'websocket' if parsed.scheme.startswith('ws') else 'http'
+                line = bisect.bisect_right(nl, m.start(1)) + 1
+                endpoints.append({'tech': tech, 'role': 'out', 'channel': key, 'resolved': True, 'kind': 'env_url',
+                                  'file': rel, 'line': line, 'text': key + '=[redacted]', 'host_tokens': core_tokens(host), 'key': key})
+            continue
         is_config = ext in CONFIG_EXT or CONFIG_NAME.match(rel.rsplit("/", 1)[-1]) is not None
         if not is_config:
             present = {name for name, rx in MARKERS.items() if rx.search(text)}
@@ -532,6 +553,7 @@ def extract(files, consts: dict) -> list[dict]:
                     got = resolve(m.group('arg'), consts)
                     if got and got[1] and got[0].startswith('/'):
                         add('http', 'out', got[0], True, rel, text, nl, m.start(), kind='path')
+                scan_go_http_helpers(text, rel, nl, add, consts)
         # URLs anywhere (code and config): the host may name another service.
         for m in URL.finditer(text):
             host = m.group("host").lower()
@@ -544,6 +566,47 @@ def extract(files, consts: dict) -> list[dict]:
             add(tech, "out", m.group(0), True, rel, text, nl, m.start(), kind="url", host=host,
                 path=m.group("path") or "", key=key.group("key") if key else "")
     return endpoints
+
+
+def scan_go_http_helpers(text: str, rel: str, nl: list[int], add, consts: dict) -> None:
+    """Follow same-receiver Go HTTP helpers when a path argument is passed through."""
+    decl = re.compile(r'(?m)^func\s+\(\s*(\w+)\s+\*?(\w+)\s*\)\s*(\w+)\s*\(([^)\n]*)')
+    found = list(decl.finditer(text))
+    methods = []
+    for m in found:
+        params = m.group(4).split(')', 1)[0].split(',')
+        names = [p.strip().split()[0] if p.strip() else '' for p in params]
+        next_decl = re.search(r'(?m)^func\s', text[m.end():])
+        end = m.end() + next_decl.start() if next_decl else len(text)
+        methods.append((m, names, text[m.end():end]))
+    sinks = {}
+    for m, names, body in methods:
+        rx = re.compile(r'http\.NewRequest(?:WithContext)?\s*\([^\n]*?\b' + re.escape(m.group(1)) + r'\.(?:baseURL|baseUrl|baseURI)\s*\+\s*(\w+)')
+        for call in rx.finditer(body):
+            if call.group(1) in names:
+                sinks[(m.group(2), m.group(3))] = names.index(call.group(1))
+    for _ in range(len(methods)):
+        changed = False
+        for m, names, body in methods:
+            for (receiver_type, name), index in list(sinks.items()):
+                if receiver_type != m.group(2):
+                    continue
+                rx = re.compile(r'\b' + re.escape(m.group(1)) + r'\.' + re.escape(name) + r'\s*\(([^()\n]*)')
+                for call in rx.finditer(body):
+                    args = [a.strip() for a in call.group(1).split(',')]
+                    if index >= len(args):
+                        continue
+                    argument = args[index]
+                    if argument in names and (m.group(2), m.group(3)) not in sinks:
+                        sinks[(m.group(2), m.group(3))] = names.index(argument)
+                        changed = True
+                    if argument in names:
+                        continue
+                    resolved = resolve(argument, consts)
+                    if resolved and resolved[1] and '/' in resolved[0] and not re.match(r'^[a-z]+://', resolved[0], re.I):
+                        add('http', 'out', resolved[0], True, rel, text, nl, m.end() + call.start(), kind='path')
+        if not changed:
+            break
 
 
 def scan_routes(text: str, rel: str, nl: list[int], add, consts: dict, ext: str) -> None:
@@ -593,11 +656,14 @@ def scan_routes(text: str, rel: str, nl: list[int], add, consts: dict, ext: str)
 
 # ---- linking services ------------------------------------------------------------------------
 def service_for_tokens(toks: list[str], cores: list[list[str]], exclude: int) -> int | None:
-    best, best_len = None, 0
+    best, best_len, ambiguous = None, 0, False
     for i, core in enumerate(cores):
-        if i != exclude and core and contains_seq(toks, core) and len(core) > best_len:
-            best, best_len = i, len(core)
-    return best
+        if i != exclude and core and contains_seq(toks, core):
+            if len(core) > best_len:
+                best, best_len, ambiguous = i, len(core), False
+            elif len(core) == best_len:
+                ambiguous = True
+    return None if ambiguous else best
 
 
 def link(services: list[dict]) -> list[dict]:
@@ -676,8 +742,8 @@ def link(services: list[dict]) -> list[dict]:
             kind = out_e["kind"]
             if kind == "path":
                 match_routes(a, route_segments(out_e["channel"]), out_e)
-            elif kind in ("url", "host"):
-                host_toks = core_tokens(out_e["host"])
+            elif kind in ("url", "host", "env_url"):
+                host_toks = out_e.get("host_tokens") if kind == "env_url" else core_tokens(out_e["host"])
                 b = service_for_tokens(host_toks, cores, a)
                 via = "url"
                 if b is None and out_e.get("key"):
@@ -686,9 +752,9 @@ def link(services: list[dict]) -> list[dict]:
                 segs = route_segments(out_e.get("path") or "")
                 if b is not None:
                     if not (segs and match_routes(a, segs, out_e, only=b, tech=out_e["tech"])):
-                        label = out_e["host"] + (out_e.get("path") or "")
+                        label = out_e["channel"] if kind == "env_url" else out_e["host"] + (out_e.get("path") or "")
                         connect(a, b, out_e["tech"], label, out_e, None, via)
-                elif segs and out_e["tech"] == "http" and (out_e["host"] in LOCAL_HOSTS or "." not in out_e["host"]
+                elif kind != "env_url" and segs and out_e["tech"] == "http" and (out_e["host"] in LOCAL_HOSTS or "." not in out_e["host"]
                                                           or re.fullmatch(r"[\d.]+", out_e["host"])):
                     match_routes(a, segs, out_e)
     result = []
