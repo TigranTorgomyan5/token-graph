@@ -27,11 +27,11 @@ Read the [user guide](token-graph/README.md), [installation details](token-graph
 
 ## Explore projects
 
-Open [index.html](index.html) locally in a browser. Choose your Projects folder to discover existing `graphify-out/graph.json` files and switch projects. The default 3D view supports drag-to-rotate, Shift-drag/right-drag to pan, scrolling to zoom, node selection and focus. A 2D toggle is also available. Existing Graphify graphs remain compatible.
+Open [index.html](index.html) locally in a browser for standalone graph browsing. Choose your Projects folder to discover existing `graphify-out/graph.json` files and switch projects. The default 3D view supports drag-to-rotate, Shift-drag/right-drag to pan, scrolling to zoom, node selection and focus. A 2D toggle is also available. Existing Graphify graphs remain compatible. Browsers do not let an HTML file start a local process, so local LLM chat needs the server-backed viewer; on macOS, double-click `Start-TokenGraph.command` to start it and open the right page automatically.
 
 The standalone viewer includes Question, Path and Impact controls that search and traverse the loaded graph in your browser. These results use simple name matching and graph relationships and can differ from the full engine. Select a Projects folder to preview source files when inspecting nodes. **Open in VS Code** prompts once for each project’s full folder path, then opens the selected source file at its graph line; the local server opens files directly.
 
-For building, updating, freshness checks and full engine queries from the viewer, start the optional loopback server:
+For local LLM chat, building, updating, freshness checks and full engine queries, start the loopback server. On macOS, double-click `token-graph/Start-TokenGraph.command` to start it and open the correct viewer automatically:
 
 ```sh
 python3 /path/to/token-graph/scripts/explorer_server.py --no-browser
@@ -41,7 +41,7 @@ Open the printed URL manually. It includes a private per-run access token. The s
 
 ## Local exploration agent
 
-The standalone command-line explorer and the viewer's **LLM** chat use a local Ollama model to query the project's graph and inspect bounded source excerpts. They select `qwen3:14b-q4_K_M` when installed, otherwise `qwen3:8b`, otherwise the first installed local model; choose another with `--model` or the viewer's model menu. Broad architecture questions receive focused entry-point and wiring excerpts. Endpoint inventory questions get an indexed route checklist and retry when literal paths are omitted; Go chi route registrations are supported. The deterministic **Evidence** search does not use Ollama. The agent only connects to Ollama at `127.0.0.1:11434` and cannot edit project files or run shell commands:
+The standalone command-line explorer and the viewer's **LLM** chat use a local Ollama model to query each project's graph and inspect bounded source excerpts, without assuming a language or framework. They select `qwen3:14b-q4_K_M` when installed, otherwise `qwen3:8b`, otherwise the first installed local model; choose another with `--model` or the viewer's model menu. Broad architecture questions receive graph-ranked entry and composition source. Factual answer lines must cite retrieved source ranges. Endpoint inventories use common route syntax hints and route-like project files; coverage depends on the routing style, and the agent should state gaps it cannot verify. The deterministic **Evidence** search does not use Ollama. The agent only connects to Ollama at `127.0.0.1:11434` and cannot edit project files or run shell commands:
 
 ```sh
 python3 token-graph/scripts/explore_agent.py /path/to/project 'Where is authentication enforced?'

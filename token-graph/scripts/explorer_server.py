@@ -481,6 +481,15 @@ def generate_docs(project: Path) -> dict:
     """The engine's wiki export: one Markdown article per community and key symbol."""
     if not graph_path(project).is_file():
         raise ValueError("This project has no graph yet; build it first.")
+    analysis = project / "graphify-out" / ".graphify_analysis.json"
+    try:
+        has_communities = bool(json.loads(analysis.read_text(encoding="utf-8")).get("communities"))
+    except (OSError, ValueError, AttributeError):
+        has_communities = False
+    if not has_communities:  # graphs built with --no-cluster have no community data; the wiki export refuses without it
+        subprocess.run([engine_python(), str(SCRIPTS / "token_graph.py"), "launch", str(project), "--action", "recluster"], cwd=project,
+                       capture_output=True, text=True, encoding="utf-8", errors="replace",
+                       creationflags=NO_WINDOW, timeout=600, check=False)
     result = subprocess.run([engine_python(), str(SCRIPTS / "token_graph.py"), "export", str(project), "wiki"], cwd=project,
                             capture_output=True, text=True, encoding="utf-8", errors="replace",
                             creationflags=NO_WINDOW, timeout=600, check=False)

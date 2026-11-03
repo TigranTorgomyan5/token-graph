@@ -39,7 +39,9 @@
     $('#agent-build').classList.toggle('hidden', mode !== 'agent');
     $('#agent-chat').classList.toggle('hidden', mode !== 'agent' && mode !== 'llm');
     $('#agent-clear').classList.toggle('hidden', mode !== 'agent' && mode !== 'llm');
-    if (mode === 'llm') $('#ask-hint').textContent = `Answered by a local model on this computer (${$('#llm-model').value || 'no model yet'}). It searches the graph, reads source and cites file:line; it can take a minute. Verify references before relying on them.`;
+    if (mode === 'llm') $('#ask-hint').textContent = !serverToken
+      ? 'This standalone file cannot detect Ollama models. Open Token Graph with Start-TokenGraph.command to load installed models.'
+      : `Answered by a local model on this computer (${$('#llm-model').value || 'no model yet'}). It searches the graph, reads source and cites file:line; it can take a minute. Verify references before relying on them.`;
     else if (mode === 'agent') $('#ask-hint').textContent = 'Deterministic graph evidence with source citations. No Ollama model is used for search.';
     else $('#ask-hint').textContent = answerHint();
     $('#ask-a').focus();

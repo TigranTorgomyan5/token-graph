@@ -418,7 +418,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
         </section>
 
         <section class="ask-page hidden" id="ask-page" aria-label="Ask AI">
-          <div class="dash-empty ask-page-note hidden" id="ask-page-note"><strong>Asking needs the local server</strong><p>Start Token Graph with the desktop shortcut (or <code>explorer_server.py</code>) and open the address it prints. Questions are answered on this computer.</p></div>
+          <div class="dash-empty ask-page-note hidden" id="ask-page-note"><strong>Local model chat needs Token Graph's server</strong><p>A browser cannot connect Ollama from a standalone <code>file://</code> page. Double-click <code>Start-TokenGraph.command</code> in the Token Graph folder, then use the page it opens. The model and project files stay on this computer.</p></div>
           <section class="ask-panel hidden" id="ask-panel" aria-label="Ask the graph">
             <div class="ask-engine" role="group" aria-label="Who answers"><button type="button" data-engine="ai" aria-pressed="true"><strong>✦ AI · graph search</strong><small>Fast and exact: graph engine and source evidence. No model needed.</small></button><button type="button" data-engine="llm" aria-pressed="false"><strong>◆ LLM · local model</strong><small>Explains in its own words: searches the graph, reads source, cites file:line.</small></button></div>
             <div class="ask-row">
@@ -1667,7 +1667,9 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     $('#agent-build').classList.toggle('hidden', mode !== 'agent');
     $('#agent-chat').classList.toggle('hidden', mode !== 'agent' && mode !== 'llm');
     $('#agent-clear').classList.toggle('hidden', mode !== 'agent' && mode !== 'llm');
-    if (mode === 'llm') $('#ask-hint').textContent = `Answered by a local model on this computer (${$('#llm-model').value || 'no model yet'}). It searches the graph, reads source and cites file:line; it can take a minute. Verify references before relying on them.`;
+    if (mode === 'llm') $('#ask-hint').textContent = !serverToken
+      ? 'This standalone file cannot detect Ollama models. Open Token Graph with Start-TokenGraph.command to load installed models.'
+      : `Answered by a local model on this computer (${$('#llm-model').value || 'no model yet'}). It searches the graph, reads source and cites file:line; it can take a minute. Verify references before relying on them.`;
     else if (mode === 'agent') $('#ask-hint').textContent = 'Deterministic graph evidence with source citations. No Ollama model is used for search.';
     else $('#ask-hint').textContent = answerHint();
     $('#ask-a').focus();
@@ -2245,7 +2247,8 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     if (!select || select.dataset.models === models.join('|')) return;
     let saved = ''; try { saved = localStorage.getItem('tokenGraph.llmModel') || ''; } catch (_) { /* per-viewer convenience only */ }
     const pick = models.includes(select.value) ? select.value : models.includes(saved) ? saved : models[0] || '';
-    select.replaceChildren(...(models.length ? models : ['']).map(name => new Option(name || 'No local model installed', name)));
+    const emptyLabel = serverToken ? 'No local model installed' : 'Open local server to see models';
+    select.replaceChildren(...(models.length ? models : ['']).map(name => new Option(name || emptyLabel, name)));
     select.value = pick; select.dataset.models = models.join('|');
   }
   function setAiBusy(on) { aiWork.asks = Math.max(0, aiWork.asks + (on ? 1 : -1)); updateAiChip(); }

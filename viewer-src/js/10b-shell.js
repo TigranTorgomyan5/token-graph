@@ -53,7 +53,8 @@
     if (!select || select.dataset.models === models.join('|')) return;
     let saved = ''; try { saved = localStorage.getItem('tokenGraph.llmModel') || ''; } catch (_) { /* per-viewer convenience only */ }
     const pick = models.includes(select.value) ? select.value : models.includes(saved) ? saved : models[0] || '';
-    select.replaceChildren(...(models.length ? models : ['']).map(name => new Option(name || 'No local model installed', name)));
+    const emptyLabel = serverToken ? 'No local model installed' : 'Open local server to see models';
+    select.replaceChildren(...(models.length ? models : ['']).map(name => new Option(name || emptyLabel, name)));
     select.value = pick; select.dataset.models = models.join('|');
   }
   function setAiBusy(on) { aiWork.asks = Math.max(0, aiWork.asks + (on ? 1 : -1)); updateAiChip(); }
