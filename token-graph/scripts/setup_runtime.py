@@ -10,8 +10,25 @@ import sys
 import venv
 
 ROOT = Path(__file__).resolve().parents[1]
-EXTRAS = {
+# Optional language grammars. Names match the extras the bundled engine names in its
+# "N file(s) contributed nothing ... a dependency is missing" warning, so that advice
+# maps 1:1 onto --extras. R and Erlang are deliberately absent: their only grammar
+# source, tree-sitter-language-pack, downloads grammars at parse time from native
+# code, which the offline policy cannot intercept.
+LANGUAGE_EXTRAS = {
     'sql': ['tree-sitter-sql'],
+    'terraform': ['tree-sitter-hcl>=1.2,<2'],
+    'vbnet': ['tree-sitter-vb-dotnet>=0.3,<0.4'],
+    'solidity': ['tree-sitter-solidity>=1.2,<2'],
+    'ocaml': ['tree-sitter-ocaml>=0.24,<0.27'],
+    'pascal': ['tree-sitter-pascal>=0.10,<0.12'],
+    'commonlisp': ['tree-sitter-commonlisp>=0.4,<0.5'],
+    'dm': ['tree-sitter-dm>=0.26,<0.27'],
+    'robot': ['robotframework>=7,<8'],
+}
+EXTRAS = {
+    **LANGUAGE_EXTRAS,
+    'languages': sorted({package for packages in LANGUAGE_EXTRAS.values() for package in packages}),
     'pdf': ['pypdf>=6.16.1', 'markdownify'],
     'office': ['python-docx', 'openpyxl'],
     'plot': ['matplotlib', 'pillow>=12.3.0'],

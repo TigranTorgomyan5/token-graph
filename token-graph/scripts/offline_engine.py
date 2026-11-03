@@ -21,10 +21,13 @@ class UserOutput:
         self.stream = stream
 
     def write(self, text):
-        extra_map = {'svg': 'plot', 'office': 'office', 'pdf': 'pdf', 'sql': 'sql', 'video': 'media', 'ollama': 'ollama'}
+        extra_map = {'svg': 'plot', 'office': 'office', 'pdf': 'pdf', 'video': 'media', 'ollama': 'ollama'}
+        # Language grammar extras share the engine's names (setup_runtime.LANGUAGE_EXTRAS).
+        extra_map.update({name: name for name in ('sql', 'terraform', 'vbnet', 'solidity', 'ocaml', 'pascal', 'commonlisp', 'dm', 'robot')})
         def suggestion(match):
             extra = extra_map.get(match.group(1), '')
-            command = f'python3 "{PACKAGE / "scripts" / "setup_runtime.py"}" --download-deps'
+            python = 'python' if os.name == 'nt' else 'python3'
+            command = f'{python} "{PACKAGE / "scripts" / "setup_runtime.py"}" --download-deps'
             return command + (f' --extras {extra}' if extra else '')
         text = re.sub(r"pip install [\"']?graphifyy\[([a-z]+)\][\"']?", suggestion, text)
         return self.stream.write(text)
@@ -37,6 +40,13 @@ class UserOutput:
 
 
 def main() -> None:
+    # A legacy console/pipe code page (e.g. cp1251) must not crash a build over one
+    # unencodable character in progress output; callers set PYTHONIOENCODING=utf-8.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors='replace')
+        except (AttributeError, ValueError):
+            pass
     args = sys.argv[1:]
     allowed = {'extract', 'update', 'cluster-only', 'query', 'path', 'explain', 'affected', 'god-nodes', 'export', 'merge-graphs', 'diagnose', 'reflect', 'watch', 'tree', 'benchmark-json', 'benchmark', 'save-result', 'cache-check', 'merge-chunks', 'merge-semantic', 'label'}
     if not args or args[0] not in allowed:

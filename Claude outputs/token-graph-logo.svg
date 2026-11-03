@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#18213f"/>
+      <stop offset="1" stop-color="#0b1020"/>
+    </linearGradient>
+    <linearGradient id="edge" gradientUnits="userSpaceOnUse" x1="117" y1="96" x2="395" y2="416">
+      <stop offset="0" stop-color="#8877ff"/>
+      <stop offset="1" stop-color="#52c9e8"/>
+    </linearGradient>
+    <radialGradient id="core" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#b9ffe0"/>
+      <stop offset="1" stop-color="#55d6a2"/>
+    </radialGradient>
+    <filter id="glow" filterUnits="userSpaceOnUse" x="0" y="0" width="512" height="512">
+      <feGaussianBlur stdDeviation="14" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="soft" filterUnits="userSpaceOnUse" x="0" y="0" width="512" height="512">
+      <feGaussianBlur stdDeviation="6" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#bg)"/>
+  <rect x="17.5" y="17.5" width="477" height="477" rx="110.5" fill="none" stroke="#8877ff" stroke-opacity="0.35" stroke-width="3"/>
+
+  <!-- token: hexagon outline -->
+  <polygon points="256,96 394.6,176 394.6,336 256,416 117.4,336 117.4,176"
+           fill="#8877ff" fill-opacity="0.06" stroke="url(#edge)" stroke-width="10" stroke-linejoin="round" stroke-opacity="0.55"/>
+
+  <!-- secondary edges -->
+  <g stroke="url(#edge)" stroke-width="7" stroke-linecap="round" opacity="0.45">
+    <line x1="256" y1="268" x2="117.4" y2="336"/>
+    <line x1="256" y1="268" x2="394.6" y2="336"/>
+    <line x1="256" y1="176" x2="256" y2="96"/>
+  </g>
+
+  <!-- primary edges: the T -->
+  <g stroke="url(#edge)" stroke-width="18" stroke-linecap="round" filter="url(#soft)">
+    <line x1="117.4" y1="176" x2="394.6" y2="176"/>
+    <line x1="256" y1="176" x2="256" y2="416"/>
+  </g>
+
+  <!-- nodes -->
+  <g fill="#0b1020" stroke-width="8">
+    <circle cx="256" cy="96" r="15" stroke="#8877ff"/>
+    <circle cx="117.4" cy="336" r="15" stroke="#7a8dfa"/>
+    <circle cx="394.6" cy="336" r="15" stroke="#52c9e8"/>
+  </g>
+  <g>
+    <circle cx="117.4" cy="176" r="24" fill="#8877ff"/>
+    <circle cx="394.6" cy="176" r="24" fill="#6fa6f2"/>
+    <circle cx="256" cy="176" r="22" fill="#7d8ffb"/>
+    <circle cx="256" cy="416" r="24" fill="#52c9e8"/>
+  </g>
+  <circle cx="256" cy="268" r="30" fill="url(#core)" filter="url(#glow)"/>
+</svg>

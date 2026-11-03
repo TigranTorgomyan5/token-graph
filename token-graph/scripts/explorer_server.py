@@ -6,6 +6,7 @@ X-Token-Graph header, so another web page in the same browser cannot trigger a
 build or read files. Running it again reuses the server that is already up.
 """
 from __future__ import annotations
+import hashlib
 import json
 import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -24,10 +25,26 @@ SKILL = Path(__file__).resolve().parents[1]
 SCRIPTS = SKILL / "scripts"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
-from local_inference import local_models, DEFAULT_MODEL
+# Child scripts print UTF-8 so their output decodes correctly here on any console code page.
+os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+from local_inference import local_models
 import explore_agent
+import system_links
+from token_graph import runtime_problems
 PAGE = SKILL / "assets" / "project-explorer.html"
 STATE = SKILL / ".explorer-server.json"      # port + token of the running server
+
+
+def code_version() -> str:
+    """Changes whenever a script of this skill changes, so the launcher can replace an outdated server."""
+    digest = hashlib.sha256()
+    for path in sorted(SCRIPTS.glob("*.py")):
+        stat = path.stat()
+        digest.update(f"{path.name}:{stat.st_size}:{stat.st_mtime_ns}".encode())
+    return digest.hexdigest()[:12]
+
+
+CODE_VERSION = code_version()
 PROJECTS = SKILL / ".explorer-projects.json"  # projects built or opened here, newest first
 RUNTIME = SKILL / ".runtime" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -137,18 +154,42 @@ def ollama_models() -> list[str]:
     return sorted(models)
 
 
+def llm_answer(body: dict, project: Path) -> dict:
+    """Answer with an installed local Ollama model (explore_agent.explore).
+
+    The model searches the graph and reads bounded source excerpts through read-only tools,
+    and cites file:line. It cannot edit files or run commands; Ollama is reached on 127.0.0.1 only.
+    """
+    question = str(body.get("question") or "").strip()
+    model = str(body.get("model") or "")
+    if not question or len(question) > 4000:
+        raise ValueError("Enter a question of up to 4,000 characters.")
+    if not graph_path(project).is_file():
+        raise ValueError("This project has no graph yet; build it first.")
+    if model not in ollama_models():
+        raise ValueError("Select an installed local Ollama model first.")
+    history = body.get("history", [])
+    if not isinstance(history, list) or len(history) > 12 or any(
+        not isinstance(item, dict) or item.get("role") not in ("user", "assistant")
+        or not isinstance(item.get("content"), str) or len(item["content"]) > 8000 for item in history
+    ):
+        raise ValueError("Invalid conversation history.")
+    started = time.time()
+    try:
+        text = explore_agent.explore(project, question, model, [{"role": i["role"], "content": i["content"]} for i in history])
+    except (OSError, ValueError, KeyError, subprocess.TimeoutExpired) as error:
+        raise ValueError(f"The local model could not answer: {error}") from error
+    return {"text": text, "model": model, "seconds": round(time.time() - started, 1)}
+
+
 def agent_answer(body: dict, project: Path) -> dict:
-    """Ask the selected local model to explore the project using verified graph/source evidence."""
+    """Return deterministic evidence for the viewer; this path never calls Ollama."""
     question = str(body.get("question") or "").strip()
     if not question or len(question) > 4000:
         raise ValueError("Enter a question of up to 4,000 characters.")
     if not graph_path(project).is_file():
         raise ValueError("This project has no graph yet; build it first.")
-    model = str(body.get("model") or DEFAULT_MODEL)
-    if ':cloud' in model.lower() or '://' in model:
-        raise ValueError("Only an installed local Ollama model can be used.")
-    if model not in local_models():
-        raise ValueError(f"Local model {model!r} is not installed. Refresh Ollama models and try again.")
+    operation = str(body.get("operation") or "query")
     history = body.get("history", [])
     if not isinstance(history, list) or len(history) > 12 or any(
         not isinstance(item, dict) or item.get("role") not in ("user", "assistant")
@@ -156,10 +197,32 @@ def agent_answer(body: dict, project: Path) -> dict:
     ):
         raise ValueError("Invalid conversation history.")
     try:
-        answer = explore_agent.explore(project, question, model, history=history)
-    except (OSError, ValueError, KeyError, subprocess.TimeoutExpired, TimeoutError) as error:
+        limit = min(100, max(1, int(body.get("limit") or 10)))
+        evidence = explore_agent.search_evidence(
+            project,
+            question,
+            operation=operation,
+            target=str(body.get("target") or "") or None,
+            line=int(body["line"]) if body.get("line") is not None else None,
+            limit=limit,
+            include_tests=not bool(body.get("hideTests")),
+            include_evaluation=bool(body.get("includeEvaluation")),
+            include_generated=not bool(body.get("hideGenerated")),
+        )
+    except (OSError, ValueError, KeyError, subprocess.TimeoutExpired) as error:
         raise ValueError(f"Evidence search failed: {error}") from error
-    return {"text": answer, "model": model, "local": True}
+    return {"text": json.dumps(evidence, ensure_ascii=False, indent=2), "evidence": evidence}
+
+
+SYSTEM_SCANS: dict[str, tuple] = {}  # system id -> (saved timestamp, scan result); rescan on demand
+
+
+def system_scan(system: dict, refresh: bool) -> dict:
+    cached = SYSTEM_SCANS.get(system["id"])
+    if refresh or not cached or cached[0] != system.get("updated"):
+        cached = (system.get("updated"), system_links.scan_system(system["services"], system))
+        SYSTEM_SCANS[system["id"]] = cached
+    return cached[1]
 
 
 def engine_python() -> str:
@@ -263,6 +326,181 @@ def graph_diff(project: Path) -> dict:
             "links_added_sample": sample(links_added), "links_removed_sample": sample(links_removed), "touched": touched[:600]}
 
 
+# ---- dashboard: activity log, project summary, local AI status, documentation ----
+# Activity lives with the project (graphify-out/, which Token Graph git-ignores), the same
+# place as its other query artifacts. Only events from this Explorer are recorded.
+ACTIVITY_FILE = "token-graph-activity.jsonl"
+LAST_BUILD_FILE = "token-graph-last-build.json"
+MAX_ACTIVITY = 200
+_activity_lock = threading.Lock()
+_dashboard_cache: dict[str, tuple[float, dict]] = {}
+_runtime_cache: dict[str, tuple[float, list[str]]] = {}
+LOCAL_OLLAMA = "http://127.0.0.1:11434"
+
+
+def record_activity(project: Path, kind: str, title: str, *, detail: str = "", ok: bool = True) -> None:
+    """Append one event to the project's activity log; never fails the request that caused it."""
+    entry = {"time": time.time(), "kind": kind, "title": title[:240], "detail": detail[:400], "ok": ok}
+    path = project / "graphify-out" / ACTIVITY_FILE
+    with _activity_lock:
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            lines = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
+            lines = [*lines[-(MAX_ACTIVITY - 1):], json.dumps(entry, ensure_ascii=False)]
+            path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        except OSError:
+            pass
+
+
+def read_activity(project: Path, limit: int = 30) -> list[dict]:
+    path = project / "graphify-out" / ACTIVITY_FILE
+    items = []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
+    except OSError:
+        return []
+    for line in reversed(lines):
+        try:
+            item = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(item, dict) and isinstance(item.get("time"), (int, float)):
+            items.append({k: item.get(k) for k in ("time", "kind", "title", "detail", "ok")})
+        if len(items) >= limit:
+            break
+    return items
+
+
+def clear_activity(project: Path) -> None:
+    with _activity_lock:
+        (project / "graphify-out" / ACTIVITY_FILE).unlink(missing_ok=True)
+
+
+def cached_runtime_problems(*, ollama: bool = False) -> list[str]:
+    """runtime_problems() starts a process; the dashboard polls, so reuse a recent answer."""
+    key = "ai" if ollama else "core"
+    cached = _runtime_cache.get(key)
+    if cached and time.time() - cached[0] < 30:
+        return cached[1]
+    problems = runtime_problems(ollama=ollama)
+    _runtime_cache[key] = (time.time(), problems)
+    return problems
+
+
+def project_summary(project: Path) -> dict:
+    """Graph, language, architecture, quality and index figures (scripts/dashboard_engine.py),
+    recomputed only when graph.json changes."""
+    graph = graph_path(project)
+    if not graph.is_file():
+        raise ValueError("This project has no graph yet; build it first.")
+    mtime = graph.stat().st_mtime
+    key = os.path.normcase(str(project))
+    cached = _dashboard_cache.get(key)
+    if cached and cached[0] == mtime:
+        return cached[1]
+    try:
+        result = subprocess.run([engine_python(), str(SCRIPTS / "dashboard_engine.py"), str(project)], cwd=project,
+                                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                                creationflags=NO_WINDOW, timeout=300, check=False)
+    except subprocess.TimeoutExpired:
+        raise ValueError("Analysing this graph took longer than 5 minutes.") from None
+    if result.returncode:
+        raise ValueError((result.stderr.strip().splitlines() or ["The dashboard analysis failed."])[-1])
+    summary = json.loads(result.stdout)
+    first = cached is None or cached[0] != mtime
+    _dashboard_cache[key] = (mtime, summary)
+    if first:
+        quality = summary.get("quality", {})
+        cycles = quality.get("cycles", {})
+        parts = [f"{len(quality.get('hotspots', []))} coupling hotspots"]
+        parts.append(f"{cycles.get('count', 0)} import cycles" if cycles.get("supported") else "import cycles not applicable")
+        parts.append(f"{quality.get('unconnected_symbols', 0)} unconnected symbols")
+        last = read_activity(project, 1)
+        if not (last and last[0].get("kind") == "analysis" and last[0].get("detail", "").endswith(f"@{mtime:.0f}")):
+            record_activity(project, "analysis", "Code analysis: " + ", ".join(parts), detail=f"graph@{mtime:.0f}")
+    return summary
+
+
+def last_build(project: Path) -> dict | None:
+    path = project / "graphify-out" / LAST_BUILD_FILE
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else None
+    except (OSError, ValueError):
+        return None
+
+
+def dashboard(project: Path) -> dict:
+    job = JOBS.status()
+    if job and os.path.normcase(job.get("project", "")) != os.path.normcase(str(project)):
+        job = None
+    return {"summary": project_summary(project), "stale": staleness(project), "job": job,
+            "last_build": last_build(project), "activity": read_activity(project),
+            "problems": cached_runtime_problems()}
+
+
+def _ollama_get(path: str, payload: dict | None = None, timeout: float = 3):
+    data = json.dumps(payload).encode() if payload is not None else None
+    req = urllib.request.Request(LOCAL_OLLAMA + path, data=data, headers={"Content-Type": "application/json"} if data else {})
+    with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(req, timeout=timeout) as response:
+        return json.load(response)
+
+
+def ai_status() -> dict:
+    """What the local model provider reports right now: reachability, models, what is loaded."""
+    status = {"provider": "Ollama", "endpoint": LOCAL_OLLAMA, "reachable": False, "version": None,
+              "chat_models": [], "embedding_models": [], "loaded": [], "error": "",
+              "problems": cached_runtime_problems(ollama=True),
+              "vector_index": {"available": False,
+                               "reason": "Token Graph has no vector index yet; questions use graph traversal and keyword search."}}
+    try:
+        status["version"] = _ollama_get("/api/version").get("version")
+        models = ollama_models()
+        status["reachable"] = True
+    except (OSError, ValueError) as error:
+        status["error"] = str(error) or "Ollama is not responding."
+        return status
+    for name in models[:30]:
+        try:
+            capabilities = _ollama_get("/api/show", {"model": name}).get("capabilities") or []
+        except (OSError, ValueError):
+            capabilities = []
+        is_embedding = "embedding" in capabilities or ("completion" not in capabilities and "embed" in name.lower())
+        status["embedding_models" if is_embedding else "chat_models"].append(name)
+    try:
+        for item in _ollama_get("/api/ps").get("models", []):
+            size, vram = int(item.get("size") or 0), int(item.get("size_vram") or 0)
+            processor = "GPU" if size and vram >= size else "CPU" if not vram else f"{round(100 * vram / size)}% GPU"
+            status["loaded"].append({"name": item.get("name"), "processor": processor, "expires": item.get("expires_at")})
+    except (OSError, ValueError):
+        pass
+    return status
+
+
+def generate_docs(project: Path) -> dict:
+    """The engine's wiki export: one Markdown article per community and key symbol."""
+    if not graph_path(project).is_file():
+        raise ValueError("This project has no graph yet; build it first.")
+    result = subprocess.run([engine_python(), str(SCRIPTS / "token_graph.py"), "export", str(project), "wiki"], cwd=project,
+                            capture_output=True, text=True, encoding="utf-8", errors="replace",
+                            creationflags=NO_WINDOW, timeout=600, check=False)
+    index = project / "graphify-out" / "wiki" / "index.md"
+    if result.returncode or not index.is_file():
+        raise ValueError((result.stdout + result.stderr).strip().splitlines()[-1] if (result.stdout + result.stderr).strip() else "Documentation export failed.")
+    articles = sum(1 for _ in index.parent.glob("*.md")) - 1
+    return {"file": index.relative_to(project).as_posix(), "articles": max(articles, 0)}
+
+
+def build_warnings(text: str) -> list[str]:
+    """Engine warnings worth surfacing (missing grammars, files without symbols, failed chunks)."""
+    seen: list[str] = []
+    for line in text.splitlines():
+        clean = line.strip()
+        if "warning" in clean.lower() and clean not in seen:
+            seen.append(clean[:400])
+    return seen[:20]
+
+
 class Jobs:
     """One build at a time; the page polls its status."""
 
@@ -271,6 +509,10 @@ class Jobs:
         self.current: dict | None = None
 
     def start(self, project: Path, model: str | None = None) -> dict:
+        # Refuse up front, with the command that fixes it, instead of failing mid-build.
+        problems = runtime_problems(ollama=bool(model))
+        if problems:
+            raise ValueError("\n".join(problems))
         with self.lock:
             if self.current and self.current["state"] == "running":
                 raise RuntimeError(f"A graph is already being built for {self.current['project']}.")
@@ -291,6 +533,9 @@ class Jobs:
 
     def _run(self, job: dict, project: Path) -> None:
         saved_graph = False
+        result = None
+        log = project / "graphify-out" / "token-graph.log"
+        log_start = log.stat().st_size if log.is_file() else 0  # first builds write engine output here
         try:
             # Keep the previous graph so the page can show what changed (/api/diff).
             if graph_path(project).is_file():
@@ -324,6 +569,45 @@ class Jobs:
             job["message"] = str(error)
         finally:
             job["finished"] = time.time()
+            self._report(job, project, result, log, log_start)
+
+    @staticmethod
+    def _report(job: dict, project: Path, result, log: Path, log_start: int) -> None:
+        """Keep this build's outcome and engine warnings for the dashboard."""
+        output = (result.stdout + "\n" + result.stderr) if result is not None else ""
+        try:
+            if log.is_file() and log.stat().st_size > log_start:
+                with log.open("rb") as stream:
+                    stream.seek(log_start)
+                    output += "\n" + stream.read(2_000_000).decode("utf-8", errors="replace")
+        except OSError:
+            pass
+        ok = job.get("state") == "done"
+        nodes = edges = None
+        if ok:
+            try:
+                data = json.loads(graph_path(project).read_text(encoding="utf-8"))
+                nodes, edges = len(data.get("nodes", [])), len(data.get("links", data.get("edges", [])))
+            except (OSError, ValueError, AttributeError):
+                pass
+        summary = {"mode": job.get("mode"), "model": job.get("model"), "ok": ok, "started": job.get("started"),
+                   "finished": job.get("finished"), "nodes": nodes, "edges": edges,
+                   "warnings": build_warnings(output), "message": "" if ok else job.get("message", "")[:2000]}
+        try:
+            (project / "graphify-out").mkdir(parents=True, exist_ok=True)
+            (project / "graphify-out" / LAST_BUILD_FILE).write_text(json.dumps(summary, indent=1, ensure_ascii=False), encoding="utf-8")
+        except OSError:
+            pass
+        label = {"ai": "AI graph generation", "update": "Graph update", "build": "Graph build"}.get(job.get("mode"), "Graph build")
+        seconds = round((job.get("finished") or time.time()) - (job.get("started") or time.time()))
+        if ok:
+            detail = f"{nodes:,} nodes, {edges:,} connections · {seconds}s" if nodes is not None else f"{seconds}s"
+            if summary["warnings"]:
+                detail += f" · {len(summary['warnings'])} warning(s)"
+            record_activity(project, job.get("mode") or "build", f"{label} finished", detail=detail)
+        else:
+            record_activity(project, job.get("mode") or "build", f"{label} failed",
+                            detail=(job.get("message") or "").splitlines()[-1][:300] if job.get("message") else "", ok=False)
 
 
 JOBS = Jobs()
@@ -388,7 +672,7 @@ class Handler(BaseHTTPRequestHandler):
         query = {k: v[0] for k, v in parse_qs(url.query).items()}
         try:
             if url.path == "/api/ping":
-                return self._json(200, {"ok": True})
+                return self._json(200, {"ok": True, "code": CODE_VERSION})
             if url.path == "/api/projects":
                 items = [{"path": p, "name": Path(p).name, "has_graph": graph_path(Path(p)).is_file()} for p in load_projects()]
                 return self._json(200, {"projects": items})
@@ -402,6 +686,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(200, {"vscode": has_vscode(), "rider": find_rider() is not None})
             if url.path == "/api/agent/status":
                 return self._json(200, {"models": ollama_models()})
+            if url.path == "/api/dashboard":
+                return self._json(200, dashboard(self._known_project(query.get("project"))))
+            if url.path == "/api/ai/status":
+                return self._json(200, ai_status())
             if url.path == "/api/graph":
                 project = self._project(query.get("project"))
                 graph = graph_path(project)
@@ -421,6 +709,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(200, data)
             if url.path == "/api/source":
                 return self._source(query)
+            if url.path == "/api/systems":
+                return self._json(200, {"systems": system_links.load_systems()})
         except (ValueError, OSError) as error:
             return self._json(400, {"error": str(error)})
         return self._json(404, {"error": "Unknown endpoint"})
@@ -445,9 +735,69 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("Select an installed local Ollama model first.")
                 return self._json(200, {"job": JOBS.start(project, model)})
             if url.path == "/api/ask":
-                return self._json(200, ask(body, self._known_project(body.get("project"))))
+                project = self._known_project(body.get("project"))
+                label = {"query": "Question", "path": "Path", "affected": "Impact"}.get(body.get("mode"), "Question")
+                text = " → ".join(t for t in (str(body.get("a") or "").strip(), str(body.get("b") or "").strip()) if t) if body.get("mode") == "path" else str(body.get("a") or "").strip()
+                try:
+                    answer = ask(body, project)
+                except ValueError as error:
+                    record_activity(project, "question", f"{label}: {text}", detail=str(error), ok=False)
+                    raise
+                record_activity(project, "question", f"{label}: {text}", detail=f"{len(answer.get('nodes') or {})} matching nodes")
+                return self._json(200, answer)
             if url.path == "/api/agent":
-                return self._json(200, agent_answer(body, self._known_project(body.get("project"))))
+                project = self._known_project(body.get("project"))
+                question, model = str(body.get("question") or "").strip(), str(body.get("model") or "")
+                try:
+                    answer = agent_answer(body, project)
+                except ValueError as error:
+                    record_activity(project, "ai_question", question, detail=str(error), ok=False)
+                    raise
+                record_activity(project, "ai_question", question, detail=f"Answered locally by {model}")
+                return self._json(200, answer)
+            if url.path == "/api/llm":
+                project = self._known_project(body.get("project"))
+                question, model = str(body.get("question") or "").strip(), str(body.get("model") or "")
+                try:
+                    answer = llm_answer(body, project)
+                except ValueError as error:
+                    record_activity(project, "ai_question", question, detail=str(error), ok=False)
+                    raise
+                record_activity(project, "ai_question", question, detail=f"Answered locally by {model} in {answer['seconds']}s")
+                return self._json(200, answer)
+            if url.path == "/api/docs":
+                project = self._known_project(body.get("project"))
+                try:
+                    docs = generate_docs(project)
+                except ValueError as error:
+                    record_activity(project, "docs", "Documentation export failed", detail=str(error), ok=False)
+                    raise
+                record_activity(project, "docs", "Documentation generated", detail=f"{docs['articles']} articles · {docs['file']}")
+                return self._json(200, docs)
+            if url.path == "/api/systems/save":
+                system = system_links.save_system(body)
+                known = {os.path.normcase(p) for p in load_projects()}
+                new = [s["path"] for s in system["services"] if os.path.normcase(s["path"]) not in known]
+                if new:  # known projects (source preview, editors); keeps the user's most recent project first
+                    items = load_projects()[:max(0, MAX_PROJECTS - len(new))] + new[:MAX_PROJECTS]
+                    PROJECTS.write_text(json.dumps(items, indent=1), encoding="utf-8")
+                SYSTEM_SCANS.pop(system["id"], None)
+                return self._json(200, {"system": system})
+            if url.path == "/api/systems/delete":
+                system_links.delete_system(str(body.get("id") or ""))
+                SYSTEM_SCANS.pop(str(body.get("id") or ""), None)
+                return self._json(200, {"ok": True})
+            if url.path == "/api/systems/discover":
+                return self._json(200, {"services": system_links.discover_services(self._project(body.get("path")))})
+            if url.path == "/api/systems/scan":
+                system = system_links.get_system(str(body.get("id") or ""))
+                return self._json(200, {"system": system, **system_scan(system, bool(body.get("refresh")))})
+            if url.path == "/api/systems/graph":
+                system = system_links.get_system(str(body.get("id") or ""))
+                return self._json(200, system_links.system_graph(system["name"], system_scan(system, False)))
+            if url.path == "/api/activity/clear":
+                clear_activity(self._known_project(body.get("project")))
+                return self._json(200, {"ok": True})
             if url.path == "/api/open":
                 editor = body.get("editor")
                 if editor not in ("vscode", "rider"):
@@ -508,15 +858,33 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def existing_server() -> str | None:
-    """URL of a server already running for this skill, if it still answers."""
+    """URL of a server already running this same code.
+
+    A server started from older scripts (no or a different code version) is asked to stop and
+    None is returned so a fresh one starts. While it is building a graph it refuses, and is reused.
+    """
     try:
         state = json.loads(STATE.read_text(encoding="utf-8"))
-        request = urllib.request.Request(f"http://127.0.0.1:{state['port']}/api/ping", headers={"X-Token-Graph": state["token"]})
-        with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(request, timeout=2) as response:
-            if response.status == 200:
-                return f"http://127.0.0.1:{state['port']}/?token={state['token']}"
+        base, headers = f"http://127.0.0.1:{state['port']}", {"X-Token-Graph": state["token"]}
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(urllib.request.Request(base + "/api/ping", headers=headers), timeout=2) as response:
+            ping = json.loads(response.read() or b"{}")
     except Exception:
         return None
+    url = f"{base}/?token={state['token']}"
+    if ping.get("code") == CODE_VERSION:
+        return url
+    try:
+        stop = urllib.request.Request(base + "/api/shutdown", data=b"{}", method="POST",
+                                      headers={**headers, "Content-Type": "application/json"})
+        with opener.open(stop, timeout=5):
+            pass
+    except Exception:
+        return url
+    for _ in range(50):  # the old process removes its state file as it exits
+        if not STATE.exists():
+            break
+        time.sleep(0.1)
     return None
 
 
@@ -540,7 +908,11 @@ def main() -> int:
     try:
         server.serve_forever()
     finally:
-        STATE.unlink(missing_ok=True)
+        try:  # only remove the state file if a newer server has not replaced it
+            if json.loads(STATE.read_text(encoding="utf-8")).get("token") == Handler.token:
+                STATE.unlink()
+        except (OSError, ValueError):
+            pass
     return 0
 
 

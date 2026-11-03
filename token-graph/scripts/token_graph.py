@@ -63,7 +63,87 @@ def clean_env(*, ollama: bool = False, vision: bool = False) -> dict[str, str]:
     env["PYTHONHASHSEED"] = "0"
     env["HF_HUB_OFFLINE"] = "1"
     env["TRANSFORMERS_OFFLINE"] = "1"
+    # Children write UTF-8 to pipes and log files regardless of the console code page
+    # (cp1251 etc. on Windows); every caller decodes their output as UTF-8.
+    env["PYTHONIOENCODING"] = "utf-8"
     return env
+
+
+CORE_MODULES = ("networkx", "numpy", "rapidfuzz", "tree_sitter")
+NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+
+def setup_command(*extras: str) -> str:
+    python = "python" if os.name == "nt" else "python3"
+    command = f'{python} "{Path(__file__).with_name("setup_runtime.py")}" --download-deps'
+    return command + (f" --extras {' '.join(extras)}" if extras else "")
+
+
+def runtime_problems(*, ollama: bool = False) -> list[str]:
+    """Reasons a build cannot start, each naming the command that fixes it.
+
+    Probes the interpreter the engine will actually use, so a build fails at once with
+    actionable advice instead of "see graphify-out/token-graph.log".
+    """
+    modules = CORE_MODULES + (("openai",) if ollama else ())
+    probe = "import importlib.util, sys; print(','.join(m for m in sys.argv[1:] if importlib.util.find_spec(m) is None))"
+    try:
+        # Same interpreter and environment as the engine itself, without -I: under the
+        # offline policy (watcher, nested updates) isolated-mode children are refused.
+        result = subprocess.run([engine_python(), "-c", probe, *modules], env=clean_env(), capture_output=True, text=True,
+                                encoding="utf-8", errors="replace", timeout=60, check=False, creationflags=NO_WINDOW)
+    except (OSError, subprocess.SubprocessError) as error:
+        return [f"Cannot start the Token Graph Python runtime ({error}). Run once: {setup_command()}"]
+    if result.returncode:
+        return [f"The Token Graph Python runtime is not working. Run once: {setup_command()}"]
+    missing = [name for name in result.stdout.strip().split(",") if name]
+    problems = []
+    core = [name for name in missing if name in CORE_MODULES]
+    if core:
+        problems.append(f"Parser libraries are not installed ({', '.join(core)}). Run once: {setup_command()}")
+    if ollama and "openai" in missing:
+        problems.append(f"AI graph generation needs the 'openai' package. Run once: {setup_command('ollama')}")
+    return problems
+
+
+def require_runtime(*, ollama: bool = False) -> None:
+    problems = runtime_problems(ollama=ollama)
+    if problems:
+        raise RuntimeError("\n".join(problems))
+
+
+def process_alive(pid: int) -> bool:
+    """True while pid runs. On Windows os.kill(pid, 0) would terminate the process instead."""
+    if os.name == "nt":
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            return False
+        try:
+            code = ctypes.c_ulong()
+            return bool(kernel32.GetExitCodeProcess(handle, ctypes.byref(code))) and code.value == 259  # STILL_ACTIVE
+        finally:
+            kernel32.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def stop_process_tree(pid: int) -> None:
+    """Stop pid and its children. A Windows venv python.exe is a launcher whose real
+    interpreter is a child process, so stopping only the recorded pid leaves it running."""
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, check=False, creationflags=NO_WINDOW)
+        return
+    try:
+        os.kill(pid, 15)
+    except ProcessLookupError:
+        pass
 
 
 def project_path(raw: str) -> Path:
@@ -153,8 +233,8 @@ def graph_file(root: Path) -> Path:
 def write_embedded_viewer(root: Path) -> Path:
     """Create an interactive file:// viewer with graph data embedded and no CDN requests."""
     benchmark = subprocess.run(
-        [sys.executable, str(Path(__file__).with_name("token_savings.py")), str(root), "--json"],
-        cwd=root, env=clean_env(), capture_output=True, text=True, check=False,
+        [engine_python(), str(Path(__file__).with_name("token_savings.py")), str(root), "--json"],
+        cwd=root, env=clean_env(), capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
     )
     if benchmark.returncode:
         print("Token Graph benchmark unavailable; see graphify-out/benchmark-error.log.")
@@ -300,6 +380,7 @@ def merge_transcript_graph(root: Path, model: str, vision: bool) -> int:
 
 
 def build_local(root: Path, model: str, vision: bool, whisper_model_dir: str | None, *, skip_missing_media: bool = False) -> int:
+    require_runtime(ollama=True)
     require_local_model(model)
     # Video/audio transcription is local and uses only a cached model directory.
     if transcribe_local_media(root, whisper_model_dir, skip_missing=skip_missing_media):
@@ -322,6 +403,7 @@ def launch_local(root: Path, question: str | None, refresh: bool, *, open_page: 
     query_return_code = 0
     try:
         if refresh or not graph.is_file():
+            require_runtime()
             if run_engine(root, "extract", str(root), "--code-only", "--no-cluster") or finish_graph(root):
                 raise RuntimeError("Local code graph build failed; see graphify-out/token-graph.log")
             mode = "bundled offline AST engine (no model required)"
@@ -332,7 +414,7 @@ def launch_local(root: Path, question: str | None, refresh: bool, *, open_page: 
             query_command = [*engine_command(), "query", question, "--graph", str(answer_graph), "--budget", str(budget)]
             for context in contexts or []: query_command.extend(["--context", context])
             with QUIET_LOG.open("a", encoding="utf-8") as log:
-                result = subprocess.run(query_command, cwd=root, env=clean_env(), capture_output=True, text=True, check=False)
+                result = subprocess.run(query_command, cwd=root, env=clean_env(), capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
                 query_return_code = result.returncode
                 if result.stdout:
                     log.write(result.stdout)
@@ -369,7 +451,7 @@ def launch_local(root: Path, question: str | None, refresh: bool, *, open_page: 
 
 def manage_hooks(root: Path, install: bool) -> str:
     import shlex
-    result = subprocess.run(["git", "rev-parse", "--git-path", "hooks"], cwd=root, capture_output=True, text=True, check=True)
+    result = subprocess.run(["git", "rev-parse", "--git-path", "hooks"], cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace", check=True)
     hooks = Path(result.stdout.strip())
     if not hooks.is_absolute(): hooks = root / hooks
     hooks.mkdir(parents=True, exist_ok=True)
@@ -431,7 +513,7 @@ def local_feature(root: Path, action: str, *, question: str | None = None,
         raise ValueError("--top must be positive")
     elif action == "benchmark":
         if queries < 1: raise ValueError("--queries must be positive")
-        commands[action] = [sys.executable, str(Path(__file__).with_name("token_savings.py")), str(root), "--queries", str(queries)]
+        commands[action] = [engine_python(), str(Path(__file__).with_name("token_savings.py")), str(root), "--queries", str(queries)]
         if question: commands[action].extend(["--question", question])
     elif action == "stats":
         data = json.loads(graph.read_text(encoding="utf-8"))
@@ -481,14 +563,14 @@ def local_feature(root: Path, action: str, *, question: str | None = None,
         elif action == "export" and export_format == "html":
             completed = subprocess.CompletedProcess([], 0, str(write_embedded_viewer(root)), "")
         elif action == "update":
-            update_result = subprocess.run([*engine_command(), *commands[action]], cwd=root, env=clean_env(), capture_output=True, text=True, check=False)
+            update_result = subprocess.run([*engine_command(), *commands[action]], cwd=root, env=clean_env(), capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
             if update_result.returncode == 0:
                 finish_code = finish_graph(root)
                 completed = subprocess.CompletedProcess([], finish_code, update_result.stdout, update_result.stderr)
             else:
                 completed = update_result
         elif action == "recluster":
-            recluster_result = subprocess.run([*engine_command(), *commands[action]], cwd=root, env=clean_env(), capture_output=True, text=True, check=False)
+            recluster_result = subprocess.run([*engine_command(), *commands[action]], cwd=root, env=clean_env(), capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
             if recluster_result.returncode == 0:
                 write_embedded_viewer(root)
             completed = recluster_result
@@ -498,36 +580,36 @@ def local_feature(root: Path, action: str, *, question: str | None = None,
             try: pid = int(pid_file.read_text(encoding="utf-8").strip())
             except (OSError, ValueError): pass
             if action == "watch-start":
-                if pid:
-                    try: os.kill(pid, 0)
-                    except ProcessLookupError: pid = None
+                if pid and not process_alive(pid):
+                    pid = None
                 if pid:
                     completed = subprocess.CompletedProcess([], 0, f"Local graph watcher is already running (pid {pid}).", "")
                 else:
+                    detached = (getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | NO_WINDOW) if os.name == "nt" else 0
                     with QUIET_LOG.open("a", encoding="utf-8") as log:
-                        process = subprocess.Popen([engine_python(), str(Path(__file__).with_name("watch_local.py")), str(root)], cwd=root, env=clean_env(), stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+                        process = subprocess.Popen([engine_python(), str(Path(__file__).with_name("watch_local.py")), str(root)], cwd=root, env=clean_env(), stdout=log, stderr=subprocess.STDOUT, start_new_session=True, creationflags=detached)
                     pid_file.write_text(str(process.pid), encoding="utf-8")
                     completed = subprocess.CompletedProcess([], 0, f"Started local graph watcher (pid {process.pid}).", "")
             elif action == "watch-stop":
                 if not pid:
                     completed = subprocess.CompletedProcess([], 0, "No local graph watcher is recorded.", "")
                 else:
-                    try: os.kill(pid, 15)
-                    except ProcessLookupError: pass
+                    if process_alive(pid):
+                        stop_process_tree(pid)
                     pid_file.unlink(missing_ok=True)
                     completed = subprocess.CompletedProcess([], 0, "Stopped the local graph watcher.", "")
             else:
                 running = False
                 if pid:
-                    try: os.kill(pid, 0); running = True
-                    except ProcessLookupError: pid_file.unlink(missing_ok=True)
+                    running = process_alive(pid)
+                    if not running: pid_file.unlink(missing_ok=True)
                 completed = subprocess.CompletedProcess([], 0, f"Local graph watcher: {'running' if running else 'stopped'}.", "")
         else:
             command = commands[action]
             if action in ("query", "path", "explain", "affected", "hubs", "tree", "export", "hook-install", "hook-uninstall", "reflect", "merge", "diagnose"):
                 command = [*engine_command(), *command]
             env = clean_env()
-            completed = subprocess.run(command, cwd=root, env=env, capture_output=True, text=True, check=False)
+            completed = subprocess.run(command, cwd=root, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
             if action == "export" and export_format == "svg" and completed.returncode:
                 with contextlib.redirect_stdout(io.StringIO()):
                     fallback_code = write_local_svg(root)
@@ -631,9 +713,11 @@ def main() -> int:
                 if launch_local(root, None, True, open_page=False): return 1
             return local_feature(root, args.action, question=args.question, source=args.source, target=args.target, node=args.node, relations=args.relation, depth=args.depth, top=args.top, export_format=args.export_format, queries=args.queries, budget=args.budget, contexts=args.context, merge_graphs=args.merge_graphs, tests=not args.no_tests, generated=args.include_generated)
         if args.command == "build":
+            require_runtime()
             if run_engine(root, "extract", str(root), "--code-only", "--no-cluster"): return 1
             return finish_graph(root)
         if args.command == "update":
+            require_runtime()
             if run_engine(root, "update", str(root), "--no-cluster"): return 1
             return finish_graph(root)
         if args.command == "build-local": return build_local(root, args.model, args.vision, args.whisper_model_dir)
@@ -652,7 +736,7 @@ def main() -> int:
             if args.format == "obsidian":
                 return run_engine(root, "export", "obsidian", "--graph", graph, "--dir", str(root / "graphify-out" / "obsidian"))
             if args.format == "svg":
-                proc = subprocess.run([*engine_command(), "export", "svg", "--graph", graph], cwd=root, env=clean_env(), capture_output=True, text=True, check=False)
+                proc = subprocess.run([*engine_command(), "export", "svg", "--graph", graph], cwd=root, env=clean_env(), capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
                 if proc.returncode == 0:
                     if proc.stdout: print(proc.stdout, end="")
                     return 0
@@ -687,7 +771,7 @@ def main() -> int:
         if args.command == "benchmark":
             if args.queries < 1: raise ValueError("--queries must be positive")
             token_script = Path(__file__).with_name("token_savings.py")
-            cmd = [sys.executable, str(token_script), str(root), "--queries", str(args.queries)]
+            cmd = [engine_python(), str(token_script), str(root), "--queries", str(args.queries)]
             for question in args.question: cmd.extend(["--question", question])
             if args.json: cmd.append("--json")
             return subprocess.run(cmd, cwd=root, env=clean_env(), check=False).returncode

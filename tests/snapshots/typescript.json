@@ -1,0 +1,73 @@
+{
+  "node_count": 22,
+  "edge_count": 28,
+  "relations": {
+    "calls": 4,
+    "contains": 11,
+    "implements": 1,
+    "imports": 3,
+    "imports_from": 3,
+    "inherits": 1,
+    "method": 5
+  },
+  "test_files": [
+    "src/wallet.test.ts"
+  ],
+  "generated_files": [
+    "src/generated/walletDto.ts"
+  ],
+  "nodes": [
+    ".balance() @ src/bonusWallet.ts L6",
+    ".balance() @ src/wallet.ts L11",
+    ".balance() @ src/wallet.ts L4",
+    ".debit() @ src/wallet.ts L15",
+    ".debit() @ src/wallet.ts L5",
+    "BonusWallet @ src/bonusWallet.ts L3",
+    "IWallet @ src/wallet.ts L3",
+    "Wallet @ src/wallet.ts L8",
+    "WalletDto @ src/generated/walletDto.ts L2 [generated]",
+    "bonusWallet.ts @ src/bonusWallet.ts L1",
+    "debitReducesBalance() @ src/wallet.test.ts L3 [test]",
+    "entries @ src/ledger.ts L1",
+    "ledger.ts @ src/ledger.ts L1",
+    "name @ package.json L2",
+    "package.json @ package.json L1",
+    "private @ package.json L4",
+    "record() @ src/ledger.ts L3",
+    "type @ package.json L5",
+    "version @ package.json L3",
+    "wallet.test.ts @ src/wallet.test.ts L1 [test]",
+    "wallet.ts @ src/wallet.ts L1",
+    "walletDto.ts @ src/generated/walletDto.ts L1 [generated]"
+  ],
+  "edges": [
+    ".debit() @ src/wallet.ts --calls--> .balance() @ src/wallet.ts",
+    ".debit() @ src/wallet.ts --calls--> record() @ src/ledger.ts",
+    "BonusWallet @ src/bonusWallet.ts --inherits--> Wallet @ src/wallet.ts",
+    "BonusWallet @ src/bonusWallet.ts --method--> .balance() @ src/bonusWallet.ts",
+    "IWallet @ src/wallet.ts --method--> .balance() @ src/wallet.ts",
+    "IWallet @ src/wallet.ts --method--> .debit() @ src/wallet.ts",
+    "Wallet @ src/wallet.ts --implements--> IWallet @ src/wallet.ts",
+    "Wallet @ src/wallet.ts --method--> .balance() @ src/wallet.ts",
+    "Wallet @ src/wallet.ts --method--> .debit() @ src/wallet.ts",
+    "bonusWallet.ts @ src/bonusWallet.ts --contains--> BonusWallet @ src/bonusWallet.ts",
+    "bonusWallet.ts @ src/bonusWallet.ts --imports--> Wallet @ src/wallet.ts",
+    "bonusWallet.ts @ src/bonusWallet.ts --imports_from--> wallet.ts @ src/wallet.ts",
+    "debitReducesBalance() @ src/wallet.test.ts --calls--> .balance() @ src/bonusWallet.ts",
+    "debitReducesBalance() @ src/wallet.test.ts --calls--> BonusWallet @ src/bonusWallet.ts",
+    "ledger.ts @ src/ledger.ts --contains--> entries @ src/ledger.ts",
+    "ledger.ts @ src/ledger.ts --contains--> record() @ src/ledger.ts",
+    "package.json @ package.json --contains--> name @ package.json",
+    "package.json @ package.json --contains--> private @ package.json",
+    "package.json @ package.json --contains--> type @ package.json",
+    "package.json @ package.json --contains--> version @ package.json",
+    "wallet.test.ts @ src/wallet.test.ts --contains--> debitReducesBalance() @ src/wallet.test.ts",
+    "wallet.test.ts @ src/wallet.test.ts --imports--> BonusWallet @ src/bonusWallet.ts",
+    "wallet.test.ts @ src/wallet.test.ts --imports_from--> bonusWallet.ts @ src/bonusWallet.ts",
+    "wallet.ts @ src/wallet.ts --contains--> IWallet @ src/wallet.ts",
+    "wallet.ts @ src/wallet.ts --contains--> Wallet @ src/wallet.ts",
+    "wallet.ts @ src/wallet.ts --imports--> record() @ src/ledger.ts",
+    "wallet.ts @ src/wallet.ts --imports_from--> ledger.ts @ src/ledger.ts",
+    "walletDto.ts @ src/generated/walletDto.ts --contains--> WalletDto @ src/generated/walletDto.ts"
+  ]
+}

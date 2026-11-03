@@ -9,6 +9,12 @@ from pathlib import Path
 
 
 def main() -> int:
+    # Windows consoles/pipes may use a legacy code page (e.g. cp1251) that cannot encode "×".
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("project", nargs="?", default=".", help="project root containing graphify-out/graph.json")
     parser.add_argument("--question", action="append", dest="questions", help="benchmark question; repeat for multiple questions")
@@ -25,7 +31,7 @@ def main() -> int:
     try:
         completed = subprocess.run(
             [*engine_command(), "benchmark-json", str(root), json.dumps(args.questions or [])],
-            cwd=root, env=clean_env(), check=True, capture_output=True, text=True, timeout=90,
+            cwd=root, env=clean_env(), check=True, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=90,
         )
         result = json.loads(completed.stdout)
     except subprocess.CalledProcessError as error:

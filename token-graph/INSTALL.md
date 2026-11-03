@@ -50,7 +50,9 @@ Use setup's `--extras` only for the features you need, for example:
 python3 /path/to/token-graph/scripts/setup_runtime.py --download-deps --extras sql pdf office
 ```
 
-Available extras: `sql`, `pdf`, `office`, `plot`, `ollama`, `media`. Media also needs a separately supplied, cached local model. A local polling watcher is included without watchdog. None of these extras is required for normal code graph creation or queries.
+Available extras: `pdf`, `office`, `plot`, `ollama`, `media`, plus optional language grammars: `sql`, `terraform`, `vbnet`, `solidity`, `ocaml`, `pascal`, `commonlisp`, `dm`, `robot`, or `languages` for all of them. Media also needs a separately supplied, cached local model. A local polling watcher is included without watchdog. None of these extras is required for normal code graph creation or queries.
+
+Files in a language whose grammar is missing contribute nothing to the graph; the build prints a warning naming the exact `--extras` value to install. R and Erlang are not offered: their only grammar package downloads grammars while parsing, which would break offline analysis. AI graph generation (`ollama`) is checked before the build starts, and the Explorer shows the setup command if it is missing.
 
 ## Network behavior and limits
 

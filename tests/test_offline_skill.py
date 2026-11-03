@@ -3,6 +3,7 @@ from pathlib import Path
 import importlib.util
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -13,6 +14,14 @@ SCRIPTS = Path(os.environ.get('TOKEN_GRAPH_TEST_SKILL_PATH', str(ROOT / 'token-g
 spec = importlib.util.spec_from_file_location('token_graph', SCRIPTS / 'token_graph.py')
 launcher = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(launcher)
+
+
+def path_without_graphify() -> str:
+    """A PATH on which no Graphify executable resolves. Windows keeps its system and Git
+    directories: without them the child cannot even find git or taskkill."""
+    if os.name != 'nt':
+        return '/usr/bin:/bin'
+    return os.pathsep.join(d for d in os.environ.get('PATH', '').split(os.pathsep) if d and not shutil.which('graphify', path=d))
 
 
 class OfflineSkillTests(unittest.TestCase):
@@ -37,14 +46,14 @@ class OfflineSkillTests(unittest.TestCase):
     def cli(cls, command, *args):
         env = dict(os.environ)
         # No Graphify binary is resolvable in the child. Python paths are explicit.
-        env['PATH'] = '/usr/bin:/bin'
-        result = subprocess.run([sys.executable, str(SCRIPTS / 'token_graph.py'), command, str(cls.project), *args], env=env, capture_output=True, text=True, timeout=90)
+        env['PATH'] = path_without_graphify()
+        result = subprocess.run([sys.executable, str(SCRIPTS / 'token_graph.py'), command, str(cls.project), *args], env=env, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=90)
         if result.returncode:
             raise AssertionError(result.stdout + '\n' + result.stderr)
         return result.stdout
 
     def graph(self):
-        return json.loads((self.project / 'graphify-out' / 'graph.json').read_text())
+        return json.loads((self.project / 'graphify-out' / 'graph.json').read_text(encoding='utf-8'))
 
     def test_optional_dependency_advice_does_not_require_graphify(self):
         result = subprocess.run([*launcher.engine_command(), 'extract', str(self.project), '--code-only', '--no-cluster'], env=launcher.clean_env(), capture_output=True, text=True, timeout=60)
@@ -56,7 +65,7 @@ class OfflineSkillTests(unittest.TestCase):
         code = "import graphify,importlib.metadata as m; print(graphify.__file__); assert not any(d.metadata['Name'].lower() == 'graphifyy' for d in m.distributions())"
         result = subprocess.run([launcher.engine_python(), '-c', code], env=launcher.clean_env(), capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn('/token-graph/vendor/graphify/', result.stdout)
+        self.assertIn('/token-graph/vendor/graphify/', Path(result.stdout.strip()).as_posix())
 
     def test_multilanguage_calls_and_exclusions(self):
         data = self.graph()
@@ -76,7 +85,7 @@ class OfflineSkillTests(unittest.TestCase):
     def test_benchmark_viewer_and_exports(self):
         self.cli('launch')
         self.assertIn('benchmark', self.graph())
-        page = (self.project / 'graphify-out' / 'graph.html').read_text()
+        page = (self.project / 'graphify-out' / 'graph.html').read_text(encoding='utf-8')
         self.assertIn('id="graph-selector"', page)
         self.assertNotIn('https://cdn', page)
         self.assertNotIn('webbrowser.open', page)
@@ -100,7 +109,7 @@ class OfflineSkillTests(unittest.TestCase):
     def test_merge_recluster_reflect_and_cypher(self):
         graph = str(self.project / 'graphify-out' / 'graph.json')
         self.cli('launch', '--action', 'merge', '--merge-graph', graph, '--merge-graph', graph)
-        merged = json.loads((self.project / 'graphify-out' / 'merged-graph.json').read_text())
+        merged = json.loads((self.project / 'graphify-out' / 'merged-graph.json').read_text(encoding='utf-8'))
         self.assertTrue({n['label'] for n in self.graph()['nodes']}.issubset({n['label'] for n in merged['nodes']}))
         self.cli('launch', '--action', 'recluster')
         self.cli('launch', '--action', 'reflect')
@@ -113,12 +122,12 @@ class OfflineSkillTests(unittest.TestCase):
         custom = '#!/bin/sh\necho existing_hook\n'
         (hooks / 'post-commit').write_text(custom)
         self.cli('launch', '--action', 'hook-install')
-        hook = (hooks / 'post-commit').read_text()
+        hook = (hooks / 'post-commit').read_text(encoding='utf-8')
         self.assertIn('existing_hook', hook)
         self.assertIn(str(SCRIPTS / 'token_graph.py'), hook)
         self.assertNotIn('command -v graphify', hook)
         self.cli('launch', '--action', 'hook-uninstall')
-        self.assertEqual((hooks / 'post-commit').read_text(), custom)
+        self.assertEqual((hooks / 'post-commit').read_text(encoding='utf-8'), custom)
 
     def test_watcher_without_watchdog(self):
         import time

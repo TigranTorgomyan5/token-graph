@@ -1082,9 +1082,57 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
         choices.append(button);
       }
     }
+    // Nothing in the project matched the question: offer example questions as one-click choices.
+    for (const example of result.suggestions || []) {
+      const button = document.createElement('button');
+      button.textContent = `${example.mode === 'affected' ? 'Impact' : 'Question'}: ${example.a}`;
+      button.addEventListener('click', () => { setAskMode(example.mode); $('#ask-a').value = example.a; runAsk(); });
+      choices.append(button);
+    }
     state.focus = null; $('#focus-bar').classList.add('hidden');
     state.activeCommunity = null; renderCommunityList();
     if (state.highlight) fitGraph(new Set(nodes.keys())); else draw();
+  }
+
+  // Mirrors scripts/ask_engine.py: a question word counts only where a word of some symbol or file name starts
+  // ("payout", "sentpayouts" do; "you" inside "PaYOUts" does not). With none, the answer says so and offers examples.
+  const NAME_WORD = /[A-Z]+(?![a-z])|[A-Z]?[a-z]+|\d+/g;
+  const HELP_WORDS = new Set(['help', 'hint', 'hints', 'example', 'examples']);
+  function codeNames(eligible) {
+    const names = [];
+    for (const node of state.nodes) {
+      if (!eligible(node)) continue;
+      for (const name of new Set([String(node.label || ''), String(node.source_file || '').split(/[\\/]/).pop()]))
+        if (name && !name.includes(' ')) names.push([name.toLowerCase(), new Set([...name.matchAll(NAME_WORD)].map(m => m.index))]);
+    }
+    return names;
+  }
+  function namesCode(term, names) {
+    if (/[_\d]/.test(term)) return true;  // an identifier typed as it is
+    const forms = [term, ...(term.length > 3 && term.endsWith('s') ? [term.slice(0, -1)] : [])];
+    return names.some(([name, starts]) => forms.some(form => {
+      for (let at = name.indexOf(form); at !== -1; at = name.indexOf(form, at + 1)) if (starts.has(at)) return true;
+      return false;
+    }));
+  }
+  function exampleQuestions(eligible) {
+    const degree = node => (state.adjacency.get(node.id) || []).length;
+    const top = (pattern, nodes) => nodes.filter(n => n && eligible(n) && n.source_file && pattern.test(String(n.label || '')))
+      .sort((x, y) => degree(y) - degree(x)).map(n => String(n.label).match(pattern)[1] || String(n.label));
+    const cls = /^([A-Z][A-Za-z0-9_]{3,})$/, method = /^\.?([A-Za-z_]\w{3,})\(\)$/;
+    const classes = top(cls, state.nodes);
+    const owner = classes.length ? state.nodes.find(n => n.label === classes[0]) : null;
+    const methods = (owner ? top(method, (state.adjacency.get(owner.id) || []).map(e => state.nodeById.get(e.nodeId))) : []).concat(top(method, state.nodes));
+    const out = classes.length ? [{mode: 'query', a: `How does ${classes[0]} work?`}, {mode: 'affected', a: classes[0]}] : [];
+    if (methods.length) out.splice(1, 0, {mode: 'query', a: `What calls ${methods[0]}?`});
+    return out.slice(0, 3);
+  }
+  function noCodeAnswer(unknown, eligible) {
+    const suggestions = exampleQuestions(eligible);
+    const lines = [...(unknown.length ? [`No class, method or file in this project is named like: ${unknown.join(', ')}.`] : []),
+      'Graph search finds code by its names. For questions in your own words, switch to LLM · local model.'];
+    if (suggestions.length) lines.push('', 'Try one of these:', ...suggestions.map(s => `  ${s.mode === 'affected' ? 'Impact' : 'Question'}: ${s.a}`));
+    return {text: lines.join('\n'), nodes: {}, seeds: [], suggestions};
   }
 
   function showServerInstructions() {
@@ -1122,8 +1170,11 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     };
     if (request.mode === 'query') {
       const stop = new Set(['how','what','where','which','the','and','are','does','with','from','for','this','that','code','flow']);
-      const terms = (String(request.a || '').toLowerCase().match(/[a-z0-9_]+/g) || []).filter(t => t.length > 1 && !stop.has(t));
-      if (!terms.length) return {text:'Enter a class, function, file name or specific keywords.',nodes:{},seeds:[]};
+      const words = (String(request.a || '').toLowerCase().match(/[a-z0-9_]+/g) || []).filter(t => t.length > 1 && !stop.has(t));
+      if (!words.length) return {text:'Enter a class, function, file name or specific keywords.',nodes:{},seeds:[]};
+      if (words.every(t => HELP_WORDS.has(t))) return noCodeAnswer([], eligible);
+      const names = codeNames(eligible), terms = words.filter(t => namesCode(t, names));
+      if (!terms.length) return noCodeAnswer(words, eligible);
       const rank = node => { const label=String(node.label||'').toLowerCase(), file=String(node.source_file||'').toLowerCase(), id=String(node.id).toLowerCase(); return terms.reduce((n,t)=>n+(label.includes(t)?4:0)+(id.includes(t)?2:0)+(file.includes(t)?1:0),0); };
       const seeds=state.nodes.filter(eligible).map(n=>({node:n,score:rank(n)})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,3).map(x=>x.node.id);
       if (!seeds.length) return {text:'No matching nodes found. Try a class, function or file name.',nodes:{},seeds:[]};

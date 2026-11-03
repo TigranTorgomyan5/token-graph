@@ -1,0 +1,179 @@
+  <body>
+    <main class="app-shell">
+      <aside class="sidebar">
+        <a class="brand" href="./" aria-label="Token Graph Explorer home">
+          <span class="brand-mark">G</span>
+          <span><strong>Token Graph</strong><small>PROJECT EXPLORER</small></span>
+        </a>
+
+        <nav class="side-nav" aria-label="Explorer pages">
+          <button type="button" class="nav-item" data-nav="overview"><span class="nav-icon" aria-hidden="true">▣</span>Overview</button>
+          <button type="button" class="nav-item" data-nav="graph"><span class="nav-icon" aria-hidden="true">◎</span>Graph</button>
+          <button type="button" class="nav-item" data-nav="architecture"><span class="nav-icon" aria-hidden="true">▦</span>Architecture</button>
+          <button type="button" class="nav-item" data-nav="flow"><span class="nav-icon" aria-hidden="true">↯</span>Execution flow</button>
+          <button type="button" class="nav-item" data-nav="ask"><span class="nav-icon" aria-hidden="true">✦</span>Ask AI</button>
+          <button type="button" class="nav-item" data-nav="health"><span class="nav-icon" aria-hidden="true">♥</span>Health</button>
+          <button type="button" class="nav-item" data-nav="system" title="Several services and how they talk: NATS, Kafka, RabbitMQ, gRPC, HTTP"><span class="nav-icon" aria-hidden="true">⬡</span>System</button>
+          <div class="nav-label">TOOLS</div>
+          <button type="button" class="nav-item" data-nav="changes" title="What the last build or update added, removed or re-connected"><span class="nav-icon" aria-hidden="true">↻</span>Changes</button>
+          <button type="button" class="nav-item" data-nav="docs" title="Write Markdown articles for communities and key symbols into graphify-out/wiki"><span class="nav-icon" aria-hidden="true">≡</span>Generate docs</button>
+          <div class="nav-sep"></div>
+          <button type="button" class="nav-item" data-nav="settings"><span class="nav-icon" aria-hidden="true">⚙</span>Settings</button>
+        </nav>
+
+        <div class="sidebar-section">
+          <label class="eyebrow" for="search">SEARCH THE GRAPH</label>
+          <div class="search-box"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Search nodes or files…" autocomplete="off" /><kbd>/</kbd></div>
+          <select id="kind-filter" class="kind-filter" aria-label="Show only one kind of node" title="Show only one kind of node, on the graph and in search"><option value="all">All kinds</option></select>
+          <div class="search-results hidden" id="search-results" role="listbox" aria-label="Search results"></div>
+        </div>
+
+        <div class="sidebar-section">
+          <button type="button" class="section-heading group-dropdown" id="group-dropdown" aria-expanded="false" aria-controls="group-body" title="Show or hide the groups list"><span class="eyebrow" id="group-heading">COMMUNITIES</span><span class="group-dropdown-meta"><span id="community-count" class="muted"></span><span class="chev" aria-hidden="true">▾</span></span></button>
+          <div class="group-body hidden" id="group-body">
+            <div class="group-toggle" role="group" aria-label="Group nodes by"><button type="button" data-group-by="community" aria-pressed="true" title="Clusters of closely connected code, found by the graph engine">Communities</button><button type="button" data-group-by="folder" aria-pressed="false" title="Source folders, three levels deep (e.g. internal/place/debit)">Folders</button></div>
+            <div id="community-list" class="community-list"></div>
+          </div>
+        </div>
+
+        <div class="sidebar-bottom">
+          <div class="data-row"><span class="live-dot"></span><span id="data-status">Loading graph…</span></div>
+        </div>
+      </aside>
+
+      <section class="workspace">
+        <header class="topbar">
+          <div><div class="breadcrumb">PROJECTS <span>/</span> <span id="project-name">LOCAL PROJECT</span> <span>/</span> <b id="view-crumb">GRAPH</b></div><h1 id="page-title">Codebase map</h1><p class="page-hint" id="page-hint"></p></div>
+          <div class="project-switch"><label class="eyebrow" for="graph-selector">PROJECT</label><select id="graph-selector" class="project-select" disabled aria-label="Switch loaded graph"></select><button type="button" class="ai-chip" id="ai-chip" data-nav="settings" title="Local AI status · open Settings">AI ·</button></div>
+          <div class="topbar-actions"><button type="button" class="stale-chip hidden" id="stale-chip"></button><button type="button" class="topbar-button hidden" id="diff-button" title="What was added, removed or re-connected in the graph by the last build or update">Changes since last build</button><span class="snapshot" id="snapshot">Graph snapshot</span><button class="icon-button" id="reset-view" title="Reset view" aria-label="Reset view">⟲</button></div>
+        </header>
+
+        <section class="server-setup hidden" id="server-setup" aria-label="Enable project tools">
+          <button type="button" class="server-setup-close" id="server-setup-close" aria-label="Close">×</button>
+          <strong>Enable build, update, and change tracking</strong>
+          <p>Run the command for your installed skill, open the address it prints, then choose your project. The server stays on your computer.</p>
+          <label for="server-address">Local server address</label><input class="ask-input" id="server-address" placeholder="Paste the address printed by the server" style="width:100%;box-sizing:border-box" /><button type="button" class="ask-go" id="server-connect">Open local viewer</button><p id="server-connect-error" role="status"></p>
+          <label>Codex <code id="server-command-codex">python3 "$HOME/.codex/skills/token-graph/scripts/explorer_server.py" --no-browser</code></label>
+          <label>Claude Code <code id="server-command-claude">python3 "$HOME/.claude/skills/token-graph/scripts/explorer_server.py" --no-browser</code></label>
+        </section>
+
+        <section class="dashboard hidden" id="dashboard" role="tabpanel" aria-label="Project dashboard">
+          <div class="dash-actions" role="group" aria-label="Quick actions">
+            <button type="button" class="dash-action" data-dash="docs" id="dash-docs" title="Write Markdown articles for communities and key symbols into graphify-out/wiki"><span aria-hidden="true">≡</span>Generate documentation</button>
+          </div>
+          <div class="dash-action-status" id="dash-action-status" role="status" aria-live="polite"></div>
+          <div class="dash-grid">
+            <article class="dash-card" id="dash-ask" aria-labelledby="dash-ask-title"><header><h2 id="dash-ask-title">Ask about this project</h2><span class="dash-head"></span></header><div class="dash-body"></div></article>
+            <article class="dash-card" id="dash-overview" aria-labelledby="dash-overview-title"><header><h2 id="dash-overview-title">Project overview</h2><span class="dash-head"></span></header><div class="dash-body"></div></article>
+            <article class="dash-card w-7" id="dash-architecture" aria-labelledby="dash-architecture-title"><header><h2 id="dash-architecture-title">How it is built</h2><span class="dash-head"></span></header><div class="dash-body"></div></article>
+            <article class="dash-card w-5" id="dash-components" aria-labelledby="dash-components-title"><header><h2 id="dash-components-title">Key components</h2><span class="dash-head"></span></header><div class="dash-body"></div></article>
+          </div>
+          <section class="benchmark-strip" id="benchmark-strip" aria-label="Token Graph context reduction estimate">
+            <span class="benchmark-mark">↘</span>
+            <div class="benchmark-main"><span class="benchmark-label">TOKEN GRAPH CONTEXT REDUCTION</span><strong id="reduction-total">Loading estimate…</strong></div>
+            <span class="benchmark-detail" id="benchmark-detail">Scanning this project locally…</span>
+            <span class="benchmark-source" id="benchmark-source">Estimated savings/query</span>
+          </section>
+        </section>
+
+        <section class="settings hidden" id="settings" aria-label="Settings">
+          <div class="dash-grid">
+            <article class="dash-card w-5" id="settings-projects" aria-labelledby="settings-projects-title"><header><h2 id="settings-projects-title">Projects</h2></header><div class="dash-body settings-projects">
+          <div class="source-choice">
+            <button type="button" class="source-button primary hidden" id="build-project" title="Pick a project folder; its graph is built (or updated) and opened here">Choose project &amp; build graph</button>
+            <form id="project-path-form" class="hidden">
+              <label for="project-path" class="eyebrow">PROJECT FOLDER PATH</label>
+              <input class="ask-input" id="project-path" type="text" placeholder="/Users/name/Projects/my-project" autocomplete="off" style="width:100%;box-sizing:border-box;margin:6px 0" required />
+              <button type="submit" class="source-button primary">Build graph</button>
+              <button type="button" class="source-button" id="project-path-cancel">Cancel</button>
+            </form>
+            <label class="source-button" for="projects-folder">Choose Projects folder</label>
+            <button type="button" class="source-button" id="original-source">Reload local graph</button>
+            <label class="source-button" id="token-source" for="graph-file">Add graph JSON files</label>
+            <button type="button" class="source-button hidden" id="stop-server" title="Stop the local Token Graph server; the desktop shortcut starts it again">Stop server</button>
+          </div>
+          <input id="projects-folder" type="file" webkitdirectory multiple hidden />
+          <input id="graph-file" type="file" accept="application/json,.json" multiple hidden />
+          <div class="data-footnote" id="graph-source-note">Choose your Projects folder to find all project graphs. Files stay in this browser.</div>
+            </div></article>
+            <article class="dash-card w-7" id="dash-ai" aria-labelledby="dash-ai-title"><header><h2 id="dash-ai-title">Local AI</h2><span class="dash-head"></span></header><div class="dash-body"></div></article>
+            <article class="dash-card w-6" id="dash-index" aria-labelledby="dash-index-title"><header><h2 id="dash-index-title">Knowledge index</h2><span class="dash-head"></span></header><div class="dash-body"></div></article>
+          </div>
+        </section>
+
+        <section class="health-page hidden" id="health-page" aria-label="Project health">
+          <div class="dash-grid">
+            <article class="dash-card w-7" id="dash-intel" aria-labelledby="dash-intel-title"><header><h2 id="dash-intel-title">Code health</h2><span class="dash-head"></span></header><div class="dash-body"></div></article>
+            <article class="dash-card w-5" id="dash-health" aria-labelledby="dash-health-title"><header><h2 id="dash-health-title">Graph status</h2><span class="dash-head"></span></header><div class="dash-body"></div></article>
+            <article class="dash-card w-7" id="dash-activity" aria-labelledby="dash-activity-title"><header><h2 id="dash-activity-title">Recent activity</h2><span class="dash-head"></span></header><div class="dash-body"></div></article>
+            <article class="dash-card w-5" id="health-changes" aria-labelledby="health-changes-title"><header><h2 id="health-changes-title">Changes since last build</h2></header><div class="dash-body"><p class="dash-note">What the last build or update added, removed or re-connected, shown on the graph.</p><div class="dash-footer"><button type="button" class="dash-link" data-dash="changes">Show changes on the graph</button></div></div></article>
+          </div>
+        </section>
+
+        <section class="system-page hidden" id="system-page" aria-label="System: services and how they communicate">
+          <div class="sys-toolbar" id="sys-toolbar"></div>
+          <div id="sys-message" class="hidden"></div>
+          <div class="dash-grid hidden" id="sys-main">
+            <article class="dash-card w-8" aria-labelledby="sys-map-title"><header><h2 id="sys-map-title">Service map</h2><span class="dash-head sys-legend" id="sys-legend"></span></header><div class="dash-body" id="sys-map"></div></article>
+            <article class="dash-card w-4 sys-detail-card" aria-labelledby="sys-detail-title" aria-live="polite"><header><h2 id="sys-detail-title">System</h2></header><div class="dash-body" id="sys-detail"></div></article>
+            <article class="dash-card" aria-labelledby="sys-edges-title"><header><h2 id="sys-edges-title">Connections</h2><span class="dash-head" id="sys-count"></span></header><div class="dash-body" id="sys-edges"></div></article>
+          </div>
+        </section>
+
+        <section class="ask-page hidden" id="ask-page" aria-label="Ask AI">
+          <div class="dash-empty ask-page-note hidden" id="ask-page-note"><strong>Asking needs the local server</strong><p>Start Token Graph with the desktop shortcut (or <code>explorer_server.py</code>) and open the address it prints. Questions are answered on this computer.</p></div>
+          <section class="ask-panel hidden" id="ask-panel" aria-label="Ask the graph">
+            <div class="ask-engine" role="group" aria-label="Who answers"><button type="button" data-engine="ai" aria-pressed="true"><strong>✦ AI · graph search</strong><small>Fast and exact: graph engine and source evidence. No model needed.</small></button><button type="button" data-engine="llm" aria-pressed="false"><strong>◆ LLM · local model</strong><small>Explains in its own words: searches the graph, reads source, cites file:line.</small></button></div>
+            <div class="ask-row">
+              <div class="ask-modes" role="group" aria-label="Question type">
+                <button type="button" data-mode="query" aria-pressed="true" title="Ask about the code in plain words">Question</button>
+                <button type="button" data-mode="path" aria-pressed="false" title="How is A connected to B?">Path A → B</button>
+                <button type="button" data-mode="affected" aria-pressed="false" title="What depends on this and could break if it changes?">Impact</button>
+                <button type="button" data-mode="agent" aria-pressed="false" title="Search the local graph and verify source without an LLM">Evidence</button>
+              </div>
+              <div class="ask-input-wrap"><input class="ask-input" id="ask-a" list="ask-nodes" autocomplete="off" spellcheck="false" placeholder="e.g. how is partial cashout executed" /><button type="button" class="ask-pick hidden" id="ask-a-pick" title="Use the selected node">◎</button></div>
+              <div class="ask-input-wrap hidden" id="ask-b-wrap"><input class="ask-input" id="ask-b" list="ask-nodes" autocomplete="off" spellcheck="false" placeholder="To: class, method or file" /><button type="button" class="ask-pick" id="ask-b-pick" title="Use the selected node">◎</button></div>
+              <select class="ask-depth hidden" id="llm-model" aria-label="Local model that answers" title="Installed local Ollama model that answers"><option value="">Checking models…</option></select><select class="ask-depth" id="ask-budget" title="Estimated answer size; increase it when the result is truncated."><option value="400">~400 tokens</option><option value="800" selected>~800 tokens</option><option value="1500">~1,500 tokens</option><option value="3000">~3,000 tokens</option></select>
+              <select class="ask-depth hidden" id="ask-depth" title="How many steps of dependants to follow"><option value="1">1 step</option><option value="2" selected>2 steps</option><option value="3">3 steps</option></select>
+              <select class="ask-depth hidden" id="agent-model" aria-label="Ollama model for AI graph generation" title="Used only by Generate AI graph"><option value="">Checking Ollama…</option></select>
+              <button type="button" class="ask-go hidden" id="agent-build" title="Build a graph using the local model for document semantics">Generate AI graph</button>
+              <button type="button" class="ask-go" id="ask-go">Ask</button>
+            </div>
+            <datalist id="ask-nodes"></datalist>
+            <div class="ask-hint" id="ask-hint">Answers come from this project's graph on your computer. Matching nodes light up on the graph below.</div>
+            <div id="agent-chat" class="agent-chat hidden" aria-live="polite" aria-label="Evidence search history"></div>
+            <button type="button" class="ask-pick hidden" id="agent-clear">New conversation</button>
+            <div class="ask-result hidden" id="ask-result">
+              <div class="ask-result-bar"><span id="ask-summary"></span><span class="spacer"></span><button type="button" id="ask-show-graph" title="Open the graph with the answer's nodes highlighted">Show on graph</button><button type="button" id="ask-only" aria-pressed="false" title="Hide everything except the answer's nodes">Show only these</button><button type="button" id="ask-copy" title="Copy the answer text, e.g. to paste into Claude">Copy text</button><button type="button" id="ask-clear">Clear</button></div>
+              <pre class="ask-text" id="ask-text"></pre>
+              <div class="ask-choices" id="ask-choices"></div>
+            </div>
+          </section>
+        </section>
+
+        <section class="overview" aria-label="Graph summary">
+          <article class="metric-card"><span class="metric-icon indigo">◉</span><div><div class="metric-label">NODES</div><strong id="node-total">—</strong></div><span class="metric-note">code + docs</span></article>
+          <article class="metric-card"><span class="metric-icon cyan">⤢</span><div><div class="metric-label">CONNECTIONS</div><strong id="edge-total">—</strong></div><span class="metric-note">relationships</span></article>
+          <article class="metric-card"><span class="metric-icon violet">▦</span><div><div class="metric-label">COMMUNITIES</div><strong id="group-total">—</strong></div><span class="metric-note">detected clusters</span></article>
+          <article class="metric-card"><span class="metric-icon green">⌘</span><div><div class="metric-label">SOURCE FILES</div><strong id="file-total">—</strong></div><span class="metric-note">represented</span></article>
+        </section>
+
+
+
+        <section class="graph-panel">
+          <div class="graph-toolbar"><div class="graph-title"><span class="live-dot"></span><strong id="graph-title">Relationship graph</strong><span id="visible-count" class="muted">All nodes</span><button class="help-button" id="graph-help-toggle" aria-expanded="false" aria-controls="graph-help">How to read this</button></div><div class="toolbar-right"><div class="view-toggle" role="group" aria-label="Graph lens"><button class="view-button active" data-lens="full" aria-pressed="true" title="All relationships">Full</button><button class="view-button" data-lens="architecture" aria-pressed="false" title="Modules (top source folders) and how they depend on each other">Architecture</button><button class="view-button" data-lens="dependency" aria-pressed="false" title="Only imports, references and inheritance">Dependencies</button><button class="view-button" data-lens="flow" aria-pressed="false" title="Only calls and dispatches. Double-click a method to trace what it calls">Execution flow</button></div><div class="view-toggle" role="group" aria-label="Graph dimensions"><button class="view-button active" id="mode-3d" aria-pressed="true">3D</button><button class="view-button" id="mode-2d" aria-pressed="false">2D</button></div><details class="graph-filters" id="graph-filters"><summary title="Clusters, hidden nodes, documentation view and legend">Filters ▾</summary><div class="filters-pop"><div class="view-toggle hidden" id="cluster-controls" role="group" aria-label="Cluster view"><button class="view-button" id="cluster-toggle" aria-pressed="true" title="Large graphs: draw each group as one bubble. Double-click a bubble to expand it.">Clusters</button><button class="view-button hidden" id="collapse-all" title="Fold every expanded cluster back into a bubble">Collapse all</button></div><div class="filter-toggle" role="group" aria-label="Hide nodes"><button class="filter-button" id="hide-tests" aria-pressed="false" title="Hide test files (_test.go, *.Tests projects, tests/ folders, *.spec.ts …)">Hide tests</button><button class="filter-button" id="hide-generated" aria-pressed="false" title="Hide generated code (gen/ folders, *.pb.go, *.g.cs, *.Designer.cs, EF Migrations …)">Hide generated</button></div><div class="view-toggle" role="group" aria-label="Graph view"><button class="view-button active" id="all-view" aria-pressed="true">All graph</button><button class="view-button" id="docs-view" aria-pressed="false">Documentation</button></div><div class="legend"><span class="legend-code"><i class="legend-dot code-dot"></i>Community</span><span><i class="legend-dot doc-dot"></i>Docs</span><span><i class="legend-line"></i>Connection</span></div></div></details></div></div>
+          <div class="graph-help hidden" id="graph-help"><button class="help-close" id="graph-help-close" aria-label="Close graph guide">×</button><strong>Reading the graph</strong><p>Each dot is an indexed code symbol or documentation section. Colors group nodes by Token Graph community; documentation dots are cyan.</p><p>Lines show relationships between two visible nodes. Select a dot to see its source excerpt and connections. In 3D, drag to orbit and Shift-drag or right-drag to pan. Scroll to zoom. Switch to 2D for a flat map. Search or click a node to inspect it.</p></div>
+          <div class="focus-bar hidden" id="focus-bar"><span>Focus on</span><b id="focus-name"></b><button id="focus-1" aria-pressed="true" title="Direct neighbours only">1 step</button><button id="focus-2" aria-pressed="false" title="Neighbours of neighbours too">2 steps</button><button id="focus-3" aria-pressed="false" title="Three steps out">3 steps</button><span class="focus-sep"></span><button id="focus-dir-both" aria-pressed="true" title="Follow relationships in both directions">↔ Both</button><button id="focus-dir-in" aria-pressed="false" title="Only what points to this node: callers, importers, users">← Incoming</button><button id="focus-dir-out" aria-pressed="false" title="Only what this node points to: calls, imports, dependencies">→ Outgoing</button><span class="muted" id="focus-count"></span><button class="focus-exit" id="focus-exit" title="Show the whole graph again (Esc)">✕ Exit focus</button></div>
+          <div class="canvas-wrap" id="canvas-wrap"><canvas id="graph-canvas" aria-label="Interactive graph of project files and code symbols"></canvas>
+            <div class="canvas-hint" id="navigation-hint"><span>DRAG</span> rotate <b>·</b> <span>SHIFT + DRAG</span> pan <b>·</b> <span>SCROLL</span> zoom <b>·</b> double-click to focus</div>
+            <div class="canvas-loading" id="loading">Preparing project graph…</div>
+            <div class="graph-empty hidden" id="graph-empty" role="status"><strong id="graph-empty-title"></strong><p id="graph-empty-detail"></p><button class="help-button" id="graph-empty-reset">Show all graph</button></div>
+          </div>
+          <div class="graph-footer"><span><span class="live-dot"></span> Token Graph snapshot</span><span id="graph-updated">—</span></div>
+        </section>
+      </section>
+
+      <aside class="details" id="details-panel">
+        <div class="details-empty"><div class="detail-orbit">◎</div><h2>Explore the graph</h2><p>Pick any node to inspect its source, community, and nearby connections.</p></div>
+      </aside>
+    </main>

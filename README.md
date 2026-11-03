@@ -41,7 +41,7 @@ Open the printed URL manually. It includes a private per-run access token. The s
 
 ## Local exploration agent
 
-The standalone command-line explorer and the viewer's **Local Agent** chat use a local Ollama model to query the project's graph and inspect bounded source excerpts. They prefer `qwen3:14b-q4_K_M` when installed; select a different installed model with `--model` or the viewer's model menu. Broad architecture and overview questions receive focused entry-point and wiring excerpts automatically. The agent only connects to Ollama at `127.0.0.1:11434` and cannot edit project files or run shell commands:
+The standalone command-line explorer uses a local Ollama model to query the project's graph and inspect bounded source excerpts. It uses `qwen3:14b-q4_K_M` when installed, otherwise `qwen3:8b`, otherwise the first installed local model; choose one explicitly with `--model`. Broad architecture and overview questions receive focused entry-point and wiring excerpts automatically. The viewer's **Evidence** search is deterministic and does not use Ollama; its **LLM** chat uses the model chosen in the viewer. The agent only connects to Ollama at `127.0.0.1:11434` and cannot edit project files or run shell commands:
 
 ```sh
 python3 token-graph/scripts/explore_agent.py /path/to/project 'Where is authentication enforced?'
@@ -78,7 +78,7 @@ python3 -m unittest discover -s tests -v
 python3 token-graph/scripts/package_skill.py
 ```
 
-The skill's canonical packaged project viewer is `token-graph/assets/project-explorer.html`. Keep the root `index.html` in sync when editing it; packaging does not overwrite either file.
+The skill's canonical packaged project viewer is `token-graph/assets/project-explorer.html`. Both it and the root `index.html` are generated: edit the sources in `viewer-src/` and run `python viewer-src/build.py`. Packaging does not overwrite either file.
 
 ## Privacy and scope
 

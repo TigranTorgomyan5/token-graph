@@ -1,0 +1,36 @@
+# Token Graph — notes for Claude
+
+Local code knowledge-graph tool: offline engine (Tree-sitter, ~35 languages) + 2D/3D Project Explorer UI + optional local Ollama agent.
+
+## Save tokens
+- Find code with the graph first (`/token-graph` skill or `python token-graph/scripts/token_graph.py launch <project> --action query|explain|affected ...`). Open only the files you will edit.
+- Never read `index.html` or `token-graph/assets/project-explorer.html` — they are build outputs (158 KB). Edit `viewer-src/` instead.
+- Never read `token-graph/.runtime/`, `token-graph/vendor/graphify/skills/`, `token-graph.zip`, `tests/snapshots/`.
+- One feature per session. Stop when the "Done when" criteria pass.
+
+## Map
+- `viewer-src/` — Project Explorer source. `template.html` + `body.html` (markup) + `css/` + `js/` → `python viewer-src/build.py` → writes both `token-graph/assets/project-explorer.html` and root `index.html`. `js/*.js` are fragments of ONE IIFE (01 opens it, 11 closes it), concatenated in order:
+  01-core (state, api(), helpers, filters, 2D/3D projection, normalizeGraph) · 02-grouping · 03-graph-data (kinds, search, metrics, communities) · 04-render (draw, hit test) · 05-details (node panel, VS Code, select, copy context) · 06-focus-view (focus mode with depth 1–3 and direction both/in/out, filters, setView) · 06b-clusters (cluster bubbles for graphs >500 nodes, expand/collapse, cluster panel, Node Inspector relations) · 06c-lenses (Full / Architecture / Dependencies / Execution flow: relation classes, modules, arrows) · 07-projects (add/switch/import graphs) · 08-ask-agent (ask bar, browser fallback, Ollama agent chat) · 09-freshness (stale/diff) · 10-server (build/update jobs, server mode) · 10b-shell (side nav, AI chip, Overview cards: Ask, How it is built module map, Key components) · 10c-system (System page: saved systems of service folders, SVG service map, connection evidence) · 11-dashboard (showPage: dashboard=Overview | graph | ask | health | system | settings — one task per page; server cards, docs generation, init)
+- `token-graph/assets/graph-viewer.html` — separate per-project viewer exported by `token_graph.py` (not built from viewer-src).
+- `token-graph/scripts/`
+  - `explorer_server.py` — loopback server, token auth. GET: /api/ping, projects, status, stale, diff, editors, agent/status, dashboard, ai/status, graph, source, systems. POST: systems/save|delete|discover|scan|graph (merged system graph), pick, build, agent/build, ask, agent (evidence, no LLM), llm (local Ollama answer via explore_agent.explore), docs, activity/clear, open, forget, shutdown
+  - `token_graph.py` — CLI launcher for all engine actions · `offline_engine.py` / `offline_policy.py` / `sitecustomize.py` — run bundled engine with no network
+  - `system_links.py` — systems (several service folders, saved in `.explorer-systems.json`): regex scan of any language for NATS/Kafka/RabbitMQ/Redis/MassTransit/gRPC/HTTP endpoints, links producer→consumer across services; `system_graph()` merges service graphs (ids `s<i>::`, community = service, node.project_path) + cross-service links (`tech`, `channel`). CLI: `scan <dirs...>`, `discover <parent>`, `impact` (git changes → BROKEN/CHANGED/CONTRACT/NEW/UNMATCHED across services), `hook` (Claude Code PostToolUse, exit 2 + stderr), `install-hook`/`uninstall-hook` (~/.claude/settings.json). Systems live in `~/.token-graph/systems.json` (+ `system-cache/`), shared by all skill copies. Tests: `tests/test_system_links.py` + `tests/fixtures/system/`
+  - `ask_engine.py` (question/path/impact) · `dashboard_engine.py` · `explorer_evidence.py` (deterministic retrieval) · `node_filters.py` (test/generated rules — mirrored in viewer js/01-core.js, change both)
+  - `explore_agent.py` (Ollama read-only agent, 127.0.0.1:11434) · `generate_agent.py` (AI graph) · `install_explorer_agent.py`
+  - `setup_runtime.py` · `package_skill.py` (builds token-graph.zip; does NOT touch viewers) · `watch_local.py` · `token_savings.py` · `transcribe_local.py`
+- `token-graph/vendor/graphify/` — bundled engine: `extractors/` + `extract.py` (parsers), `build.py`, `cluster.py` (communities), `affected.py` (impact), `analyze.py`, `callflow_html.py`, `diagnostics.py`, `benchmark.py`, `export.py`. Prefer reusing these over new code.
+- `tests/` — unittest; `tests/fixtures/languages/*` + `tests/snapshots/*.json` per-language extraction snapshots.
+
+## Commands
+- Build viewer: `python viewer-src/build.py` (check only: `--check`)
+- Tests: `python -m unittest discover -s tests -v`
+- Package: `python token-graph/scripts/package_skill.py`
+- Run app (Windows): `Start-TokenGraph.bat`
+
+## Rules
+- Preserve the existing 2D and 3D graph engines; extend, don't rewrite.
+- Language-specific logic only in extractors/adapters, never in UI or core.
+- Server stays 127.0.0.1-only and token-protected; agents are read-only (no shell, no file edits).
+- No new dependencies without asking. Keep the viewer working from file:// (no ES modules, no CDN).
+- After editing viewer-src: run build.py, then the tests.

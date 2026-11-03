@@ -5,7 +5,7 @@ for (const name of ['index.html', 'token-graph/assets/project-explorer.html', 't
   const html = fs.readFileSync(require('path').join(root, name), 'utf8');
   let code = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map(m => m[1]).find(s => s.includes('(() =>'));
   new vm.Script(code);
-  code = code.replace(/\}\)\(\);\s*$/, 'globalThis.viewerTest = {state, normalizeGraph, projectNode, findNode, fitGraph, setDimension, select, draw, setView, recoverGraph, browserAsk, runAsk, setAskMode, importProjectFolder, switchGraph}; })();');
+  code = code.replace(/\}\)\(\);\s*$/, 'globalThis.viewerTest = {state, normalizeGraph, projectNode, findNode, fitGraph, setDimension, select, draw, setView, recoverGraph, browserAsk, runAsk, setAskMode, importProjectFolder, switchGraph, showPage: typeof showPage === "function" ? showPage : null, renderDashboard: typeof renderDashboard === "function" ? renderDashboard : null, clusterModel: typeof clusterModel === "function" ? clusterModel : null, clustersActive: typeof clustersActive === "function" ? clustersActive : null, expandCluster: typeof expandCluster === "function" ? expandCluster : null, enterFocus: typeof enterFocus === "function" ? enterFocus : null, setLens: typeof setLens === "function" ? setLens : null, visible: typeof visible === "function" ? visible : null}; })();');
   const elements = new Map(), arcs = [];
   const context = new Proxy({measureText:t=>({width:String(t).length*7}), arc:(...args)=>arcs.push(args)}, {get:(target,k)=>target[k] || (()=>{})});
   function el(key) {
@@ -25,6 +25,23 @@ for (const name of ['index.html', 'token-graph/assets/project-explorer.html', 't
   const fixture={nodes:Array.from({length:60},(_,i)=>({id:'node'+i,label:'Symbol'+i,source_file:'src/'+i+'.py',community:i%4})),edges:Array.from({length:59},(_,i)=>({source:'node'+i,target:'node'+(i+1),relation:'calls'}))};
   for(let i=20;i<40;i++) fixture.edges.push({source:"node0",target:"node"+i,relation:"calls"});
   api.normalizeGraph(fixture);
+  if (api.showPage) {
+    // Dashboard page (project explorer only): opens by default, shows real loaded-graph figures,
+    // and asks for the local server instead of inventing server-only figures.
+    assert.equal(api.state.page,'dashboard');
+    api.renderDashboard();
+    const overview=el('#dash-overview .dash-body').innerHTML;
+    assert(overview.includes('Source files') && overview.includes('>60<') && overview.includes('>79<'), 'overview shows the loaded graph counts');
+    assert(!/NaN|undefined/.test(overview));
+    for (const card of ['ask','health','ai','index','intel','activity']) assert(el(`#dash-${card} .dash-body`).innerHTML.includes('local Token Graph server'), `${card} needs the server`);
+    api.showPage('graph'); assert(el('#dashboard').classList.contains('hidden')); assert.equal(el('#view-crumb').textContent,'GRAPH');
+    api.showPage('dashboard'); assert(!el('#dashboard').classList.contains('hidden')); assert.equal(el('#view-crumb').textContent,'OVERVIEW');
+    api.setView('docs'); assert.equal(el('#view-crumb').textContent,'OVERVIEW', 'graph sub-views do not retitle the overview'); api.setView('all');
+    assert(el('#dash-architecture .dash-body').innerHTML.includes('dash-modmap'), 'architecture map is drawn from the loaded graph');
+    assert(el('#dash-components .dash-body').innerHTML.includes('data-dash="node"'), 'key components list');
+    api.showPage('settings'); assert(!el('#settings').classList.contains('hidden')); assert(el('#dashboard').classList.contains('hidden')); assert.equal(el('#view-crumb').textContent,'SETTINGS');
+    api.showPage('graph');
+  }
   const search=api.browserAsk({mode:'query',a:'Symbol10',budget:400});
   assert(search.text.includes('Symbol10')); assert(Object.keys(search.nodes).length>0);
   const truncated=api.browserAsk({mode:'query',a:'Symbol',budget:100});
@@ -36,6 +53,10 @@ for (const name of ['index.html', 'token-graph/assets/project-explorer.html', 't
   const impact=api.browserAsk({mode:'affected',a:'node3',depth:2});
   assert(Object.hasOwn(impact.nodes,'node2')); assert(Object.hasOwn(impact.nodes,'node1')); assert(!Object.hasOwn(impact.nodes,'node4'));
   assert(api.browserAsk({mode:'query',a:'what how',budget:400}).text.includes('specific keywords'));
+  const meta=api.browserAsk({mode:'query',a:'what question can you give',budget:400});  // words that name no code
+  assert(meta.text.includes('named like: question, can, you, give'), meta.text); assert.equal(Object.keys(meta.nodes).length,0); assert(Array.isArray(meta.suggestions));
+  assert(api.browserAsk({mode:'query',a:'help',budget:400}).text.includes('finds code by its names'));
+  assert(Object.keys(api.browserAsk({mode:'query',a:'Symbol10 for you',budget:400}).nodes).length>0, 'a known name still answers');
   el('#ask-a').value='Symbol10'; await api.runAsk(); assert(el('#ask-text').textContent.includes('Symbol10')); assert(api.state.highlight.nodes.size>0);
   el('#server-setup').classList.add('hidden'); el('#build-project').handlers.click(); assert(!el('#server-setup').classList.contains('hidden'));
   assert.equal(api.state.is3d,true);
@@ -86,6 +107,42 @@ for (const name of ['index.html', 'token-graph/assets/project-explorer.html', 't
   assert(el('#source-excerpt').textContent.includes('selected source'));
   api.select(api.state.nodeById.get('secret')); await Promise.resolve();
   assert.equal(secretReads,0); assert(el('#source-excerpt').textContent.includes('unavailable'));
+  if (api.clusterModel) {
+    // Explorer 2.0: a large graph opens as one bubble per community; expanding, selecting, focus direction, inspector.
+    const big={nodes:Array.from({length:800},(_,i)=>({id:'b'+i,label:'Big'+i,source_file:'pkg'+(i%8)+'/f'+i+'.py',community:i%8})),edges:Array.from({length:799},(_,i)=>({source:'b'+i,target:'b'+(i+1),relation:'calls'}))};
+    api.normalizeGraph(big); api.draw();
+    assert(api.clustersActive());
+    let model=api.clusterModel();
+    assert.equal(model.bubbles.length,8); assert.equal(model.shown.length,0);
+    assert(model.edges.length>0 && model.edges.every(e=>e.count>0));
+    assert.equal(api.findNode(eventAt(api.projectNode(model.bubbles[0])))._cluster.id, model.bubbles[0]._cluster.id);
+    api.expandCluster('0'); model=api.clusterModel(); api.draw();
+    assert.equal(model.bubbles.length,7); assert.equal(model.shown.length,100);
+    api.select(api.state.nodeById.get('b1')); assert(api.state.expanded.has('1'));
+    const panel=el('#details-panel').innerHTML;
+    assert(panel.includes('INCOMING') && panel.includes('OUTGOING') && panel.includes('MODULE / FOLDER') && panel.includes('RELATED COMPONENTS'));
+    api.enterFocus(api.state.nodeById.get('b5'),2,'out'); assert(!api.clustersActive());
+    assert.deepEqual([...api.state.focus.ids].sort(),['b5','b6','b7']);
+    api.enterFocus(api.state.nodeById.get('b5'),1,'in'); assert.deepEqual([...api.state.focus.ids].sort(),['b4','b5']);
+    api.enterFocus(api.state.nodeById.get('b5'),3,'both'); assert.equal(api.state.focus.ids.size,7);
+    api.state.focus=null; api.state.focusDir='both';
+    if (api.setLens) {
+      // Lenses: architecture = module bubbles with directed non-structural links; dependency / flow filter relations.
+      api.normalizeGraph({nodes:[{id:'A',label:'A',source_file:'src/api/A.cs',community:0},{id:'F',label:'A.cs',source_file:'src/api/A.cs',community:0},{id:'B',label:'B',source_file:'src/app/B.cs',community:1},{id:'C',label:'C',source_file:'src/domain/C.cs',community:2},{id:'D',label:'D',source_file:'src/domain/D.cs',community:2}],
+        edges:[{source:'A',target:'B',relation:'calls'},{source:'B',target:'C',relation:'imports'},{source:'F',target:'A',relation:'contains'},{source:'A',target:'C',relation:'references'}]});
+      api.setLens('architecture'); assert(api.clustersActive());
+      let m=api.clusterModel(); api.draw();
+      assert.deepEqual(m.bubbles.map(b=>b._cluster.id).sort(),['src/api','src/app','src/domain']);
+      assert.deepEqual(m.edges.map(e=>e.a+'>'+e.b).sort(),['cluster:src/api>cluster:src/app','cluster:src/api>cluster:src/domain','cluster:src/app>cluster:src/domain']);
+      api.expandCluster('src/api'); m=api.clusterModel(); api.draw(); assert.equal(m.shown.length,2);
+      api.setLens('dependency'); assert(!api.clustersActive());
+      assert(api.visible(api.state.nodeById.get('C')) && !api.visible(api.state.nodeById.get('D')) && !api.visible(api.state.nodeById.get('F'))); api.draw();
+      api.setLens('flow'); api.enterFocus(api.state.nodeById.get('A'),3);
+      assert.deepEqual([...api.state.focus.ids].sort(),['A','B']); api.draw();
+      api.setLens('full'); assert(api.visible(api.state.nodeById.get('D')));
+    }
+    api.normalizeGraph(big); assert.equal(api.state.expanded.size,0);
+  }
   api.normalizeGraph({nodes:[{id:'single',label:'Single',community:0}],edges:[]});assert(Number.isFinite(api.state.scale));assert(Number.isFinite(api.projectNode(api.state.nodes[0]).x));
   for (const path of process.argv.slice(2)) {
     const graph=JSON.parse(fs.readFileSync(path,'utf8'));

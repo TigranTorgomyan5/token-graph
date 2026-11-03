@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import time
 from pathlib import Path
 import re
 
@@ -65,7 +66,18 @@ def scoped_graph(graph_file: Path, *, tests: bool, generated: bool) -> Path:
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as stream:
             json.dump(data, stream, ensure_ascii=False)
-        temp.replace(scoped)
+        for attempt in range(20):
+            try:
+                temp.replace(scoped)
+                break
+            except PermissionError:
+                # Windows refuses the rename while another request is replacing or reading the
+                # same cache file. An equally fresh copy written by that request is just as good.
+                if scoped.is_file() and scoped.stat().st_mtime >= graph_file.stat().st_mtime:
+                    break
+                if attempt == 19:
+                    raise
+                time.sleep(0.05)
     finally:
         temp.unlink(missing_ok=True)
     return scoped

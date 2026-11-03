@@ -26,6 +26,66 @@ from graphify import affected as gaffected  # noqa: E402
 from graphify import serve  # noqa: E402
 
 QUERY_DEPTH = 2  # shallower than the CLI default (3): a highlight of thousands of nodes shows nothing
+WORD = re.compile(r"[A-Z]+(?![a-z])|[A-Z]?[a-z]+|\d+")   # GetSentPayoutsAsync -> Get Sent Payouts Async
+METHOD = re.compile(r"^\.?([A-Za-z_]\w{3,})\(\)$")
+CLASS = re.compile(r"^[A-Z][A-Za-z0-9_]{3,}$")
+HELP_WORDS = frozenset({"help", "hint", "hints", "example", "examples"})   # asked alone: show what to ask
+
+
+def code_names(G: nx.Graph) -> list[tuple[str, set[int]]]:
+    """Every symbol and file name, lower-cased, with the offsets where its words start.
+    Sentence-like labels (documents, rationale) have spaces and are left out."""
+    names = []
+    for _nid, data in G.nodes(data=True):
+        for name in {str(data.get("label") or ""), Path(str(data.get("source_file") or "")).name}:
+            if name and " " not in name:
+                names.append((name.lower(), {m.start() for m in WORD.finditer(name)}))
+    return names
+
+
+def names_code(term: str, names: list[tuple[str, set[int]]]) -> bool:
+    """True when a question word starts a word inside some symbol or file name: "payout", "sentpayouts" and
+    "betservice" do; "you" inside "PaYOUts" does not. Identifiers and non-Latin words are trusted as typed."""
+    if not term.isascii() or "_" in term or any(c.isdigit() for c in term):
+        return True
+    forms = [term] + ([term[:-1]] if len(term) > 3 and term.endswith("s") else [])
+    for name, starts in names:
+        for form in forms:
+            at = name.find(form)
+            while at != -1:
+                if at in starts:
+                    return True
+                at = name.find(form, at + 1)
+    return False
+
+
+def example_questions(G: nx.Graph) -> list[dict]:
+    """Three questions this project can answer, from its most connected class and method
+    (declared in the project: external types such as Task or ILogger have no source file)."""
+    def top(pattern, among):
+        ranked = sorted(((G.degree(n), str(G.nodes[n].get("label"))) for n in among
+                         if G.nodes[n].get("source_file") and pattern.match(str(G.nodes[n].get("label") or ""))), reverse=True)
+        return [pattern.match(label).group(1) if pattern.groups else label for _deg, label in ranked]
+    classes = top(CLASS, G.nodes)
+    # a method of that class, not a framework call such as AddMediatR() made somewhere
+    methods = (top(METHOD, G.neighbors(next(n for n, d in G.nodes(data=True) if d.get("label") == classes[0])))
+               if classes else []) or top(METHOD, G.nodes)
+    out = []
+    if classes:
+        out += [{"mode": "query", "a": f"How does {classes[0]} work?"}, {"mode": "affected", "a": classes[0]}]
+    if methods:
+        out.insert(1, {"mode": "query", "a": f"What calls {methods[0]}?"})
+    return out[:3]
+
+
+def no_code_answer(G: nx.Graph, unknown: list[str]) -> dict:
+    examples = example_questions(G)
+    label = {"query": "Question", "affected": "Impact"}
+    lines = ([f"No class, method or file in this project is named like: {', '.join(unknown)}."] if unknown else []) + [
+        "Graph search finds code by its names. For questions in your own words, switch to LLM · local model."]
+    if examples:
+        lines += ["", "Try one of these:"] + [f"  {label[e['mode']]}: {e['a']}" for e in examples]
+    return {"text": "\n".join(lines), "nodes": {}, "seeds": [], "suggestions": examples}
 
 
 def levels_from(G: nx.Graph, seeds: list[str], allowed: set[str]) -> dict[str, int]:
@@ -43,6 +103,17 @@ def levels_from(G: nx.Graph, seeds: list[str], allowed: set[str]) -> dict[str, i
 
 
 def ask_query(G: nx.Graph, graph_file: str, question: str, budget: int) -> dict:
+    # Words that name no code would otherwise seed the search from any name merely containing them
+    # ("what question can I give you?" started from GetSentPayoutsAsync). Leave them out, or say so.
+    names = code_names(G)
+    terms = serve._query_terms(question)
+    if terms and set(terms) <= HELP_WORDS:
+        return no_code_answer(G, [])
+    unknown = [t for t in terms if t not in serve._RELATIONAL_INTENT_TERMS and not names_code(t, names)]
+    if terms and len(unknown) == len([t for t in terms if t not in serve._RELATIONAL_INTENT_TERMS]):
+        return no_code_answer(G, unknown or terms)
+    for term in unknown:
+        question = re.sub(rf"(?i)\b{re.escape(term)}\b", " ", question)
     # Mirrors serve._query_graph_text so the highlighted nodes are the ones the text describes.
     qs = serve._score_query(G, serve._query_terms(question), collect_per_term_seeds=True)
     by_term = qs.best_seed_by_term

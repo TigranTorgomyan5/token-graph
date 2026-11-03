@@ -1,0 +1,64 @@
+{
+  "node_count": 20,
+  "edge_count": 22,
+  "relations": {
+    "calls": 3,
+    "contains": 7,
+    "embeds": 1,
+    "imports_from": 3,
+    "method": 6,
+    "references": 2
+  },
+  "test_files": [
+    "wallet/wallet_test.go"
+  ],
+  "generated_files": [
+    "wallet/wallet.pb.go"
+  ],
+  "nodes": [
+    ".Balance() @ wallet/wallet.go L10",
+    ".Balance() @ wallet/wallet.go L22",
+    ".Balance() @ wallet/wallet.go L40",
+    ".Debit() @ wallet/wallet.go L11",
+    ".Debit() @ wallet/wallet.go L26",
+    ".GetAmount() @ wallet/wallet.pb.go L9 [generated]",
+    "BonusWallet @ wallet/wallet.go L35",
+    "IWallet @ wallet/wallet.go L9",
+    "NewWallet() @ wallet/wallet.go L18",
+    "Record() @ ledger/ledger.go L5",
+    "TestDebitReducesBalance() @ wallet/wallet_test.go L5 [test]",
+    "Wallet @ wallet/wallet.go L14",
+    "WalletDto @ wallet/wallet.pb.go L5 [generated]",
+    "example.com/wallet @ go.mod L1",
+    "go_pkg_errors @ <external> <concept>",
+    "go_pkg_testing @ <external> <concept>",
+    "ledger.go @ ledger/ledger.go L1",
+    "testing.T @ <external>",
+    "wallet.pb.go @ wallet/wallet.pb.go L1 [generated]",
+    "wallet_test.go @ wallet/wallet_test.go L1 [test]"
+  ],
+  "edges": [
+    ".Debit() @ wallet/wallet.go --calls--> .Balance() @ wallet/wallet.go",
+    ".Debit() @ wallet/wallet.go --calls--> Record() @ ledger/ledger.go",
+    "BonusWallet @ wallet/wallet.go --embeds--> Wallet @ wallet/wallet.go",
+    "BonusWallet @ wallet/wallet.go --method--> .Balance() @ wallet/wallet.go",
+    "IWallet @ wallet/wallet.go --method--> .Balance() @ wallet/wallet.go",
+    "IWallet @ wallet/wallet.go --method--> .Debit() @ wallet/wallet.go",
+    "NewWallet() @ wallet/wallet.go --references--> Wallet @ wallet/wallet.go",
+    "TestDebitReducesBalance() @ wallet/wallet_test.go --calls--> NewWallet() @ wallet/wallet.go",
+    "TestDebitReducesBalance() @ wallet/wallet_test.go --references--> testing.T @ <external>",
+    "Wallet @ wallet/wallet.go --contains--> BonusWallet @ wallet/wallet.go",
+    "Wallet @ wallet/wallet.go --contains--> IWallet @ wallet/wallet.go",
+    "Wallet @ wallet/wallet.go --contains--> NewWallet() @ wallet/wallet.go",
+    "Wallet @ wallet/wallet.go --contains--> Wallet @ wallet/wallet.go",
+    "Wallet @ wallet/wallet.go --imports_from--> go_pkg_errors @ <external>",
+    "Wallet @ wallet/wallet.go --imports_from--> ledger.go @ ledger/ledger.go",
+    "Wallet @ wallet/wallet.go --method--> .Balance() @ wallet/wallet.go",
+    "Wallet @ wallet/wallet.go --method--> .Debit() @ wallet/wallet.go",
+    "WalletDto @ wallet/wallet.pb.go --method--> .GetAmount() @ wallet/wallet.pb.go",
+    "ledger.go @ ledger/ledger.go --contains--> Record() @ ledger/ledger.go",
+    "wallet.pb.go @ wallet/wallet.pb.go --contains--> WalletDto @ wallet/wallet.pb.go",
+    "wallet_test.go @ wallet/wallet_test.go --contains--> TestDebitReducesBalance() @ wallet/wallet_test.go",
+    "wallet_test.go @ wallet/wallet_test.go --imports_from--> go_pkg_testing @ <external>"
+  ]
+}

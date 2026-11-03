@@ -15,6 +15,7 @@ from local_inference import call, local_models, DEFAULT_ENDPOINT, DEFAULT_MODEL
 
 SCRIPTS = Path(__file__).resolve().parent
 TOKEN_GRAPH = SCRIPTS / 'token_graph.py'
+FALLBACK_MODEL = 'qwen3:8b'
 MAX_ROUNDS = 6
 MAX_CITATION_REPAIRS = 2
 OLLAMA_API = 'http://127.0.0.1:11434'
@@ -210,7 +211,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('project', type=Path)
     parser.add_argument('question', nargs='?')
-    parser.add_argument('--model', help='installed local Ollama model (default: qwen3:14b-q4_K_M if installed)')
+    parser.add_argument('--model', help=f'installed local Ollama model (default: {DEFAULT_MODEL} if installed, else {FALLBACK_MODEL}, else the first installed model)')
     parser.add_argument('--endpoint', default=DEFAULT_ENDPOINT, help='loopback Ollama origin')
     parser.add_argument('--metrics', action='store_true', help='write local inference token and time counters to stderr')
     parser.add_argument('--build', action='store_true', help='deprecated; explorer is read-only, build the graph separately')
@@ -228,7 +229,7 @@ def main() -> int:
         parser.error('No graph found. Build it separately with token_graph.py build.')
     try:
         models = installed_models()
-        model = args.model or (DEFAULT_MODEL if DEFAULT_MODEL in models else next(iter(sorted(models)), None))
+        model = args.model or next((m for m in (DEFAULT_MODEL, FALLBACK_MODEL) if m in models), next(iter(sorted(models)), None))
         if model is None:
             raise ValueError('No local Ollama models are installed. Install a model and retry.')
         if model not in models:
