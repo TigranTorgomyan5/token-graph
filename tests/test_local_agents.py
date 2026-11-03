@@ -76,6 +76,84 @@ class LogTests(unittest.TestCase):
 
 
 class ExplorerTests(unittest.TestCase):
+    def test_endpoint_inventory_sources_selects_indexed_routes_controllers_and_response_pipeline(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            (root / 'graphify-out').mkdir()
+            files = {
+                'cmd/nh-sport/router.go', 'internal/sport/controller.go', 'internal/bonus/controller.go',
+                'internal/health/health.go', 'internal/openapi/openapi.go', 'internal/mvc/mvc.go',
+                'tests/router_test.go',
+            }
+            (root / 'graphify-out/graph.json').write_text(json.dumps({'nodes': [{'source_file': file} for file in files]}))
+            selected = explorer.endpoint_inventory_sources(root)
+            self.assertIn(('cmd/nh-sport/router.go', 55, 20), selected)
+            self.assertIn(('internal/sport/controller.go', 58, 20), selected)
+            self.assertIn(('internal/bonus/controller.go', 44, 34), selected)
+            self.assertIn(('internal/mvc/mvc.go', 313, 49), selected)
+            self.assertIn(('internal/openapi/openapi.go', 160, 5), selected)
+            self.assertFalse(any(file == 'tests/router_test.go' for file, _, _ in selected))
+
+    def test_endpoint_route_hints_preserve_registered_prefixes_and_static_paths(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            (root / 'graphify-out').mkdir()
+            sources = {
+                'cmd/router.go': 'r.With(x).Handle("/metrics", metrics)\n',
+                'internal/sport/controller.go': 'TokenRoute = "api/v1/auth/player/token"\nr.Method(http.MethodPost, "/"+TokenRoute, handler)\n',
+                'internal/health/health.go': 'r.With(x).Get("/live", handler)\n',
+                'internal/openapi/openapi.go': 'documentRoute = "/swagger/{documentName}/swagger.json"\ndocumentName = "v1"\nr.HandleFunc(documentRoute, handler)\nr.HandleFunc("/swagger/"+name, handler)\nr.HandleFunc("/swagger", handler)\n"index.html": {"text/html", true},\n',
+            }
+            nodes = []
+            for filename, content in sources.items():
+                path = root / filename
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content)
+                nodes.append({'source_file': filename})
+            (root / 'graphify-out/graph.json').write_text(json.dumps({'nodes': nodes}))
+            hints = explorer.endpoint_route_hints(root)
+            self.assertIn('POST /api/v1/auth/player/token', hints)
+            self.assertIn('GET /live', hints)
+            self.assertIn('HANDLE /metrics', hints)
+            self.assertIn('GET /swagger/v1/swagger.json', hints)
+            self.assertIn('GET /swagger/{asset}', hints)
+            self.assertIn('GET/HEAD /swagger (redirect)', hints)
+            self.assertIn('/swagger/index.html', hints)
+            self.assertNotIn('If-None-Match', hints)
+
+    def test_endpoint_path_extraction_ignores_parameterized_patterns(self):
+        hints = 'POST /api/v1/token — controller.go:10\nGET /swagger/{asset} — openapi.go:20\nGET /swagger/index.html — openapi.go:30\nGET/HEAD /swagger/ (redirect) — openapi.go:40'
+        self.assertEqual(explorer.endpoint_paths_from_hints(hints), {'/api/v1/token', '/swagger/index.html', '/swagger/'})
+
+    def test_endpoint_inventory_repairs_omitted_registered_path(self):
+        replies = [
+            {'role': 'assistant', 'content': '| GET | /live | router.go:1 |'},
+            {'role': 'assistant', 'content': '| GET | /live | router.go:1 |\n| GET | /ready | router.go:2 |'},
+        ]
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.object(explorer, 'graph_query', return_value=json.dumps({'results': []})), \
+             patch.object(explorer, 'endpoint_inventory_sources', return_value=[('router.go', 1, 2)]), \
+             patch.object(explorer, 'endpoint_route_hints', return_value='GET /live — router.go:1\nGET /ready — router.go:2'), \
+             patch.object(explorer, 'read_source', return_value='1: /live\n2: /ready'), \
+             patch.object(explorer, 'chat', side_effect=replies):
+            result = explorer.explore(Path(directory), 'Inventory every HTTP endpoint', 'local')
+        self.assertIn('/ready', result)
+
+    def test_endpoint_inventory_question_prefetches_routes_and_body_schemas(self):
+        response = 'POST /api/v1/auth/player/token takes a JSON body; fields are in internal/sport/controller.go:124-153.'
+        reads = []
+        def read(project, filename, line=1, count=50):
+            reads.append((filename, line, count))
+            return f'{line}: source line\n{line + count - 1}: last source line'
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.object(explorer, 'graph_query', return_value=json.dumps({'results': []})), \
+             patch.object(explorer, 'endpoint_inventory_sources', return_value=[('cmd/nh-sport/router.go', 55, 20), ('internal/sport/controller.go', 124, 30)]), \
+             patch.object(explorer, 'read_source', side_effect=read), \
+             patch.object(explorer, 'chat', return_value={'role': 'assistant', 'content': response}):
+            answer = explorer.explore(Path(directory), 'Inventory every HTTP endpoint and request and response', 'local')
+        self.assertIn('POST /api/v1/auth/player/token', answer)
+        self.assertEqual(reads, [('cmd/nh-sport/router.go', 55, 20), ('internal/sport/controller.go', 124, 30)])
+
     def test_architecture_prefetch_uses_indexed_production_entry_and_wiring(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
@@ -93,6 +171,11 @@ class ExplorerTests(unittest.TestCase):
             (root / 'graphify-out').mkdir()
             (root / 'graphify-out/graph.json').write_text(json.dumps({'nodes': [{'source_file': 'src/bootstrap.py'}, {'source_file': 'src/service.py'}]}))
             self.assertEqual(explorer.architecture_sources(root), ['src/bootstrap.py', 'src/service.py'])
+
+    def test_endpoint_inventory_uses_larger_bounded_output(self):
+        with patch.object(explorer, 'call', return_value={'message': {'role': 'assistant', 'content': 'Inventory.'}}) as call:
+            explorer.chat([{'role': 'user', 'content': 'Inventory every HTTP endpoint in this service.'}], 'qwen3:14b-q4_K_M')
+        self.assertEqual(call.call_args.kwargs['body']['options']['num_predict'], 2048)
 
     def test_broad_architecture_question_prefetches_source_deterministically(self):
         graph = json.dumps({'results': []})
