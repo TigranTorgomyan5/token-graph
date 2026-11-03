@@ -42,6 +42,7 @@
       ask: { title: 'Ask AI', crumb: 'ASK', hint: 'Questions about the code, answered from this graph with file and line references.', section: '#ask-page' },
       health: { title: 'Health', crumb: 'HEALTH', hint: 'Issues, graph freshness, changes and recent activity.', section: '#health-page', plain: true },
       system: { title: 'System', crumb: 'SYSTEM', hint: 'Several services and how they talk to each other: NATS, Kafka, RabbitMQ, MassTransit, gRPC, HTTP.', section: '#system-page', plain: true },
+      agents: { title: 'Agents', crumb: 'AGENTS', hint: 'Explore code and investigate logs with local tools.', section: '#agents-page', plain: true },
       settings: { title: 'Settings', crumb: 'SETTINGS', hint: 'Projects, local AI and the index.', section: '#settings', plain: true },
     };
     state.page = pages[page] ? page : 'dashboard';
@@ -327,6 +328,7 @@
   }
 
   function initDashboard() {
+    $('.agent-open-explorer').addEventListener('click', () => { showPage('ask'); setAskMode('llm'); $('#ask-a').focus(); });
     $('#dashboard').addEventListener('click', onDashboardClick);
     $('#settings').addEventListener('click', onDashboardClick);
     $('#health-page').addEventListener('click', onDashboardClick);

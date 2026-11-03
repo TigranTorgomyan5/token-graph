@@ -14,6 +14,7 @@
           <button type="button" class="nav-item" data-nav="ask"><span class="nav-icon" aria-hidden="true">✦</span>Ask AI</button>
           <button type="button" class="nav-item" data-nav="health"><span class="nav-icon" aria-hidden="true">♥</span>Health</button>
           <button type="button" class="nav-item" data-nav="system" title="Several services and how they talk: NATS, Kafka, RabbitMQ, gRPC, HTTP"><span class="nav-icon" aria-hidden="true">⬡</span>System</button>
+          <button type="button" class="nav-item" data-nav="agents"><span class="nav-icon" aria-hidden="true">◇</span>Agents</button>
           <div class="nav-label">TOOLS</div>
           <button type="button" class="nav-item" data-nav="changes" title="What the last build or update added, removed or re-connected"><span class="nav-icon" aria-hidden="true">↻</span>Changes</button>
           <button type="button" class="nav-item" data-nav="docs" title="Write Markdown articles for communities and key symbols into graphify-out/wiki"><span class="nav-icon" aria-hidden="true">≡</span>Generate docs</button>
@@ -74,6 +75,26 @@
             <span class="benchmark-detail" id="benchmark-detail">Scanning this project locally…</span>
             <span class="benchmark-source" id="benchmark-source">Estimated savings/query</span>
           </section>
+        </section>
+
+        <section class="agents-page hidden" id="agents-page" aria-label="Local agents">
+          <div class="dash-grid">
+            <article class="dash-card w-6 agent-card" aria-labelledby="agent-explorer-title">
+              <header><h2 id="agent-explorer-title">Code Explorer</h2><span class="agent-badge">Local model</span></header>
+              <div class="dash-body"><p>Answers questions about a project using its graph and source files, with file and line references.</p>
+                <dl><dt>Useful for</dt><dd>Architecture, code paths and endpoint investigation.</dd><dt>Needs</dt><dd>A project graph, the local Token Graph server and an installed Ollama model.</dd><dt>Access</dt><dd>Read-only. It does not build or modify the graph.</dd></dl>
+                <button type="button" class="dash-link primary agent-open-explorer">Open in Ask AI</button>
+                <details><summary>Run in a terminal</summary><pre><code>python3 /path/to/token-graph/scripts/explore_agent.py /path/to/project 'How does authentication work?'</code></pre></details>
+              </div>
+            </article>
+            <article class="dash-card w-6 agent-card" aria-labelledby="agent-logs-title">
+              <header><h2 id="agent-logs-title">Log Analyzer</h2><span class="agent-badge">Terminal</span></header>
+              <div class="dash-body"><p>Groups log errors, reports counts and timelines, and can ask a local model to interpret the results.</p>
+                <dl><dt>Useful for</dt><dd>Investigating failures, repeated errors and related log events.</dd><dt>Needs</dt><dd>A local log file. Ollama is optional when using <code>--no-llm</code>.</dd><dt>Access</dt><dd>Reads the log; redaction is best effort, so review results before sharing.</dd></dl>
+                <details open><summary>Run in a terminal</summary><pre><code>python3 /path/to/token-graph/scripts/log_analyzer.py /path/to/application.log 'What failures occurred?'</code></pre><p class="dash-note">Add <code>--no-llm</code> for statistics without a model.</p></details>
+              </div>
+            </article>
+          </div>
         </section>
 
         <section class="settings hidden" id="settings" aria-label="Settings">

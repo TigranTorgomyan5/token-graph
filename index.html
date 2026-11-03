@@ -247,6 +247,12 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       .system-page{display:flex;flex-direction:column;gap:14px}
       .sys-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
       .sys-toolbar .project-select{max-width:280px}
+      .agent-card p{margin:0;color:#cfd6e6;line-height:1.55}
+      .agent-card dl{display:grid;grid-template-columns:90px minmax(0,1fr);gap:8px 12px;margin:0;font-size:12px;line-height:1.5}
+      .agent-card dt{color:#8f9bb3;font-weight:600}.agent-card dd{margin:0;color:#cfd6e6}
+      .agent-card .dash-link{align-self:flex-start}.agent-card details{color:#aebbd2;font-size:12px}.agent-card summary{cursor:pointer;color:#b8aaff}
+      .agent-card pre{white-space:pre-wrap;overflow-wrap:anywhere;padding:10px;background:#0b1221;border:1px solid #26334c;border-radius:7px}
+      .agent-badge{border:1px solid #5649a5;border-radius:999px;padding:3px 8px;color:#bdb3ff;font-size:11px;white-space:nowrap}
       .sys-project-search{width:min(340px,100%);min-width:220px;border:1px solid #2c3953;border-radius:7px;background:#111a2d;color:#e4e8f4;font:12px var(--sans);padding:7px 9px}
       .sys-project-search:focus{outline:2px solid #665bd0;outline-offset:1px}
       .dash-link.primary{border-color:#8877ff;color:#fff;background:#2a2560}
@@ -313,6 +319,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
           <button type="button" class="nav-item" data-nav="ask"><span class="nav-icon" aria-hidden="true">✦</span>Ask AI</button>
           <button type="button" class="nav-item" data-nav="health"><span class="nav-icon" aria-hidden="true">♥</span>Health</button>
           <button type="button" class="nav-item" data-nav="system" title="Several services and how they talk: NATS, Kafka, RabbitMQ, gRPC, HTTP"><span class="nav-icon" aria-hidden="true">⬡</span>System</button>
+          <button type="button" class="nav-item" data-nav="agents"><span class="nav-icon" aria-hidden="true">◇</span>Agents</button>
           <div class="nav-label">TOOLS</div>
           <button type="button" class="nav-item" data-nav="changes" title="What the last build or update added, removed or re-connected"><span class="nav-icon" aria-hidden="true">↻</span>Changes</button>
           <button type="button" class="nav-item" data-nav="docs" title="Write Markdown articles for communities and key symbols into graphify-out/wiki"><span class="nav-icon" aria-hidden="true">≡</span>Generate docs</button>
@@ -373,6 +380,26 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
             <span class="benchmark-detail" id="benchmark-detail">Scanning this project locally…</span>
             <span class="benchmark-source" id="benchmark-source">Estimated savings/query</span>
           </section>
+        </section>
+
+        <section class="agents-page hidden" id="agents-page" aria-label="Local agents">
+          <div class="dash-grid">
+            <article class="dash-card w-6 agent-card" aria-labelledby="agent-explorer-title">
+              <header><h2 id="agent-explorer-title">Code Explorer</h2><span class="agent-badge">Local model</span></header>
+              <div class="dash-body"><p>Answers questions about a project using its graph and source files, with file and line references.</p>
+                <dl><dt>Useful for</dt><dd>Architecture, code paths and endpoint investigation.</dd><dt>Needs</dt><dd>A project graph, the local Token Graph server and an installed Ollama model.</dd><dt>Access</dt><dd>Read-only. It does not build or modify the graph.</dd></dl>
+                <button type="button" class="dash-link primary agent-open-explorer">Open in Ask AI</button>
+                <details><summary>Run in a terminal</summary><pre><code>python3 /path/to/token-graph/scripts/explore_agent.py /path/to/project 'How does authentication work?'</code></pre></details>
+              </div>
+            </article>
+            <article class="dash-card w-6 agent-card" aria-labelledby="agent-logs-title">
+              <header><h2 id="agent-logs-title">Log Analyzer</h2><span class="agent-badge">Terminal</span></header>
+              <div class="dash-body"><p>Groups log errors, reports counts and timelines, and can ask a local model to interpret the results.</p>
+                <dl><dt>Useful for</dt><dd>Investigating failures, repeated errors and related log events.</dd><dt>Needs</dt><dd>A local log file. Ollama is optional when using <code>--no-llm</code>.</dd><dt>Access</dt><dd>Reads the log; redaction is best effort, so review results before sharing.</dd></dl>
+                <details open><summary>Run in a terminal</summary><pre><code>python3 /path/to/token-graph/scripts/log_analyzer.py /path/to/application.log 'What failures occurred?'</code></pre><p class="dash-note">Add <code>--no-llm</code> for statistics without a model.</p></details>
+              </div>
+            </article>
+          </div>
         </section>
 
         <section class="settings hidden" id="settings" aria-label="Settings">
@@ -2206,7 +2233,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
   function currentNav() {
     if (state.page === 'dashboard') return 'overview';
     if (state.page === 'settings') return 'settings';
-    if (state.page === 'ask' || state.page === 'health' || state.page === 'system') return state.page;
+    if (state.page === 'ask' || state.page === 'health' || state.page === 'system' || state.page === 'agents') return state.page;
     return state.lens === 'architecture' ? 'architecture' : state.lens === 'flow' ? 'flow' : 'graph';
   }
   function updateNav() {
@@ -2238,6 +2265,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     else if (nav === 'settings') showPage('settings');
     else if (nav === 'health') showPage('health');
     else if (nav === 'system') showPage('system');
+    else if (nav === 'agents') showPage('agents');
     updateNav();
   }
   // AI colour: every local model gets its own colour (--ai-color: chip border, Ask borders), so switching
@@ -2800,6 +2828,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       ask: { title: 'Ask AI', crumb: 'ASK', hint: 'Questions about the code, answered from this graph with file and line references.', section: '#ask-page' },
       health: { title: 'Health', crumb: 'HEALTH', hint: 'Issues, graph freshness, changes and recent activity.', section: '#health-page', plain: true },
       system: { title: 'System', crumb: 'SYSTEM', hint: 'Several services and how they talk to each other: NATS, Kafka, RabbitMQ, MassTransit, gRPC, HTTP.', section: '#system-page', plain: true },
+      agents: { title: 'Agents', crumb: 'AGENTS', hint: 'Explore code and investigate logs with local tools.', section: '#agents-page', plain: true },
       settings: { title: 'Settings', crumb: 'SETTINGS', hint: 'Projects, local AI and the index.', section: '#settings', plain: true },
     };
     state.page = pages[page] ? page : 'dashboard';
@@ -3085,6 +3114,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
   }
 
   function initDashboard() {
+    $('.agent-open-explorer').addEventListener('click', () => { showPage('ask'); setAskMode('llm'); $('#ask-a').focus(); });
     $('#dashboard').addEventListener('click', onDashboardClick);
     $('#settings').addEventListener('click', onDashboardClick);
     $('#health-page').addEventListener('click', onDashboardClick);

@@ -4,7 +4,7 @@
   function currentNav() {
     if (state.page === 'dashboard') return 'overview';
     if (state.page === 'settings') return 'settings';
-    if (state.page === 'ask' || state.page === 'health' || state.page === 'system') return state.page;
+    if (state.page === 'ask' || state.page === 'health' || state.page === 'system' || state.page === 'agents') return state.page;
     return state.lens === 'architecture' ? 'architecture' : state.lens === 'flow' ? 'flow' : 'graph';
   }
   function updateNav() {
@@ -36,6 +36,7 @@
     else if (nav === 'settings') showPage('settings');
     else if (nav === 'health') showPage('health');
     else if (nav === 'system') showPage('system');
+    else if (nav === 'agents') showPage('agents');
     updateNav();
   }
   // AI colour: every local model gets its own colour (--ai-color: chip border, Ask borders), so switching
