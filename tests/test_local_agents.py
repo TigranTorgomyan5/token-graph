@@ -17,6 +17,75 @@ from local_inference import endpoint
 
 
 class LogTests(unittest.TestCase):
+    def test_argocd_import_preserves_time_service_and_stack(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / 'argo.json'
+            source.write_text(json.dumps([{'content': 'ERROR DNS failed', 'timeStampStr': '2026-11-04T10:00:00Z'},
+                                          {'content': '    at caller()', 'timeStampStr': '2026-11-04T10:00:00Z'},
+                                          {'content': 'ERROR DNS failed', 'timeStampStr': '2026-11-04T10:00:03Z'}]))
+            text, count = logs.import_records(source, 'argocd', 'casino')
+            normalized = Path(directory) / 'normalized.log'
+            normalized.write_text(text)
+            report = logs.analyze(normalized)
+        self.assertEqual(count, 3)
+        self.assertEqual(report['total_events'], 2)
+        self.assertEqual(report['groups'][0]['service'], 'casino')
+        self.assertEqual(report['groups'][0]['gap_s'], 3.0)
+        self.assertEqual(report['groups'][0]['end_line'], 2)
+
+    def test_structured_status_and_normal_dns_message(self):
+        entry = logs.parse_entry(json.dumps({'level': 'info', 'message': 'DNS cache initialized', 'StatusCode': 503}), 1, 1)
+        self.assertIn('HTTP error', entry['categories'])
+        self.assertNotIn('network error', entry['categories'])
+
+    def test_loki_envelope_imports_timestamp_and_service(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / 'loki.json'
+            source.write_text(json.dumps({'data': {'result': [{'stream': {'service_name': 'gateway'}, 'values': [['1767225600000000000', 'ERROR timeout']]}]}}))
+            text, count = logs.import_records(source, 'loki', '')
+            path = Path(directory) / 'normalized.log'
+            path.write_text(text)
+            report = logs.analyze(path)
+        self.assertEqual(count, 1)
+        self.assertEqual(report['groups'][0]['service'], 'gateway')
+        self.assertEqual(report['groups'][0]['first'], '2026-01-01T00:00:00+00:00')
+
+    def test_tracking_overflow_is_disclosed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'events.log'
+            path.write_text('ERROR alpha\nERROR beta\nERROR gamma\nERROR gamma\n')
+            with patch.object(logs, 'MAX_TRACKED_GROUPS', 2):
+                report = logs.analyze(path)
+        self.assertGreater(report['untracked_events'], 0)
+        self.assertEqual(report['groups'][0]['count'], 2)
+
+    def test_numeric_claim_must_match_its_cited_group(self):
+        evidence = [{'group': 1, 'count': 2, 'line': 1, 'end_line': 1}, {'group': 2, 'count': 17, 'line': 3, 'end_line': 3}]
+        rendered, dropped = logs.check_findings([{'kind': 'observation', 'text': 'There were 17 events.', 'groups': [1]}], evidence)
+        self.assertEqual(rendered, [])
+        self.assertEqual(dropped, 1)
+
+    def test_indented_timestamp_starts_new_event_and_grpc_info_is_not_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            file = Path(directory) / 'input.log'
+            file.write_text('2026-01-01T00:00:00Z INFO grpc server started\n  2026-01-01T00:00:01Z ERROR timeout\n')
+            result = logs.analyze(file)
+        self.assertEqual(result['total_events'], 2)
+        self.assertEqual(result['levels'], {'INFO': 1, 'ERROR': 1})
+        self.assertEqual(len(result['groups']), 1)
+        self.assertEqual(result['groups'][0]['line'], 2)
+        self.assertNotIn('gRPC failure', result['groups'][0]['category'])
+
+    def test_late_frequent_groups_are_ranked_after_group_limit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            file = Path(directory) / 'input.log'
+            file.write_text('ERROR alpha\nERROR beta\nERROR gamma\nERROR gamma\nERROR gamma\n')
+            with patch.object(logs, 'MAX_GROUPS', 2):
+                groups = logs.analyze(file)['groups']
+        self.assertEqual(len(groups), 2)
+        self.assertEqual(groups[0]['count'], 3)
+        self.assertIn('gamma', groups[0]['evidence'])
+
     def test_json_plain_multiline_dedup_timeline_and_secrets(self):
         with tempfile.TemporaryDirectory() as directory:
             file = Path(directory) / 'input.log'
@@ -97,7 +166,7 @@ class LogTests(unittest.TestCase):
         findings[0]['text'] = 'The error repeats every 3.0 seconds.'
         lines, dropped = logs.check_findings(findings, self.EVIDENCE)
         self.assertEqual(dropped, 0)
-        self.assertIn('[group 1: 12 event(s), lines 5-12]', lines[0])
+        self.assertIn('[group 1: 12 event(s), example lines 5-12;', lines[0])
         self.assertTrue(lines[0].startswith('- OBSERVATION'))
 
     def test_findings_with_unknown_group_invented_number_or_no_group_are_dropped(self):

@@ -2,12 +2,14 @@
 """Bounded local log analysis: deterministic statistics, optional Ollama interpretation."""
 from __future__ import annotations
 import argparse
+import heapq
 from collections import Counter
 from datetime import datetime, timezone
 import json
 from pathlib import Path
 import re
 import sys
+import tempfile
 import time
 from urllib.error import URLError
 from local_inference import call, local_models, DEFAULT_ENDPOINT, DEFAULT_MODEL
@@ -16,6 +18,7 @@ MAX_LINES = 200_000
 MAX_LINE = 12_000
 MAX_GROUPS = 500
 MAX_TRACE_IDS = 1000
+MAX_TRACKED_GROUPS = 5000
 TS = re.compile(r'\b(\d{4}-\d\d-\d\d[T ]\d\d:\d\d:\d\d(?:[.,]\d+)?(?:Z|[+-]\d\d:?\d\d)?)')
 LEVEL = re.compile(r'\b(trace|debug|info|warning|warn|error|err|fatal|critical|crit)\b', re.I)
 TRACE = re.compile(r'\b(trace[_-]?id|correlation[_-]?id|request[_-]?id)\s*[=:]\s*["\']?([\w-]{4,128})', re.I)
@@ -33,9 +36,9 @@ CATEGORIES = [
     ('database connection failure', r'(?:postgres|database|\bdb\b).{0,80}(?:connect|refused|unavailable|failed)'),
     ('authentication failure', r'\b(?:unauthori[sz]ed|forbidden|invalid (?:token|credential)|authentication fail)\b'),
     ('HTTP error', r'\b(?:http(?:/\d(?:\.\d)?)?\s*|status(?:_code)?[=: ]+)(?:4\d\d|5\d\d)\b'),
-    ('gRPC failure', r'\b(?:grpc|rpc error|statuscode\.)\b'),
+    ('gRPC failure', r'\b(?:rpc error|statuscode\.(?!ok\b)\w+|grpc.{0,80}\b(?:error|fail(?:ed|ure)?|unavailable|deadline exceeded)\b)\b'),
     ('timeout', r'\b(?:timeout|timed out|deadline exceeded)\b'),
-    ('network error', r'\b(?:connection refused|connection reset|broken pipe|dns|no route to host|network unreachable)\b'),
+    ('network error', r'\b(?:connection refused|connection reset|broken pipe|(?:dns|name resolution).{0,60}(?:fail|error|unavailable|timeout)|(?:fail|error).{0,60}(?:dns|name resolution)|no route to host|network unreachable)\b'),
     ('retry failure', r'\b(?:retry|retries|retrying|attempts exhausted)\b'),
     ('slow request indicator', r'\b(?:slow request|slow query|high latency)\b'),
     ('database latency indicator', r'\b(?:postgres|database|\bdb\b).{0,60}(?:slow|latency)\b'),
@@ -48,6 +51,65 @@ def redact(value: str) -> str:
     for pattern, replacement in REDACTIONS:
         value = pattern.sub(replacement, value)
     return value
+
+
+def import_records(path: Path, source: str, service: str) -> tuple[str, int]:
+    """Convert a bounded Argo CD or Loki JSON response into numbered log lines."""
+    if path.stat().st_size > 50_000_000:
+        raise ValueError('Source response exceeds the 50 MB import limit.')
+    data = json.loads(path.read_text(encoding='utf-8'))
+    if source == 'argocd':
+        if not isinstance(data, list):
+            raise ValueError('Expected an Argo CD log entry array.')
+        records = [(x.get('content'), x.get('timeStampStr') or x.get('timeStamp'), service)
+                   for x in data if isinstance(x, dict) and isinstance(x.get('content'), str) and x.get('content')]
+    else:
+        if not isinstance(data, dict):
+            raise ValueError('Expected a Loki response object.')
+        records = []
+        payload = data.get('data', [])
+        if isinstance(payload, dict):
+            for stream in payload.get('result', []):
+                labels = stream.get('stream', {})
+                for stamp, line in stream.get('values', []):
+                    try:
+                        when = datetime.fromtimestamp(int(stamp) / 1_000_000_000, timezone.utc).isoformat()
+                    except (ValueError, TypeError, OSError, OverflowError):
+                        when = None
+                    records.append((line, when, service or labels.get('service_name', '')))
+            payload = []
+        for item in payload:
+            if isinstance(item, dict) and isinstance(item.get('line'), str):
+                labels = item.get('labels') or {}
+                records.append((item['line'], item.get('timestamp'), service or labels.get('service_name', '')))
+    if not records:
+        raise ValueError('No log entries found in the source response.')
+    lines = []
+    for message, stamp, name in records[:MAX_LINES]:
+        if stamp and not TS.search(str(stamp)):
+            try:
+                stamp = datetime.fromtimestamp(int(str(stamp).strip('"')) / 1_000_000_000, timezone.utc).isoformat()
+            except (ValueError, TypeError, OSError, OverflowError):
+                stamp = None
+        # Argo CD sends stack frames as separate records. Keep them attached to the preceding event.
+        if message.startswith((' ', '\t', 'at ', 'Caused by:')):
+            lines.append(message)
+            continue
+        try:
+            obj = json.loads(message)
+        except ValueError:
+            obj = None
+        if isinstance(obj, dict):
+            if stamp and not (obj.get('timestamp') or obj.get('time')) and TS.search(str(stamp)):
+                obj['timestamp'] = stamp
+            if name and not obj.get('service'):
+                obj['service'] = name
+            lines.append(json.dumps(obj, ensure_ascii=False))
+        else:
+            prefix = (str(stamp) + ' ') if stamp and TS.search(str(stamp)) else ''
+            identity = ('service=' + name + ' ') if name else ''
+            lines.append(prefix + identity + message)
+    return '\n'.join(lines) + '\n', len(records)
 
 
 def timestamp(value: str) -> tuple[str | None, str | None]:
@@ -83,6 +145,9 @@ def parse_entry(text: str, start: int, end: int) -> dict:
     for key in ('trace_id', 'traceId', 'correlation_id', 'correlationId', 'request_id'):
         if isinstance(obj.get(key), str) and re.fullmatch(r'[\w-]{4,128}', obj[key]): trace_ids.add(obj[key])
     categories = [name for name, pattern in CATEGORIES if re.search(pattern, message, re.I)]
+    status = obj.get('StatusCode', obj.get('status_code', obj.get('statusCode')))
+    if str(status).isdigit() and 400 <= int(status) <= 599 and 'HTTP error' not in categories:
+        categories.append('HTTP error')
     return {'line': start, 'end_line': end, 'time': date, 'sort_time': sortable, 'level': level.upper(), 'service': service,
             'message': message, 'categories': categories, 'trace_ids': sorted(trace_ids)}
 
@@ -99,7 +164,7 @@ def events(path: Path):
                     break
             line = raw.rstrip('\r\n')[:MAX_LINE]
             # Stack frames and Python traceback detail belong to the preceding event.
-            continuation = bool(current and (line.startswith((' ', '\t')) or re.match(r'^(?:at |--- End of|Caused by:|goroutine \d+ \[)', line)
+            continuation = bool(current and not TS.match(line.lstrip()) and (line.startswith((' ', '\t')) or re.match(r'^(?:at |--- End of|Caused by:|goroutine \d+ \[)', line)
                                 or ('Traceback (most recent call last)' in current[0] and re.match(r'^[\w.]+(?:Error|Exception|Exit|Interrupt)(?::|$)', line))))
             if continuation:
                 if len(current) < 30: current.append(line)
@@ -134,10 +199,12 @@ def rate(stamps: list[str]) -> dict:
 
 
 def analyze(path: Path, *, service: str = '', level: str = '') -> dict:
-    groups, levels, traces, timeline = {}, Counter(), {}, []
-    total = 0
+    groups, levels, traces, timeline, group_heap = {}, Counter(), {}, [], []
+    total, untracked, partial_start = 0, 0, False
     first, last = None, None
     for event in events(path):
+        if event['line'] == 1 and re.match(r'\s*(?:at |File ")', event['message']):
+            partial_start = True
         if service and service.casefold() not in event['service'].casefold(): continue
         if level and event['level'] != level.upper(): continue
         total += 1
@@ -158,29 +225,45 @@ def analyze(path: Path, *, service: str = '', level: str = '') -> dict:
             if len(timeline) > 20: timeline.pop()
         key = (event['service'], signature(event['message']))
         if key not in groups:
-            if len(groups) >= MAX_GROUPS: continue
+            if len(groups) >= MAX_TRACKED_GROUPS:
+                while group_heap and (group_heap[0][1] not in groups or groups[group_heap[0][1]]['count'] != group_heap[0][0]):
+                    heapq.heappop(group_heap)
+                victim = group_heap[0][1]
+                heapq.heappop(group_heap)
+                untracked += groups[victim]['count']
+                del groups[victim]
             groups[key] = {'category': event['categories'] or ['unclassified error'], 'count': 0, 'service': event['service'],
                            'first': event['time'], 'last': event['time'], 'first_sort': event['sort_time'], 'last_sort': event['sort_time'],
                            'line': event['line'], 'end_line': event['end_line'], 'evidence': event['message'][:1000],
                            'occurrences': [], 'stamps': []}
         group = groups[key]
         group['count'] += 1
+        heapq.heappush(group_heap, (group['count'], key))
+        if len(group_heap) > 2 * MAX_TRACKED_GROUPS:
+            group_heap = [(value['count'], name) for name, value in groups.items()]
+            heapq.heapify(group_heap)
         if len(group['occurrences']) < 10: group['occurrences'].append(event['line'])
         if event['sort_time'] and len(group['stamps']) < 2000: group['stamps'].append(event['sort_time'])
         if event['sort_time'] and (not group['first_sort'] or event['sort_time'] < group['first_sort']): group['first'], group['first_sort'] = event['time'], event['sort_time']
         if event['sort_time'] and (not group['last_sort'] or event['sort_time'] > group['last_sort']): group['last'], group['last_sort'] = event['time'], event['sort_time']
-    ranked = sorted(groups.values(), key=lambda group: (-group['count'], group['line']))
+    ranked = sorted(groups.values(), key=lambda group: (-group['count'], group['line']))[:MAX_GROUPS]
     for group in ranked:
         group.pop('first_sort'); group.pop('last_sort')
-        group.update(rate(group.pop('stamps')))
+        stamps = group.pop('stamps')
+        group.update(rate(stamps))
+        group['rate_sampled'] = group['count'] > len(stamps) and len(stamps) == 2000
     return {'total_events': total, 'levels': dict(levels), 'first': first, 'last': last,
             'groups': ranked, 'timeline': timeline, 'traces': {key: {'count': value['count'], 'services': sorted(value['services']), 'lines': value['lines']}
                         for key, value in sorted(traces.items(), key=lambda item: (-item[1]['count'], item[0]))[:20]}, 'line_limit': MAX_LINES,
+            'untracked_events': untracked,
             'limitations': ['Counts cover at most the first 200000 physical lines; long lines and stack traces are truncated.',
+                            'The input begins with a stack frame; the first event may be incomplete.' if partial_start else 'A sample can still end within a stack trace.',
+                            f'{untracked} error event(s) were omitted or evicted by the group tracking limit; retained counts can be lower bounds.' if untracked else 'All encountered error groups were counted before ranking.',
+                            'Rates based on at most the first 2000 timestamped occurrences are marked as sampled.',
                             'Events without timezone-aware timestamps are not ordered across services.',
                             'Redaction is best effort; inspect logs and output for sensitive data.',
-                            'At most 500 distinct error groups and 1000 trace IDs are retained; summary output shows up to 15 groups.',
-                            'Nested Loki query-response envelopes require conversion to line-delimited events.',
+                            'Up to 500 tracked groups and 1000 trace IDs are returned; summary output shows up to 15 groups. Evictions can affect ranking.',
+                            'For source envelopes use --source argocd or --source loki; retrieval determines coverage.',
                             'Correlation and co-occurrence do not prove causation.']}
 
 
@@ -212,7 +295,6 @@ def check_findings(findings, evidence: list[dict]) -> tuple[list[str], int]:
     number does not exist, or its text contains a number that is not in the evidence. Citations are
     produced from the group's real line range and count, never copied from the model. This is a
     sanity filter, not proof: a finding can cite a real group and still be wrong about it."""
-    allowed = set(re.findall(r'\d+(?:\.\d+)?', json.dumps(evidence)))
     lines, dropped, seen = [], 0, set()
     for item in findings if isinstance(findings, list) else []:
         try:
@@ -222,6 +304,7 @@ def check_findings(findings, evidence: list[dict]) -> tuple[list[str], int]:
             dropped += 1
             continue
         known = {entry['group']: entry for entry in evidence}
+        allowed = set(re.findall(r'\d+(?:\.\d+)?', json.dumps([known[n] for n in groups if n in known])))
         numbers = re.findall(r'(?<![\w.])\d+(?:\.\d+)?(?![\w.]*[A-Za-z_])', text)
         bad = (kind not in {'observation', 'hypothesis', 'check'} or not text or any(number not in known for number in groups)
                or (kind == 'observation' and not groups) or any(number not in allowed for number in numbers) or text.casefold() in seen)
@@ -229,7 +312,7 @@ def check_findings(findings, evidence: list[dict]) -> tuple[list[str], int]:
             dropped += 1
             continue
         seen.add(text.casefold())
-        cite = ''.join(f" [group {number}: {known[number]['count']} event(s), lines {known[number]['line']}-{known[number]['end_line']}]" for number in groups)
+        cite = ''.join(f" [group {number}: {known[number]['count']} event(s), example lines {known[number]['line']}-{known[number]['end_line']}; occurrence lines {', '.join(map(str, known[number].get('occurrences') or [known[number]['line']]))}]" for number in groups)
         label = {'observation': 'OBSERVATION', 'hypothesis': 'HYPOTHESIS (unproven)', 'check': 'SUGGESTED CHECK'}[kind]
         lines.append(f'- {label}: {text}{cite}')
     order = {'OBSERVATION': 0, 'HYPOTHESIS': 1, 'SUGGESTED': 2}
@@ -245,17 +328,27 @@ def main() -> int:
     parser.add_argument('--endpoint', default=DEFAULT_ENDPOINT, help='loopback Ollama origin')
     parser.add_argument('--service', default='')
     parser.add_argument('--level', default='')
+    parser.add_argument('--source', choices=('file', 'argocd', 'loki'), default='file', help='input format (JSON response for argocd or loki)')
+    parser.add_argument('--source-service', default='', help='service name for imported source records')
     parser.add_argument('--no-llm', action='store_true', help='deterministic analysis only')
     args = parser.parse_args()
     try:
         started = time.monotonic()
-        report = analyze(args.log, service=args.service, level=args.level)
+        if args.source == 'file':
+            report = analyze(args.log, service=args.service, level=args.level)
+        else:
+            imported, record_count = import_records(args.log, args.source, args.source_service)
+            with tempfile.TemporaryDirectory(prefix='log-analyzer-') as directory:
+                normalized = Path(directory) / 'input.log'
+                normalized.write_text(imported, encoding='utf-8')
+                report = analyze(normalized, service=args.service, level=args.level)
+            report['limitations'].append(f'{args.source} response contained {record_count} records; source time window and completeness depend on the retrieval request. Line references refer to the normalized input.')
         print('SUMMARY: Deterministic log analysis')
         print('TIME RANGE:', (report['first'] or {}).get('time', 'unknown'), 'to', (report['last'] or {}).get('time', 'unknown'))
         print('TOTAL EVENTS:', report['total_events'], '| LEVELS:', json.dumps(report['levels']))
         print('ERROR GROUPS:')
         for group in report['groups'][:15]:
-            print(f"- {', '.join(group['category'])}: {group['count']} | service={group['service']} | first={group['first']} | last={group['last']} | {'every ~%ss (median)' % group['gap_s'] if group['gap_s'] is not None else 'repeat rate n/a'} | lines {group['line']}-{group['end_line']} | {group['evidence']}")
+            print(f"- {', '.join(group['category'])}: {group['count']} | service={group['service']} | first={group['first']} | last={group['last']} | {'every ~%ss (median%s)' % (group['gap_s'], ', sampled' if group['rate_sampled'] else '') if group['gap_s'] is not None else 'repeat rate n/a'} | example lines {group['line']}-{group['end_line']} | {group['evidence']}")
         print('TIMELINE: Earliest 20 timezone-aware error events; ordering is not causal.')
         for item in report['timeline']:
             print(f"- {item['time']} line {item['line']} {item['service']} {item['message'][:300]}")
