@@ -597,8 +597,10 @@ def called_names(filename: str, body: list[str]) -> list[str]:
     injected interface (e.Service.GetBalanceByWalletID(...))."""
     lang = language(filename)
     names = []
-    for text in body[1:]:
-        if is_comment(lang, text):
+    # A one-line body calls on the declaration line itself: func (a *API) getHistory(...) { a.writeHistory(w, r) }.
+    first = body[0].split('{', 1)[1] if body and '{' in body[0] else ''
+    for text in [first] + body[1:]:
+        if not text or is_comment(lang, text):
             continue
         names.extend(re.findall(r'(?:\.|::|\b)([A-Za-z_]\w*)\s*(?:<[^<>()]*>)?\s*\(', text))
     return [name for name in dict.fromkeys(names) if name not in _NOT_NAMES]

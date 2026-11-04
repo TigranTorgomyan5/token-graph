@@ -235,18 +235,23 @@ QUESTION_STOPWORDS = {'endpoint', 'endpoints', 'route', 'routes', 'request', 're
                       'the', 'how', 'are', 'and', 'for', 'can', 'was', 'its', 'you', 'our', 'why', 'who', 'has', 'had',
                       'get', 'set', 'new', 'all', 'any', 'one', 'use', 'via', 'api'}
 MAX_ROUTE_MATCHES = 3
+METHOD_VERBS = {'PUT': ('update', 'modify', 'change', 'edit', 'replace'), 'PATCH': ('update', 'modify', 'change', 'edit', 'patch'),
+                'DELETE': ('delete', 'remove', 'erase')}
 # Each function is extracted in its own call, so these bound time, not context. Windows end at the function's
 # real body; nh_identity's validateCredentials does its actual hash check at line 32 of its body.
 HANDLER_LINES = 80     # nh_identity's exchangeToken mints the token pair at line 61 of its body
 CALLEE_LINES = 50
-MAX_CALLEES = 4
+MAX_CALLEES = 5
 MAX_CALL_DEPTH = 2      # handler -> callee -> one callee of the first callee
 MAX_FLOW_LINES = 320    # all registration, handler and callee lines together
 # The prefix is case-insensitive (WriteJSON, write_json); the word boundary after it is not, so `val` does not
 # match validateCredentials and `log` does not match login.
-HELPER_NAME = re.compile(r'^(?i:write|log|warn|info|debug|err|error|fail|json|respond|render|send|reply|bad|ok|not_?found|internal|server_?error|'
+# write and internal only as response writers (writeJSON, write_error) and internalServerError: writeHistory and
+# internalUpsert do a config service's real work (nh-config-service-go).
+HELPER_NAME = re.compile(r'^(?i:log|warn|info|debug|err|error|fail|json|respond|render|send|reply|bad|ok|not_?found|server_?error|'
                          r'invalid|opt|trim|str|format|marshal|unmarshal|encode|decode|bind|parse|read|must|new|required|non_?null|val|to|'
-                         r'exec|scan|begin|commit|rollback|require|ensure|valid|is_?valid)(?:[A-Z0-9_]|$)')
+                         r'exec|scan|begin|commit|rollback|require|ensure|valid|is_?valid|internal_?server_?error|internal$|'
+                         r'write_?(?:ok|json|err|error|invalid|problem|response|result|header|status|validation))(?:[A-Z0-9_]|$)')
 MAPPER_NAME = re.compile(r'(?:Dto|DTO|Response|Mapper|View)$|_dto$|^to[A-Z]|^map[A-Z]|_to_')
 HELPER_DIRS = {'log', 'logs', 'logging', 'applog', 'json', 'httpx', 'errors', 'apierror', 'util', 'utils', 'helpers', 'common', 'mvc', 'platform'}
 
@@ -289,7 +294,8 @@ def question_route_sources(project: Path, question: str, hints: str | None = Non
     for line in (endpoint_route_hints(project) if hints is None else hints).splitlines():
         match = re.match(r'(\S+) (/\S*).* — (.+):(\d+)$', line)
         if match and 'swagger' not in line.casefold():
-            routes.append((line, match.group(3), int(match.group(4)), *_path_words(match.group(2)), match.group(2).casefold()))
+            routes.append((line, match.group(3), int(match.group(4)), *_path_words(match.group(2)), match.group(2).casefold(),
+                           match.group(1).split('/')[0]))
     # A word in most route paths ("config" in a config service, "wallets") does not say which route is meant.
     common = {word for word in order if sum(word in route[3] for route in routes) > max(2, len(routes) // 4)}
     words = set(order) - common
@@ -298,12 +304,22 @@ def question_route_sources(project: Path, question: str, hints: str | None = Non
         # Endings are irregular (exclusion/exclude, registration/register): long words sharing 5 letters match.
         return word == part or (len(word) >= 6 and len(part) >= 5 and word[:5] == part[:5])
 
-    for line, filename, number, segments, parts, path in routes:
+    method_counts = {route[6]: sum(other[6] == route[6] for other in routes) for route in routes}
+    rare_methods = {method: count <= max(1, len(routes) // 4) for method, count in method_counts.items()}
+    for route in routes:
+        line, filename, number, segments, parts, path, _ = route
         whole = {word for word in words if any(same_stem(word, segment) for segment in segments)}
         inner = {word for word in words - whole if any(same_stem(word, part) for part in parts - segments)}
         # Count question words, not their stems: "tokens" and its stem "token" are one word.
         whole_words = {order[word] for word in whole}
         score = 2 * len(whole_words) + len({order[word] for word in inner} - whole_words)
+        # A verb in the question names a rare method: "updated" -> PUT, "removed" -> DELETE (not POST, used everywhere).
+        verbs = {word for word in words for method in route[6:7] for verb in METHOD_VERBS.get(method, ()) if same_stem(word, verb)}
+        if verbs and rare_methods.get(route[6]):
+            whole |= verbs
+            whole_words = {order[word] for word in whole}
+            # +1: the method is the route's own statement of what it does (PUT /config over internal/updateConfig).
+            score = 2 * len(whole_words) + len({order[word] for word in inner} - whole_words) + 1
         named = [literal for literal in literal_paths if path == literal or path.startswith(literal.rstrip('*').rstrip('/') + '/')]
         if named:
             score += 10 if any(path == literal for literal in named) else 6
@@ -399,7 +415,14 @@ def question_route_sources(project: Path, question: str, hints: str | None = Non
             # A name-only match needs a distinctive name (GetBalanceByWalletID), not Load or Close, which any
             # type may have: the graph gave no edge, so the name is all that links the call to the definition.
             distinctive = len(called) >= 8 or (len(called) >= 6 and len(re.findall(r'[A-Z]?[a-z]+|[A-Z]+(?![a-z])|\d+', called)) >= 2)
-            node_id = by_location.get(matches[0]) if len(matches) == 1 and distinctive else None
+            # A short name (h.repo.Create) still counts when its only definition is in the handler's own package.
+            local = [item for item in matches if Path(item[0]).parent == Path(handler_file).parent]
+            if len(matches) == 1 and distinctive:
+                node_id = by_location.get(matches[0])
+            elif len(local) == 1 and len(called) >= 4:
+                node_id = by_location.get(local[0])
+            else:
+                node_id = None
             if node_id and node_id not in targets:
                 targets.append(node_id)
         ranked = []
@@ -414,7 +437,9 @@ def question_route_sources(project: Path, question: str, hints: str | None = Non
             # How much work it visibly does: its calls, from the graph or (for calls the graph missed) its body.
             work = max(len(calls.get(target, [])),
                        len(frameworks.called_names(file, frameworks.function_body(source_lines(file), line, CALLEE_LINES))))
-            score = 10 * len(parts & set(order)) + min(8, work)
+            # A question word in the name helps, but must not let store queries that repeat the question's noun
+            # outrank the call doing the side effect (selfExclude's revokeAllSessions).
+            score = 6 * len(parts & set(order)) + min(8, work)
             score += 2 if Path(file).parent == Path(handler_file).parent else 0
             if MAPPER_NAME.search(name):
                 score -= 8    # balanceDto, toResponse: shapes the answer, rarely decides it
@@ -430,12 +455,16 @@ def question_route_sources(project: Path, question: str, hints: str | None = Non
         # a second callee from the same file still fills the slot when nothing else qualifies
         # (addFavourite: GetFavourite, then InsertFavourite).
         ordered = [item for item in sorted(ranked, key=lambda item: (-item[0], item[2], item[3])) if item[0] > 0]
-        picked, files = [], set()
-        for item in ordered:
-            if item[2] not in files and len(picked) < 2:
-                picked.append(item)
-                files.add(item[2])
-        picked += [item for item in ordered if item not in picked][:2 - len(picked)]
+        picked = ordered[:1]
+        if len(ordered) > 1:
+            # The second slot goes to the best callee in another file when it scores at least half as well as
+            # the best one in the same file (revokeAllSessions over a second store query; InsertFavourite
+            # over the much weaker invalidate).
+            same = next((item for item in ordered[1:] if item[2] == picked[0][2]), None)
+            other = next((item for item in ordered[1:] if item[2] != picked[0][2]), None)
+            picked.append(other if other and (not same or other[0] * 2 >= same[0]) else same)
+            # Third slot: the next best of any file (addFavourite: GetFavourite, InsertFavourite, invalidate).
+            picked += [item for item in ordered if item not in picked][:1]
         best = [(name, file, line, target, rank) for rank, (score, name, file, line, target) in enumerate(picked)]
         # Shown in the order the handler calls them, so the answer reads as the request flows.
         position = {name: index for index, name in enumerate(called_order)}
@@ -477,7 +506,7 @@ def question_route_sources(project: Path, question: str, hints: str | None = Non
             deepened = False
             while frontier:
                 caller_id, caller_file, caller_line, caller_label, level = frontier.pop(0)
-                for callee, file, line, callee_id, rank in callees(caller_id, caller_file, caller_line)[:2 if level == 1 else 1]:
+                for callee, file, line, callee_id, rank in callees(caller_id, caller_file, caller_line)[:3 if level == 1 else 1]:
                     size = body_length(file, line, CALLEE_LINES)
                     if callee_budget <= 0 or sum(count for *_, count, _ in sources) + size > MAX_FLOW_LINES:
                         break

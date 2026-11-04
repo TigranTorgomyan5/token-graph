@@ -975,8 +975,8 @@ class ExplorerGroundingTests(unittest.TestCase):
         edges = [{'source': 'h', 'target': t, 'relation': 'calls'} for t in ('u', 'o', 'i', 'v')]
         (root / 'graphify-out/graph.json').write_text(json.dumps({'nodes': nodes, 'edges': edges}))
         whys = [why.split(',')[0] for *_, why in explorer.question_route_sources(root, 'How does self exclusion work?')]
-        self.assertIn('revokeAllSessions', whys)
-        self.assertEqual(1, sum(name in {'HasOverlappingExclusion', 'InsertSelfExclusion'} for name in whys))
+        self.assertIn('revokeAllSessions', whys)      # not crowded out by the second store query
+        self.assertIn('InsertSelfExclusion', whys)
         self.assertNotIn('RequireUser', whys)        # an auth guard is a helper
 
     def test_helper_names_need_a_word_boundary(self):
