@@ -225,6 +225,25 @@ class FrameworkBodyTests(unittest.TestCase):
         self.assertEqual(lines[:6], frameworks.function_body(lines, 1, 40))
 
 
+class ReceiverFieldCallTests(unittest.TestCase):
+    """Go calls through a receiver's fields: a.svc.Update -> the Update method of the field's type."""
+
+    def test_receiver_struct_fields_and_field_calls(self):
+        # Live nh-config-service-go: (a *API) upsert calls a.svc.Update; API has svc *configsvc.Service.
+        self.assertEqual(('a', 'API'), frameworks.receiver('api.go', 'func (a *API) upsert(w http.ResponseWriter, r *http.Request, b binding, update bool) {'))
+        self.assertIsNone(frameworks.receiver('api.go', 'func upsert(w http.ResponseWriter) {'))
+        self.assertIsNone(frameworks.receiver('api.py', 'def upsert(self):'))
+        struct = ['type API struct {', '\tsvc         *configsvc.Service', '\tpaybridge   *paybridge.Client', '\tlog, audit *logging.Logger',
+                  '\tDeps', '\tdevelopment bool // set at start', '}', 'func next() {}']
+        self.assertEqual({'svc': '*configsvc.Service', 'paybridge': '*paybridge.Client', 'log': '*logging.Logger', 'audit': '*logging.Logger',
+                          'Deps': 'Deps', 'development': 'bool'}, frameworks.struct_field_types('api.go', struct, 1))
+        body = ['\tif update {', '\t\te, err = a.svc.Update(ctx, b.root)', '\t} else {', '\t\te, err = a.svc.Create(ctx, b.root)',
+                '\t}', '\t// a.svc.Delete(ctx) is a comment', '\tx.svc.Other()']
+        self.assertEqual([('svc', 'Update'), ('svc', 'Create')], frameworks.field_calls('api.go', body, 'a'))
+        self.assertTrue(frameworks.method_declares('service.go', 'func (s *Service) Update(ctx context.Context, value *jsonx.Node) (*Entity, error) {', 'Service', 'Update'))
+        self.assertFalse(frameworks.method_declares('service.go', 'func (r *Repo) Update(ctx context.Context) error {', 'Service', 'Update'))
+
+
 class FrameworkHandlerTests(unittest.TestCase):
     def test_route_handlers_are_named_in_each_framework(self):
         for location, expected in EXPECTED_HANDLERS.items():

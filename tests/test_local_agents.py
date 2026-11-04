@@ -979,6 +979,58 @@ class ExplorerGroundingTests(unittest.TestCase):
         self.assertIn('InsertSelfExclusion', whys)
         self.assertNotIn('RequireUser', whys)        # an auth guard is a helper
 
+    def test_short_calls_through_receiver_fields_follow_the_field_type(self):
+        # Live nh-config-service-go: a.svc.Update(...) where API.svc is *configsvc.Service. "Update" is too short to
+        # match by name and is declared on other types too; the field's type says which one is called.
+        files = {
+            'internal/api/api.go': ('package api\ntype API struct {\n\tsvc *configsvc.Service\n\tlog *slog.Logger\n}\n'
+                                    'func (a *API) Mount(r chi.Router) {\n\tr.Put("/config/api/v1/config", a.updateConfig)\n}\n'
+                                    'func (a *API) updateConfig(w http.ResponseWriter, r *http.Request) {\n'
+                                    '\tif err := a.svc.Update(r.Context(), doc); err != nil {\n\t\treturn\n\t}\n}\n'),
+            'internal/configsvc/service.go': ('package configsvc\ntype History struct{}\n'
+                                              'func (h *History) Update(ctx context.Context) error {\n\treturn nil\n}\n'
+                                              'func (s *Service) Update(ctx context.Context, doc []byte) error {\n'
+                                              '\tif err := s.store.Save(ctx, doc); err != nil {\n\t\treturn err\n\t}\n'
+                                              '\ts.cache.Reset()\n\treturn s.publish(ctx)\n}\n'),
+            'internal/other/thing.go': 'package other\nfunc (t *Thing) Update(ctx context.Context, doc []byte) error {\n\tt.a()\n\tt.b()\n\treturn t.c()\n}\n',
+        }
+        root = self.make_project(files)
+        nodes = [{'source_file': name} for name in files] + [
+            {'id': 'h', 'label': '.updateConfig()', 'source_file': 'internal/api/api.go', 'source_location': 'L9'},
+            {'id': 'x', 'label': '.Update()', 'source_file': 'internal/configsvc/service.go', 'source_location': 'L3'},
+            {'id': 's', 'label': '.Update()', 'source_file': 'internal/configsvc/service.go', 'source_location': 'L6'},
+            {'id': 't', 'label': '.Update()', 'source_file': 'internal/other/thing.go', 'source_location': 'L2'}]
+        (root / 'graphify-out/graph.json').write_text(json.dumps({'nodes': nodes, 'edges': []}))
+        sources = explorer.question_route_sources(root, 'How is the config updated?')
+        self.assertIn(('internal/configsvc/service.go', 6), [(file, line) for file, line, _, why in sources if why.startswith('Update,')])
+        self.assertNotIn('internal/other/thing.go', [file for file, *_ in sources])
+        self.assertEqual(1, sum(why.startswith('Update,') for *_, why in sources))   # not History.Update too
+
+    def test_deeper_level_reads_the_best_callee_not_the_first_called(self):
+        # Live nh-data-adapter-go: Service.Banners wraps s.repo.Banners in s.cache.GetOrSet, which is called first.
+        files = {
+            'internal/content/handler.go': ('package content\ntype Service struct {\n\trepo *Repository\n\tcache *cache.Cache\n}\n'
+                                            'func (h *Handler) Mount(r chi.Router) {\n\tr.Post("/api/v1/content/banners", h.banners)\n}\n'
+                                            'func (h *Handler) banners(w http.ResponseWriter, r *http.Request) {\n\th.svc.Banners(r.Context())\n}\n'
+                                            'func (s *Service) Banners(ctx context.Context) ([]byte, error) {\n'
+                                            '\treturn s.cache.GetOrSet(ctx, key, func() ([]byte, error) {\n\t\treturn s.repo.Banners(ctx)\n\t})\n}\n'),
+            'internal/content/repository.go': ('package content\nfunc (r *Repository) Banners(ctx context.Context) ([]Banner, error) {\n'
+                                               '\trows := r.db.Query(ctx, q)\n\tdefer rows.Close()\n\treturn scanBanners(rows)\n}\n'),
+            'internal/cache/cache.go': ('package cache\nfunc (c *Cache) GetOrSet(ctx context.Context, key string, load func() ([]byte, error)) ([]byte, error) {\n'
+                                        '\tif v, ok := c.l1.Get(key); ok {\n\t\treturn v, nil\n\t}\n\treturn load()\n}\n'),
+        }
+        root = self.make_project(files)
+        nodes = [{'source_file': name} for name in files] + [
+            {'id': 'h', 'label': '.banners()', 'source_file': 'internal/content/handler.go', 'source_location': 'L9'},
+            {'id': 's', 'label': '.Banners()', 'source_file': 'internal/content/handler.go', 'source_location': 'L12'},
+            {'id': 'r', 'label': '.Banners()', 'source_file': 'internal/content/repository.go', 'source_location': 'L2'},
+            {'id': 'g', 'label': '.GetOrSet()', 'source_file': 'internal/cache/cache.go', 'source_location': 'L2'}]
+        edges = [{'source': 'h', 'target': 's', 'relation': 'calls'}, {'source': 's', 'target': 'g', 'relation': 'calls'}]
+        (root / 'graphify-out/graph.json').write_text(json.dumps({'nodes': nodes, 'edges': edges}))
+        files_read = [file for file, *_ in explorer.question_route_sources(root, 'How are banners fetched?')]
+        self.assertIn('internal/content/repository.go', files_read)   # the query, through s.repo
+        self.assertIn('internal/cache/cache.go', files_read)          # one route matched: room for the second
+
     def registration_project(self):
         # Modelled on nh-player-service-go: register returns sessionId; otp/verify takes authSessionId and
         # returns authorizationCode; oauth/token takes code. WriteValidation sets 422 inside apierror.

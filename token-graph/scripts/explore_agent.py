@@ -252,7 +252,7 @@ HELPER_NAME = re.compile(r'^(?i:log|warn|info|debug|err|error|fail|json|respond|
                          r'invalid|opt|trim|str|format|marshal|unmarshal|encode|decode|bind|parse|read|must|new|required|non_?null|val|to|'
                          r'exec|scan|begin|commit|rollback|require|ensure|valid|is_?valid|internal_?server_?error|internal$|'
                          r'write_?(?:ok|json|err|error|invalid|problem|response|result|header|status|validation))(?:[A-Z0-9_]|$)')
-MAPPER_NAME = re.compile(r'(?:Dto|DTO|Response|Mapper|View)$|_dto$|^to[A-Z]|^map[A-Z]|_to_')
+MAPPER_NAME = re.compile(r'(?:Dto|DTO|Response|Mapper|View|JSON|Json)$|_dto$|^to[A-Z]|^map[A-Z]|_to_')
 HELPER_DIRS = {'log', 'logs', 'logging', 'applog', 'json', 'httpx', 'errors', 'apierror', 'util', 'utils', 'helpers', 'common', 'mvc', 'platform'}
 
 
@@ -399,6 +399,51 @@ def question_route_sources(project: Path, question: str, hints: str | None = Non
         source = source_lines(file)
         return max(1, len(frameworks.function_body(source, line, cap))) if source else cap
 
+    production_files = sorted({file for file, _ in (item for items in definitions.values() for item in items)})
+
+    def field_call_targets(handler_file: str, handler_line: int) -> list[str]:
+        """Calls through the receiver's fields that a short name alone cannot place: a.svc.Update(...) in
+        func (a *API) is configsvc.Service.Update when API's field svc is *configsvc.Service. The adapter reads
+        the receiver, the struct's field types and the method declarations; languages it does not know give none."""
+        source = source_lines(handler_file)
+        if not 0 < handler_line <= len(source):
+            return []
+        owner = frameworks.receiver(handler_file, source[handler_line - 1])
+        if not owner:
+            return []
+        variable, type_name = owner
+        language = frameworks.language(handler_file)
+        declaration = frameworks.type_declaration(language, type_name)
+        directory = Path(handler_file).parent
+        fields = {}
+        for file in (f for f in production_files if Path(f).parent == directory):
+            lines = source_lines(file)
+            number = next((n for n, text in enumerate(lines, 1) if declaration and declaration.match(text)), None)
+            if number:
+                fields = frameworks.struct_field_types(file, lines, number)
+                break
+        body = frameworks.function_body(source, handler_line, HANDLER_LINES)
+        found = []
+        for field, method in frameworks.field_calls(handler_file, body, variable):
+            field_type = re.sub(r'^[\s*&\[\]]+', '', fields.get(field, ''))
+            match = re.fullmatch(r'(?:(\w+)\.)?([A-Za-z_]\w*)', field_type)
+            if not match:
+                continue
+            package, target_type = match.groups()
+            matches = []
+            for file, line in definitions.get(method, []):
+                if frameworks.language(file) != language:
+                    continue
+                if (Path(file).parent.name != package) if package else (Path(file).parent != directory):
+                    continue
+                real = declared_at(file, line, method)
+                lines = source_lines(file)
+                if 0 < real <= len(lines) and frameworks.method_declares(file, lines[real - 1], target_type, method):
+                    matches.append((file, line))      # the graph's line: the key of its node
+            if len(matches) == 1 and by_location.get(matches[0]):
+                found.append(by_location[matches[0]])
+        return found
+
     def callees(handler_id: str, handler_file: str, handler_line: int) -> list[tuple[str, str, int, str]]:
         """The handler's callees most likely to hold the answer, from the graph's call edges (any language),
         plus calls the graph did not resolve (a method on a struct field or injected interface), matched
@@ -424,6 +469,9 @@ def question_route_sources(project: Path, question: str, hints: str | None = Non
             else:
                 node_id = None
             if node_id and node_id not in targets:
+                targets.append(node_id)
+        for node_id in field_call_targets(handler_file, handler_line):
+            if node_id not in targets and node_id != handler_id:
                 targets.append(node_id)
         ranked = []
         for target in targets:
@@ -506,7 +554,12 @@ def question_route_sources(project: Path, question: str, hints: str | None = Non
             deepened = False
             while frontier:
                 caller_id, caller_file, caller_line, caller_label, level = frontier.pop(0)
-                for callee, file, line, callee_id, rank in callees(caller_id, caller_file, caller_line)[:3 if level == 1 else 1]:
+                found = callees(caller_id, caller_file, caller_line)
+                # callees() lists in call order; below the handler the best-ranked are read, not the first called
+                # (Service.Banners: repo.Banners, then the cache.GetOrSet wrapped around it). The second one only
+                # when the question matched one route, so several routes keep the budget for their own handlers.
+                deep = 1 if len(best) == 1 else 0
+                for callee, file, line, callee_id, rank in (found[:3] if level == 1 else [item for item in found if item[4] <= deep]):
                     size = body_length(file, line, CALLEE_LINES)
                     if callee_budget <= 0 or sum(count for *_, count, _ in sources) + size > MAX_FLOW_LINES:
                         break

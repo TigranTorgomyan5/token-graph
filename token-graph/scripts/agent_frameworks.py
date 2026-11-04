@@ -637,6 +637,59 @@ def handler_name(filename: str, lines: list[str], number: int) -> str | None:
     return handler_reference(filename, lines, number)[0]
 
 
+# ── Calls through a receiver's fields (a.svc.Update -> configsvc.Service.Update) ──
+
+def receiver(filename: str, declaration: str) -> tuple[str, str] | None:
+    """(variable, type) of a method's receiver: func (a *API) updateConfig(...) -> ('a', 'API'). Go only."""
+    if language(filename) != 'go':
+        return None
+    match = re.match(r'\s*func\s*\(\s*(\w+)\s+\*?([A-Za-z_]\w*)(?:\[[^\]]*\])?\s*\)', declaration)
+    return (match.group(1), match.group(2)) if match else None
+
+
+def struct_field_types(filename: str, lines: list[str], number: int) -> dict[str, str]:
+    """Every field of the Go struct declared at lines[number - 1], exported or not: {name: type}.
+    Embedded fields map their type name to itself."""
+    if language(filename) != 'go' or not 0 < number <= len(lines):
+        return {}
+    fields, depth = {}, 0
+    for index in range(number - 1, min(len(lines), number + 120)):
+        text = lines[index]
+        depth += text.count('{') - text.count('}')
+        if index > number - 1 and depth <= 0:
+            break
+        stripped = text.split('//')[0].strip()
+        if index == number - 1 or not stripped:
+            continue
+        embedded = re.match(r'\*?(?:\w+\.)?([A-Za-z_]\w*)\s*(?:`[^`]*`)?$', stripped)
+        if embedded:
+            fields[embedded.group(1)] = stripped.split('`')[0].strip()
+            continue
+        match = re.match(r'(\w+(?:\s*,\s*\w+)*)\s+([^`]+?)\s*(?:`[^`]*`)?$', stripped)
+        if match:
+            for name in match.group(1).split(','):
+                fields[name.strip()] = match.group(2).strip()
+    return fields
+
+
+def field_calls(filename: str, body: list[str], variable: str) -> list[tuple[str, str]]:
+    """(field, method) of each call through the receiver's fields: a.svc.Update(...) -> ('svc', 'Update')."""
+    if language(filename) != 'go':
+        return []
+    calls = []
+    for text in body:
+        if not is_comment('go', text):
+            calls += re.findall(r'\b' + re.escape(variable) + r'\.(\w+)\.(\w+)\s*\(', text)
+    return list(dict.fromkeys(calls))
+
+
+def method_declares(filename: str, line: str, type_name: str, method: str) -> bool:
+    """Whether line declares method on type_name: func (s *Service) Update(...)."""
+    if language(filename) != 'go':
+        return False
+    return bool(re.match(r'\s*func\s*\(\s*\w+\s+\*?' + re.escape(type_name) + r'(?:\[[^\]]*\])?\s*\)\s*' + re.escape(method) + r'\s*\(', line))
+
+
 # ── Request and response bodies ──────────────────────────────────────────────
 #
 # Found by code from the handler's own lines and the type definitions they name. A body type is
@@ -880,14 +933,21 @@ def response_writes(filename: str, body: list[tuple[int, str]], limit: int = 12)
             status = 200
         indent = len(line) - len(line.lstrip())
         when = None
-        for _, previous in reversed(body[max(0, index - 6):index]):
-            condition = re.match(r'\s*(?:\}\s*else\s+)?(?:if|elif|else\s+if)\s*(.+?)\s*[{:]\s*$|\s*case\s+(.+?):\s*$', previous)
-            if condition and len(previous) - len(previous.lstrip()) < indent:
-                when = (condition.group(1) or condition.group(2)).strip()
+        # The enclosing condition is the nearest line above at a lower indent, and only if it opens an if/case:
+        # an earlier, already closed if (if req.ReasonCode != nil { ... }) is not it. A multi-line condition
+        # (if err := m.store.Insert(ctx,\n ...); err != nil {) is quoted by its first line and marked as cut.
+        for _, previous in reversed(body[1:index]):
+            if not previous.strip() or len(previous) - len(previous.lstrip()) >= indent:
+                continue
+            opener = re.match(r'\s*(?:\}\s*else\s+)?(?:if|elif|else\s+if)\b\s*(.+?)\s*$|\s*case\s+(.+?):\s*$', previous)
+            if opener:
+                when = (opener.group(1) or opener.group(2)).strip()
+                complete = when.endswith(('{', ':'))
+                when = when.rstrip('{:').strip()
                 if when.startswith('(') and when.endswith(')'):     # C-like if (cond) { ... }
                     when = when[1:-1].strip()
-                when = when[:90]
-                break
+                when = when[:90] + ('' if complete else ' …')
+            break
         # The whole call, joined until its parentheses close: map[string]any{ "messageSent": true, ... })
         call, depth = [line.strip()], line.count('(') - line.count(')')
         for _, following in body[index + 1:index + 8]:
