@@ -43,7 +43,10 @@ def classify_source(source_file: str) -> str:
         return "evaluation_fixture"
     if any(part in {"docs", "doc", "documentation", "wiki"} for part in parts) or name.endswith((".md", ".mdx", ".rst", ".adoc")):
         return "documentation"
-    if any(part in {"examples", "example", "samples", "sample"} for part in parts):
+    # com/example/shop is the package com.example.shop (Spring Initializr's default), not an examples folder.
+    package_roots = {"com", "org", "net", "io", "dev", "co", "me", "edu", "gov"}
+    if any(part in {"examples", "example", "samples", "sample"} and not (index and parts[index - 1] in package_roots)
+           for index, part in enumerate(parts)):
         return "example"
     if is_test({"source_file": path}):
         return "test"

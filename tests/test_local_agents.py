@@ -592,7 +592,7 @@ class ExplorerGroundingTests(unittest.TestCase):
         facts = self.facts(*[(f'Startup step {n} runs', n, n, [f'run_{n}']) for n in range(1, 41)])
         # 40 lines, 12 facts max in the schema; ask for as many as validate.
         answer = self.overview(files, [facts])
-        self.assertLessEqual(answer.count('\n- '), explorer.MAX_PER_FILE)
+        self.assertLessEqual(answer.count('\n- '), explorer.MAX_PER_ENTRY_FILE)   # app.py is an entry file
         self.assertIn('further validated fact(s) omitted for brevity', answer)
 
     def test_routes_section_comes_from_code_not_the_model(self):
@@ -601,6 +601,446 @@ class ExplorerGroundingTests(unittest.TestCase):
             answer = self.overview(files, [self.facts(('Health route is registered', 1, 1, ['health']))])
         self.assertIn('extracted from route declarations by code, not by the model', answer)
         self.assertIn('- GET /health', answer)
+
+    def test_entry_points_are_found_by_code_and_background_runs_are_not_servers(self):
+        shown = {'cmd/a/main.go': {33: 'func main() {', 90: '\t\tmods.warmup.Run(stopping)', 94: '\tlistener, err := net.Listen("tcp", address)',
+                                   112: '\t\tif err := srv.Serve(listener); err != nil {', 113: '\t// srv.Serve(x) in a comment'},
+                 'internal/x/router.go': {5: 'func main() {'},                                   # not an entry file
+                 'src/app.py': {40: 'if __name__ == "__main__":', 41: '    uvicorn.run(app)'}}
+        found = '\n'.join(explorer.entry_points(shown))
+        self.assertIn('process entry: `func main()` — cmd/a/main.go:33', found)
+        self.assertIn('cmd/a/main.go:94', found)
+        self.assertIn('cmd/a/main.go:112', found)
+        self.assertNotIn(':90', found)       # a background worker is not a server start
+        self.assertNotIn(':113', found)      # commented-out code
+        self.assertNotIn('router.go', found)
+        self.assertIn('src/app.py:40', found)
+        self.assertIn('src/app.py:41', found)
+
+    def test_lifecycle_and_route_mounting_are_found_by_code(self):
+        shown = {'cmd/a/main.go': {80: '\trootCtx, stop := signal.NotifyContext(ctx, syscall.SIGTERM)', 143: '\tif err := srv.Shutdown(shutdownCtx); err != nil {'},
+                 'cmd/a/router.go': {67: '\thealth.Mount(r, d.readiness, d.log)', 70: '\t\tc.Mount(r, d.log)'},
+                 'internal/x/service.go': {9: '\tc.Mount(r, log)'},                              # not an entry/composition file
+                 'src/main.py': {3: 'app.include_router(users.router)', 9: 'signal.signal(signal.SIGTERM, stop)'}}
+        found = '\n'.join(explorer.entry_points(shown))
+        self.assertIn('signal handling: `rootCtx', found)
+        self.assertIn('shutdown: `if err := srv.Shutdown', found)
+        self.assertIn('routes mounted: `c.Mount(r, d.log)` — cmd/a/router.go:70', found)
+        self.assertIn('cmd/a/router.go:67', found)
+        self.assertNotIn('service.go', found)
+        self.assertIn('routes mounted: `app.include_router(users.router)` — src/main.py:3', found)
+        self.assertIn('signal handling: `signal.signal', found)
+
+    def test_route_hints_find_subrouters_helper_wrappers_and_module_files(self):
+        # Live nh-gateway-go shapes: routes in an ordinary module file, a sub-router receiver, and a catchAll helper.
+        files = {
+            'internal/modules/gaming/gaming.go': 'package gaming\nfunc (m *M) Mount(r chi.Router) {\n\tgr.Post("/v1/gaming/catalog/GetGames", m.get)\n'
+                                                '\tct := resp.Header.Get("Content-Type")\n}\n',
+            'internal/forwarding/routes.go': 'package forwarding\nfunc Mount(r chi.Router) {\n\tcatchAll(r, "/v1/otp", h)\n}\n'
+                                             'func catchAll(r chi.Router, prefix string, h http.Handler) {\n\tr.Method(http.MethodPost, prefix, h)\n'
+                                             '\tr.Method(http.MethodPost, prefix+"/*", h)\n}\n',
+        }
+        root = self.make_project(files)
+        hints = explorer.endpoint_route_hints(root)
+        self.assertIn('POST /v1/gaming/catalog/GetGames — internal/modules/gaming/gaming.go:3', hints)
+        self.assertNotIn('Content-Type', hints)                          # not a route: no leading "/"
+        self.assertIn('POST /v1/otp (and /v1/otp/* via catchAll) — internal/forwarding/routes.go:3', hints)
+
+    def test_chi_route_prefixes_are_applied_and_closed(self):
+        files = {'internal/modules/user/user.go': 'package user\nfunc (m *Module) Mount(r chi.Router) {\n\tr.Route("/v1/user", func(r chi.Router) {\n'
+                                                  '\t\tr.Post("/get", m.get)\n\t\tr.Route("/security", func(r chi.Router) {\n\t\t\tr.Post("/deactivate", m.d)\n\t\t})\n'
+                                                  '\t})\n\tr.Get("/health", m.h)\n}\n'}
+        hints = explorer.endpoint_route_hints(self.make_project(files))
+        self.assertIn('POST /v1/user/get — internal/modules/user/user.go:4', hints)
+        self.assertIn('POST /v1/user/security/deactivate — internal/modules/user/user.go:6', hints)
+        self.assertIn('GET /health — internal/modules/user/user.go:9', hints)      # outside the Route block again
+
+    def test_config_path_accessors_are_not_routes(self):
+        # Live nh_identity: core.Path("phoneCountryCode", "default") was listed as "URLPATTERN phoneCountryCode".
+        files = {'internal/authconfig/authconfig.go': 'package authconfig\nfunc f() {\n\td, ok := core.Path("phoneCountryCode", "default")\n'
+                                                      '\tr.Get("/live", h)\n}\n'}
+        hints = explorer.endpoint_route_hints(self.make_project(files))
+        self.assertNotIn('phoneCountryCode', hints)
+        self.assertNotIn('URLPATTERN', hints)
+        self.assertIn('GET /live — internal/authconfig/authconfig.go:4', hints)
+
+    def test_go_route_helpers_with_path_parameters(self):
+        # Live nh-wallet-adapter-go: generic helper post(g, ..., "wallets/balance", ...) -> r.With(...).Post("/"+pattern, ...).
+        # Live nh-config-service-go: closure cfg(http.MethodGet, "config/api/v1/config", ...) -> rt.Handle(method, "/"+path, ...).
+        files = {
+            'internal/walletapi/endpoints.go': (
+                'package walletapi\nfunc Mount(r chi.Router, d Deps) {\n\tr.Group(func(g chi.Router) {\n'
+                '\t\tpost(g, d.Log, d.Prepare, "wallets/balance", "BalanceRequest", readBalance, validate, e.balance)\n\t})\n}\n'
+                'func post[P body](r chi.Router, log *slog.Logger, prepare func(context.Context), pattern, typeName string, read func(*netjson.Value) P) {\n'
+                '\tr.With(aspnet.Endpoint(log, EndpointName("/"+pattern))).Post("/"+pattern, func(w http.ResponseWriter, req *http.Request) {\n\t})\n}\n'),
+            'internal/api/api.go': (
+                'package api\nfunc (a *API) Mount(rt *httpx.Router) {\n\tcfg := func(method, path, name string, h http.HandlerFunc) {\n'
+                '\t\trt.Handle(method, "/"+path, path, action("ConfigController", name), h)\n\t}\n'
+                '\tcfg(http.MethodPut, "config/api/v1/config", "UpdateConfig", a.updateConfig)\n'
+                '\trt.Handle(http.MethodPost, "/config/api/v1/external/payment-services", "x", a.paymentServices)\n}\n'),
+            'internal/auth/oauth.go': (
+                'package auth\nfunc headerPtr(r *http.Request, name string) *string {\n\tv := r.Header.Get(name)\n\treturn &v\n}\n'
+                'func f(r *http.Request) {\n\tcountry := headerPtr(r, "CF-IPCountry")\n}\n'),
+        }
+        hints = explorer.endpoint_route_hints(self.make_project(files))
+        self.assertIn('POST /wallets/balance — internal/walletapi/endpoints.go:4', hints)
+        self.assertIn('PUT /config/api/v1/config — internal/api/api.go:6', hints)
+        self.assertIn('POST /config/api/v1/external/payment-services — internal/api/api.go:7', hints)
+        self.assertNotIn('POST / —', hints)          # the helper's own "/"+pattern line is not a route
+        self.assertNotIn('CF-IPCountry', hints)       # a header read is not a route
+
+    def test_map_indexing_and_comments_are_not_attribute_routes(self):
+        # Live nh_identity byPattern[route] and nh-sport-go comments quoting [Route("api/v1/auth")].
+        files = {'internal/app/allow.go': 'package app\nfunc f() {\n\tbyPattern[route][method] = true\n}\n',
+                 'internal/sport/controller.go': '// Routes, as [Route("api/v1/auth")] write them.\npackage sport\n',
+                 'Controllers/AuthController.cs': '[Route("api/v1/auth")]\npublic class AuthController {\n    [HttpPost("login")]\n    public IActionResult Login() {}\n}\n'}
+        hints = explorer.endpoint_route_hints(self.make_project(files))
+        self.assertNotIn('allow.go', hints)
+        self.assertNotIn('controller.go', hints)
+        self.assertIn('POST /api/v1/auth/login — Controllers/AuthController.cs:3', hints)   # class [Route] is the prefix
+
+    def route_project(self):
+        auth = ('package auth\nfunc (m *Module) Mount(r chi.Router) {\n\tr.Post("/v1/authentication/login", m.login)\n'
+                '\tr.Post("/v1/authentication/forgotPassword", m.forgot)\n\tr.Post("/v1/oauth/token", m.exchangeToken)\n'
+                '\tr.Post("/v1/otp/verify", m.otpVerify)\n\tr.Post("/v1/user/favourites/add", m.addFavourite)\n'
+                '\tr.Method(http.MethodPost, "/v1/bonus/contract/get", c.get.Endpoint(log, c.get.Handler(\n'
+                '\t\tfunc() mvc.Body { return &getRequest{} }, "request", c.getContract)))\n}\n'
+                + 'func (m *Module) login(w http.ResponseWriter, r *http.Request) {\n\tm.validateCredentials(w, r)\n}\n' * 1)
+        root = self.make_project({'internal/auth/auth.go': auth, 'internal/applog/events.go': 'package applog\nfunc Login() {}\n',
+                                  'internal/auth/oauth.go': 'package auth\nfunc (m *Module) exchangeToken() {}\n'})
+        nodes = [{'source_file': 'internal/auth/auth.go'}, {'source_file': 'internal/applog/events.go'},
+                 {'label': 'Login()', 'source_file': 'internal/applog/events.go', 'source_location': 'L2'},
+                 {'label': '.login()', 'source_file': 'internal/auth/auth.go', 'source_location': 'L11'},
+                 {'label': '.exchangeToken()', 'source_file': 'internal/auth/oauth.go', 'source_location': 'L2'},
+                 {'label': '.getContract()', 'source_file': 'internal/auth/auth.go', 'source_location': 'L11'},
+                 {'label': 'login()', 'source_file': 'tests/contract/helpers_test.go', 'source_location': 'L1'}]
+        (root / 'graphify-out/graph.json').write_text(json.dumps({'nodes': nodes}))
+        return root
+
+    def test_question_naming_a_route_reads_its_registration_and_handler(self):
+        # Live nh_identity: graph keyword search returned applog.Login and a test helper, never the login handler.
+        sources = explorer.question_route_sources(self.route_project(), 'How does the login endpoint verify the password and issue tokens?')
+        whys = [why for *_, why in sources]
+        self.assertIn(('internal/auth/auth.go', 11, 3, 'handler login of POST /v1/authentication/login'), sources)  # 3 = the body
+        self.assertIn('handler exchangeToken of POST /v1/oauth/token', whys)        # "tokens" -> token; not crowded out by verify
+        self.assertFalse(any('forgotPassword' in why for why in whys))            # a camelCase part alone is not enough
+        self.assertFalse(any(file.startswith(('internal/applog', 'tests/')) for file, *_ in sources))
+
+    def test_question_route_sources_follow_graph_calls_to_the_real_work(self):
+        # Live nh_identity: login calls validateCredentials (the password check), applog.LoginOK and WriteJSON.
+        # The graph's call edges are language-neutral; helpers are ranked below the function doing the work,
+        # even when the helper's name contains a question word ("LoginOK" for "login").
+        root = self.route_project()
+        nodes = json.loads((root / 'graphify-out/graph.json').read_text())['nodes'] + [
+            {'id': 'h', 'label': '.login()', 'source_file': 'internal/auth/auth.go', 'source_location': 'L11'},
+            {'id': 'v', 'label': '.validateCredentials()', 'source_file': 'internal/auth/auth.go', 'source_location': 'L48'},
+            {'id': 'ok', 'label': 'LoginOK()', 'source_file': 'internal/applog/events.go', 'source_location': 'L2'},
+            {'id': 'w', 'label': 'WriteJSON()', 'source_file': 'internal/httpx/json.go', 'source_location': 'L1'}]
+        nodes = [node for node in nodes if not (node.get('label') == '.login()' and 'id' not in node)]
+        edges = [{'source': 'h', 'target': target, 'relation': 'calls'} for target in ('ok', 'w', 'v')]
+        (root / 'graphify-out/graph.json').write_text(json.dumps({'nodes': nodes, 'edges': edges}))
+        with open(root / 'internal/auth/auth.go', 'a') as handle:
+            handle.write('\n' * 34 + 'func (m *Module) validateCredentials() {\n\tplayer := m.player.GetByPhone(phone)\n'
+                         '\tif player == nil {\n\t\treturn refuse()\n\t}\n\tm.hasher.Verify(password)\n}\n')
+        sources = explorer.question_route_sources(root, 'How does the login endpoint check the password?')
+        whys = [why for *_, why in sources]
+        self.assertIn('validateCredentials, called by handler login', whys)
+        self.assertFalse(any(why.startswith(('LoginOK', 'WriteJSON')) for why in whys))
+
+    def test_handler_qualifier_picks_the_named_module(self):
+        # Live nh-identity-rust: post(authentication::login) resolved to events.rs's login() before the qualifier was used.
+        files = {'src/auth.rs': 'pub fn routes() -> Router {\n    Router::new()\n        .route("/v1/authentication/login", post(authentication::login))\n}\n',
+                 'src/events.rs': 'pub fn login() {}\n', 'src/auth/authentication.rs': 'pub async fn login() {}\n'}
+        root = self.make_project(files)
+        nodes = [{'source_file': name} for name in files] + [
+            {'id': 'e', 'label': 'login()', 'source_file': 'src/events.rs', 'source_location': 'L1'},
+            {'id': 'a', 'label': 'login()', 'source_file': 'src/auth/authentication.rs', 'source_location': 'L1'}]
+        (root / 'graphify-out/graph.json').write_text(json.dumps({'nodes': nodes}))
+        sources = explorer.question_route_sources(root, 'How does login work?')
+        self.assertIn(('src/auth/authentication.rs', 1, 1, 'handler login of POST /v1/authentication/login'), sources)
+        self.assertFalse(any(file == 'src/events.rs' for file, *_ in sources))
+
+    def test_purpose_quote_never_cuts_a_word(self):
+        # Live nh_identity: a fixed 400-char cut turned "nh-player-service V5.0 calls." into "... V5.0 call".
+        sentence = 'This service owns registration and login, password reset and token exchange for every player. '
+        lines = {1: '// ' + sentence * 3, 2: '// ' + sentence * 4 + 'Final words here.', 3: 'package main'}
+        quote = explorer.purpose_lines({'cmd/svc/main.go': lines})[0].split(' — ')[0]
+        self.assertTrue(quote.endswith('player. …'), quote[-40:])
+        self.assertLessEqual(len(quote), explorer.PURPOSE_CHARS + 2)
+        short = explorer.purpose_lines({'cmd/svc/main.go': {1: '// Command svc serves orders.', 2: 'package main'}})
+        self.assertEqual(['Command svc serves orders. — cmd/svc/main.go:1-1'], short)
+
+    def test_route_question_answer_is_steps_per_function_checked_by_code(self):
+        # Live nh-wallet-adapter-go: the free-form answer only listed where functions are defined.
+        root = self.route_project()
+        def fake_json(messages, model, schema=None):
+            excerpt = messages[-1]['content']
+            if 'handler login' in excerpt:
+                return json.dumps({'facts': [
+                    {'claim': 'The handler checks the credentials', 'start': 12, 'end': 12, 'identifiers': ['validateCredentials']},
+                    {'claim': 'It issues a refresh token', 'start': 12, 'end': 12, 'identifiers': ['issueRefreshToken']}]})  # not in the line
+            return json.dumps({'facts': []})
+        with patch.object(explorer, 'graph_query', return_value=json.dumps({'results': []})), \
+             patch.object(explorer, 'chat_json', side_effect=fake_json), \
+             patch.object(explorer, 'chat', side_effect=AssertionError('free-form answer not expected')):
+            answer = explorer.explore(root, 'How does the login endpoint work?', 'm')
+        self.assertIn('**Code path**', answer)
+        self.assertIn('registration of POST /v1/authentication/login — internal/auth/auth.go:', answer)
+        self.assertIn('The handler checks the credentials. `validateCredentials` internal/auth/auth.go:12-12', answer)
+        self.assertNotIn('issueRefreshToken', answer)          # identifier absent from the cited line: dropped
+        self.assertIn('1 candidate claim(s) were dropped', answer)
+        self.assertIn(explorer.CITATION_CAVEAT, answer)
+
+    def test_stale_graph_lines_snap_to_the_real_declaration_and_follow_two_levels(self):
+        # Live nh_identity: the graph put otp verify at L150 (file: 159) and login at L138 (file: 139), so the
+        # excerpts started on a blank line and a comment. Live nh-wallet-adapter-go: balanceDto (a mapper)
+        # outranked GetBalanceByWalletID, so the second level followed currencyOf, not resolveByWalletID.
+        files = {
+            'internal/walletapi/endpoints.go': ('package walletapi\nfunc Mount(r chi.Router) {\n\tr.Post("/wallets/balance", e.balance)\n}\n'
+                                                + '\n' * 9 + 'func (e *endpoints) balance(w http.ResponseWriter) error {\n'
+                                                '\tresult, err := e.Service.GetBalanceByWalletID(ctx, id)\n\tif err != nil {\n\t\treturn err\n\t}\n'
+                                                '\twriteOK(w, balanceDto(result))\n\treturn nil\n}\n'),
+            'internal/walletapi/dto.go': ('package walletapi\nfunc balanceDto(r Result) Response {\n\tout := Response{Outcome: r.Outcome()}\n'
+                                          '\tif r.Wallet != nil {\n\t\tout.Currency = currencyOf(r)\n\t}\n\treturn out\n}\n'),
+            'internal/wallet/service.go': ('package wallet\ntype Backend interface {\n\tGetBalanceByWalletID(ctx context.Context, id string) (Result, error)\n}\n'
+                                           'func (s *Service) GetBalanceByWalletID(ctx context.Context, id string) (Result, error) {\n'
+                                           '\tresolved, err := s.resolveByWalletID(ctx, id)\n\tif ex, ok := playerUnavailable(err); ok {\n'
+                                           '\t\treturn Result{ReasonCode: toTechnicalFailure(ex)}, nil\n\t}\n\treturn balanceFromResolved(resolved), nil\n}\n'
+                                           'func (s *Service) resolveByWalletID(ctx context.Context, id string) (Resolved, error) {\n'
+                                           '\tplayer, err := s.players.Resolve(ctx, id)\n\treturn s.backend.Lookup(ctx, player, id)\n}\n'),
+        }
+        root = self.make_project(files)
+        nodes = [{'source_file': name} for name in files] + [
+            {'id': 'h', 'label': '.balance()', 'source_file': 'internal/walletapi/endpoints.go', 'source_location': 'L5'},     # stale: real 14
+            {'id': 'd', 'label': 'balanceDto()', 'source_file': 'internal/walletapi/dto.go', 'source_location': 'L2'},
+            {'id': 'g', 'label': '.GetBalanceByWalletID()', 'source_file': 'internal/wallet/service.go', 'source_location': 'L5'},
+            {'id': 'r', 'label': '.resolveByWalletID()', 'source_file': 'internal/wallet/service.go', 'source_location': 'L12'},
+            {'id': 'c', 'label': 'currencyOf()', 'source_file': 'internal/walletapi/dto.go', 'source_location': 'L9'}]
+        edges = [{'source': 'h', 'target': 'd', 'relation': 'calls'}, {'source': 'd', 'target': 'c', 'relation': 'calls'},
+                 {'source': 'g', 'target': 'r', 'relation': 'calls'}]      # no h -> g edge: a call through a field
+        (root / 'graphify-out/graph.json').write_text(json.dumps({'nodes': nodes, 'edges': edges}))
+        sources = explorer.question_route_sources(root, 'How is a balance request handled?')
+        located = {why: (file, line) for file, line, _, why in sources}
+        self.assertEqual(('internal/walletapi/endpoints.go', 14), located['handler balance of POST /wallets/balance'])
+        whys = [why for *_, why in sources]
+        self.assertLess(whys.index('GetBalanceByWalletID, called by handler balance'), whys.index('balanceDto, called by handler balance'))
+        self.assertIn('resolveByWalletID, called by GetBalanceByWalletID', whys)
+        self.assertFalse(any(why.startswith('currencyOf') for why in whys))
+
+    def test_irregular_word_endings_match_route_parts(self):
+        # Live nh-player-service-go: "self exclusion" did not match /v1/user/security/selfExclude.
+        hints = 'POST /v1/user/security/selfExclude — internal/security/security.go:3\nPOST /v1/user/security/deactivate — internal/security/security.go:4'
+        root = self.make_project({'internal/security/security.go': 'package security\n'})
+        whys = [why for *_, why in explorer.question_route_sources(root, 'How does self exclusion work?', hints)]
+        self.assertEqual(['registration of POST /v1/user/security/selfExclude'], whys)
+
+    def test_a_word_and_its_stem_count_once(self):
+        # "tokens" and its stem "token" must not outrank a route matching a different question word.
+        hints = 'POST /v1/oauth/token — a.go:1\nPOST /v1/authentication/login — a.go:2'
+        root = self.make_project({'a.go': 'package a\n'})
+        whys = [why for *_, why in explorer.question_route_sources(root, 'How does login issue tokens?', hints)]
+        self.assertEqual('registration of POST /v1/authentication/login', whys[0])
+
+    def test_a_path_written_in_the_question_picks_its_route(self):
+        # Live nh-gateway-go-sync: "How are /v1/user requests forwarded?" matched /v1/user/GetRecentPlayed, not
+        # the /v1/user catch-all forwarding route.
+        hints = ('POST /v1/user (and /v1/user/* via catchAll) — internal/forwarding/routes.go:3\n'
+                 'POST /v1/user/GetRecentPlayed — internal/gaming/gaming.go:4\nPOST /v1/promo (and /v1/promo/* via catchAll) — internal/forwarding/routes.go:4')
+        root = self.make_project({'internal/forwarding/routes.go': 'package forwarding\n', 'internal/gaming/gaming.go': 'package gaming\n'})
+        whys = [why for *_, why in explorer.question_route_sources(root, 'How are /v1/user requests forwarded to the player service?', hints)]
+        self.assertEqual('registration of POST /v1/user (and /v1/user/* via catchAll)', whys[0])
+        self.assertFalse(any('/v1/promo' in why for why in whys))
+
+    def test_three_letter_words_complete_a_two_part_match(self):
+        # Live nh-gateway-go-sync: "top winners" found nothing; GetTopWinners needs both parts.
+        hints = 'POST /v1/gaming/stats/GetTopWinners — g.go:1\nPOST /v1/authentication/forgotPassword — g.go:2'
+        root = self.make_project({'g.go': 'package g\n'})
+        self.assertEqual(['registration of POST /v1/gaming/stats/GetTopWinners'],
+                         [why for *_, why in explorer.question_route_sources(root, 'How are top winners fetched?', hints)])
+        self.assertEqual([], explorer.question_route_sources(root, 'How is the password checked?', hints))   # one part only
+
+    def test_handler_variables_are_followed_and_name_matches_stay_in_language(self):
+        # Live nh-gateway-go-sync: catchAll(pr, "/v1/user", toPlayerService) with toPlayerService := f.Handler(PlayerService);
+        # a name-only match also reached SwaggerUI in swagger-ui-bundle.js from a Go handler.
+        files = {
+            'internal/forwarding/routes.go': ('package forwarding\nfunc Mount(r chi.Router, f *Forwarder) {\n\ttoPlayerService := f.Handler(PlayerService)\n'
+                                              '\tr.Post("/v1/user", toPlayerService)\n}\n'),
+            'internal/forwarding/forwarder.go': ('package forwarding\nfunc (f *Forwarder) Handler(d Destination) http.HandlerFunc {\n'
+                                                 '\treturn func(w http.ResponseWriter, r *http.Request) {\n\t\tSwaggerUI(r)\n\t\tf.proxy.ServeHTTP(w, r)\n\t}\n}\n'),
+            'internal/openapi/swagger-ui-bundle.js': 'function SwaggerUI() {\n  return 1;\n}\n',
+        }
+        root = self.make_project(files)
+        nodes = [{'source_file': name} for name in files] + [
+            {'id': 'h', 'label': '.Handler()', 'source_file': 'internal/forwarding/forwarder.go', 'source_location': 'L2'},
+            {'id': 's', 'label': 'SwaggerUI()', 'source_file': 'internal/openapi/swagger-ui-bundle.js', 'source_location': 'L1'}]
+        (root / 'graphify-out/graph.json').write_text(json.dumps({'nodes': nodes}))
+        sources = explorer.question_route_sources(root, 'How are /v1/user requests forwarded?')
+        whys = [why for *_, why in sources]
+        self.assertIn('handler Handler of POST /v1/user', whys)
+        self.assertFalse(any(file.endswith('.js') for file, *_ in sources))
+
+    def test_camel_case_question_words_match_by_parts(self):
+        root = self.make_project({'internal/gaming/gaming.go': 'package gaming\nfunc Mount(r chi.Router) {\n\tr.Post("/v1/session/InitGame", m.initGame)\n}\n'})
+        whys = [why for *_, why in explorer.question_route_sources(root, 'How does InitGame work?')]
+        self.assertEqual(['registration of POST /v1/session/InitGame'], whys)
+
+    def test_callees_spread_across_files_before_repeating_one(self):
+        # Live nh-player-service-go selfExclude: two store queries in one file crowded out revokeAllSessions.
+        files = {
+            'internal/security/security.go': ('package security\nfunc (m *Module) Mount(r chi.Router) {\n\tr.Post("/v1/user/security/selfExclude", m.selfExclude)\n}\n'
+                                              'func (m *Module) selfExclude(w http.ResponseWriter, r *http.Request) {\n\tid, ok := internalauth.RequireUser(w, r)\n'
+                                              '\tm.store.HasOverlappingExclusion(ctx, id)\n\tm.store.InsertSelfExclusion(ctx, id)\n\tm.revokeAllSessions(ctx, id)\n}\n'
+                                              'func (m *Module) revokeAllSessions(ctx context.Context, id string) error {\n\tm.revoker.RevokeAllByUser(ctx, id)\n'
+                                              '\tm.store.AllActiveDevices(ctx, id)\n\treturn nil\n}\n'),
+            'internal/store/security.go': ('package store\nfunc (s *Store) HasOverlappingExclusion(ctx context.Context, id string) (bool, error) {\n\treturn s.pool.QueryRow(ctx, q).Scan(&b)\n}\n'
+                                           'func (s *Store) InsertSelfExclusion(ctx context.Context, id string) error {\n\treturn s.pool.Exec(ctx, q)\n}\n'),
+            'internal/internalauth/auth.go': 'package internalauth\nfunc RequireUser(w http.ResponseWriter, r *http.Request) (ID, bool) {\n\treturn ID{}, true\n}\n',
+        }
+        root = self.make_project(files)
+        nodes = [{'source_file': name} for name in files] + [
+            {'id': 'h', 'label': '.selfExclude()', 'source_file': 'internal/security/security.go', 'source_location': 'L5'},
+            {'id': 'o', 'label': '.HasOverlappingExclusion()', 'source_file': 'internal/store/security.go', 'source_location': 'L2'},
+            {'id': 'i', 'label': '.InsertSelfExclusion()', 'source_file': 'internal/store/security.go', 'source_location': 'L5'},
+            {'id': 'v', 'label': '.revokeAllSessions()', 'source_file': 'internal/security/security.go', 'source_location': 'L11'},
+            {'id': 'u', 'label': 'RequireUser()', 'source_file': 'internal/internalauth/auth.go', 'source_location': 'L2'}]
+        edges = [{'source': 'h', 'target': t, 'relation': 'calls'} for t in ('u', 'o', 'i', 'v')]
+        (root / 'graphify-out/graph.json').write_text(json.dumps({'nodes': nodes, 'edges': edges}))
+        whys = [why.split(',')[0] for *_, why in explorer.question_route_sources(root, 'How does self exclusion work?')]
+        self.assertIn('revokeAllSessions', whys)
+        self.assertEqual(1, sum(name in {'HasOverlappingExclusion', 'InsertSelfExclusion'} for name in whys))
+        self.assertNotIn('RequireUser', whys)        # an auth guard is a helper
+
+    def test_helper_names_need_a_word_boundary(self):
+        for name in ('WriteJSON', 'write_json', 'serverError', 'opt_guid', 'Read', 'val', 'RequireUser', 'requireWebexUser', 'Exec', 'valid'):
+            self.assertTrue(explorer.HELPER_NAME.search(name), name)
+        for name in ('validateCredentials', 'validate_credentials', 'login', 'LoginOK', 'token', 'readiness', 'revokeAllSessions', 'invalidate', 'execute'):
+            self.assertFalse(explorer.HELPER_NAME.search(name), name)
+
+    def test_question_route_matching_stems_and_follows_multiline_registrations(self):
+        root = self.route_project()
+        whys = [why for *_, why in explorer.question_route_sources(root, 'How are favourites added?')]
+        self.assertEqual(['registration of POST /v1/user/favourites/add'], whys)  # handler not in graph: registration only
+        whys = [why for *_, why in explorer.question_route_sources(root, 'What does the bonus contract endpoint return?')]
+        self.assertIn('handler getContract of POST /v1/bonus/contract/get', whys)
+        self.assertEqual([], explorer.question_route_sources(root, 'Where is data stored?'))
+
+    def test_question_words_in_most_routes_do_not_pick_routes(self):
+        hints = '\n'.join(f'POST /config/api/v1/{name} — internal/api/api.go:{n}' for n, name in enumerate(['get', 'set', 'history', 'list', 'push'], 1))
+        self.assertEqual([], explorer.question_route_sources(self.make_project({'internal/api/api.go': 'package api\n'}), 'How is the config cached?', hints))
+
+    def test_route_question_prefetch_is_shown_to_the_model_and_citable(self):
+        root = self.route_project()
+        sent = []
+        def fake_chat(messages, model):
+            sent.append(list(messages))
+            return {'role': 'assistant', 'content': 'ANSWER\n- login checks credentials via `validateCredentials` internal/auth/auth.go:12-12\nUNCERTAINTIES\n- none'}
+        with patch.object(explorer, 'graph_query', return_value=json.dumps({'results': []})), patch.object(explorer, 'chat', side_effect=fake_chat):
+            answer = explorer.explore(root, 'How does the login endpoint work?', 'm')
+        self.assertIn('handler login of POST /v1/authentication/login', sent[0][-1]['content'])
+        self.assertIn('internal/auth/auth.go:12-12', answer)
+
+    def test_long_entry_file_keeps_late_wiring_and_lifecycle_lines(self):
+        # Live nh-player-service-go: main.go is 293 lines; the server start was at line 263, past the budget.
+        body = ['package main', 'func main() {'] + [f'\tcfg{n} := strings.Repeat("x", 60) // filler line {n}' for n in range(260)]  # > 220 lines
+        body += ['\tusermod.New(st, log).Mount(api)', '\tsrv := &http.Server{Handler: root}', '\tif err := srv.ListenAndServe(); err != nil {',
+                 '\tif err := srv.Shutdown(ctx); err != nil {', '}']
+        root = self.make_project({'cmd/svc/main.go': '\n'.join(body) + '\n'})
+        text, citable, outline = explorer.architecture_excerpt(root, 'cmd/svc/main.go')
+        self.assertTrue(outline)
+        for needle in ('Mount(api)', 'srv.ListenAndServe()', 'srv.Shutdown(ctx)'):
+            self.assertIn(needle, text)
+        self.assertNotIn('filler line 259', text)
+        found = '\n'.join(explorer.entry_points({'cmd/svc/main.go': citable}))
+        self.assertIn('server start', found)
+        self.assertIn('routes mounted: `usermod.New(st, log).Mount(api)`', found)
+
+    def test_files_that_register_routes_outrank_registration_named_files(self):
+        files = {'cmd/svc/main.go': 'package main\n', 'internal/modules/auth/register_otp.go': 'package auth\nfunc register() {}\n',
+                 'internal/modules/user/user.go': 'package user\nfunc M(r chi.Router) {\n\tr.Post("/v1/user/get", h)\n\tr.Post("/v1/user/set", h)\n}\n'}
+        sources = explorer.architecture_sources(self.make_project(files))
+        self.assertLess(sources.index('internal/modules/user/user.go'),
+                        sources.index('internal/modules/auth/register_otp.go') if 'internal/modules/auth/register_otp.go' in sources else 99)
+
+    def test_swagger_routes_do_not_promote_docs_files(self):
+        files = {'cmd/svc/main.go': 'package main\n', 'cmd/svc/wiring.go': 'package main\n',
+                 'internal/openapi/openapi.go': 'package openapi\nfunc M(r chi.Router) {\n' + ''.join(f'\tr.Get("/swagger/a{n}.js", h)\n' for n in range(6)) + '}\n',
+                 'internal/user/user.go': 'package user\nfunc M(r chi.Router) {\n\tr.Post("/v1/user/get", h)\n\tr.Post("/v1/user/set", h)\n\tr.Post("/v1/user/del", h)\n}\n'}
+        sources = explorer.architecture_sources(self.make_project(files))   # 3+ routes earns the early slot
+        self.assertEqual(sources[:2], ['cmd/svc/main.go', 'internal/user/user.go'])
+        self.assertLess(sources.index('cmd/svc/wiring.go'), sources.index('internal/openapi/openapi.go') if 'internal/openapi/openapi.go' in sources else 99)
+
+    def test_misplaced_specific_terms_are_unsupported(self):
+        # Live nh-player-service-go: true claim, but "Azure Key Vault" is in the file header, not the cited signature.
+        self.assertEqual(explorer.unsupported_terms('The load method loads the signing key from Azure Key Vault',
+                                                    'func (r *Registry) load(ctx context.Context) (*signingKey, error) {'), ['Azure', 'Vault'])  # "Key" is in signingKey
+        self.assertEqual(explorer.unsupported_terms('The service exposes an HTTP API with JSON', 'r.Post("/x", h)'), [])
+        self.assertEqual(explorer.unsupported_terms('The gateway mounts the GamingModule', 'gamingModule.Mount(r)'), [])
+
+    def test_purpose_comes_from_entry_header_comment(self):
+        shown = {'cmd/svc/main.go': {1: '// Command svc is the player and auth surface', 2: '// behind the gateway.', 3: 'package main',
+                                     9: '// unrelated later comment'},
+                 'internal/x/x.go': {1: '// Package x does helper things.'},
+                 'src/app.py': {1: '#!/usr/bin/env python3', 2: '"""Billing worker entry point."""', 3: 'import os'}}
+        lines = explorer.purpose_lines(shown)
+        self.assertIn('Command svc is the player and auth surface behind the gateway. — cmd/svc/main.go:1-2', lines)
+        self.assertIn('Billing worker entry point. — src/app.py:2-2', lines)
+        self.assertFalse(any('x.go' in line or 'unrelated' in line for line in lines))
+
+    def test_structured_fact_with_misplaced_term_is_dropped(self):
+        files = {'cmd/app/main.go': 'package main\nfunc load() {}\n'}
+        answer = self.overview(files, [self.facts(('The load function reads keys from Azure Key Vault', 2, 2, ['load']),
+                                                  ('The load function is declared here', 2, 2, ['load']))])
+        self.assertNotIn('Azure', answer)
+        self.assertIn('load function is declared here', answer)
+
+    def test_long_route_lists_are_grouped_by_file_not_cut(self):
+        routes = [f'POST /v1/gaming/x{n} — g.go:{80 + n}' for n in range(12)] + [f'POST /v1/bonus/y{n} — b.go:{90 + n}' for n in range(8)] + ['GET /live — h.go:45']
+        grouped = explorer.group_routes(routes, 18)
+        self.assertIn('12 routes in g.go: POST /v1/gaming/x0, POST /v1/gaming/x1, POST /v1/gaming/x2, ... — g.go:80-91', grouped)
+        exact = explorer.group_routes(routes + ['GET /swagger/* static assets (8 files) — o.go:38-45',
+                                                 'POST /a — s.go:1', 'POST /b — s.go:2', 'POST /c — s.go:3'], 18)
+        self.assertIn('GET /swagger/* static assets (8 files) — o.go:38-45', exact)       # range preserved
+        self.assertIn('3 routes in s.go: POST /a, POST /b, POST /c — s.go:1-3', exact)    # no "..." when all are listed
+        self.assertIn('8 routes in b.go: POST /v1/bonus/y0, POST /v1/bonus/y1, POST /v1/bonus/y2, ... — b.go:90-97', grouped)
+        self.assertIn('GET /live — h.go:45', grouped)
+        self.assertEqual(explorer.group_routes(routes[:5], 18), routes[:5])      # short lists stay as they are
+
+    def test_trivial_definition_facts_score_below_behaviour(self):
+        for claim in ('The service defines a hello handler for the root endpoint', 'The service defines a route template function for routing',
+                      'Implements the Enabled method for the handler'):
+            self.assertLess(explorer.fact_score('internal/x/router.go', claim, 50),
+                            explorer.fact_score('internal/x/router.go', 'The router mounts the health endpoint', 50), claim)
+
+    def test_infrastructure_packages_rank_below_feature_code(self):
+        root = self.make_project({'cmd/app/main.go': '', 'internal/logging/handler.go': '', 'internal/apierror/apierror.go': '',
+                                  'internal/modules/gaming/gaming.go': ''})
+        self.assertEqual(explorer.architecture_sources(root)[:2], ['cmd/app/main.go', 'internal/modules/gaming/gaming.go'])
+
+    def test_static_asset_routes_are_folded_and_api_routes_kept(self):
+        routes = ['POST /api/v1/token — c.go:59',
+                  'GET /swagger/index.js (plus supported HEAD/asset methods) — o.go:50',
+                  'GET /swagger/index.css (plus supported HEAD/asset methods) — o.go:51',
+                  'GET /swagger/favicon-32x32.png (plus supported HEAD/asset methods) — o.go:55',
+                  'GET /swagger/v1/swagger.json — o.go:63']
+        folded = explorer.collapse_static_assets(routes)
+        self.assertEqual(folded[0], 'POST /api/v1/token — c.go:59')
+        self.assertIn('GET /swagger/* static assets (3 files: index.js, index.css, favicon-32x32.png) — o.go:50-55', folded)
+        self.assertIn('GET /swagger/v1/swagger.json — o.go:63', folded)   # an API document, not a static asset
+        self.assertEqual(len(folded), 3)
+
+    def test_entry_and_config_facts_survive_trimming_in_a_crowded_entry_file(self):
+        facts = [('cmd/a/main.go', 33, 35, 'The main entry point is the main() function', 'entry'),
+                 ('cmd/a/main.go', 39, 43, 'Startup loads configuration', 'config'),
+                 ('cmd/a/main.go', 112, 114, 'The HTTP server starts serving requests', 'serve')]
+        facts += [('cmd/a/main.go', 200 + n * 5, 201 + n * 5, f'Startup initializes observability module {n}', f'o{n}') for n in range(12)]
+        kept = [f[4] for f in explorer.trim_facts(facts)[0]]
+        for anchor in ('entry', 'config', 'serve'):
+            self.assertIn(anchor, kept)
+
+    def test_uncertainty_mentions_second_check_only_when_enabled(self):
+        files = {'cmd/app/main.go': 'package main\nfunc main() {\n\tcfg, err := config.Load()\n}\n'}
+        answer = self.overview(files, [self.facts(('Startup calls the config loader', 3, 3, ['config.Load']))])
+        self.assertNotIn('second model check', answer)
 
     def test_each_file_is_a_separate_small_call_with_only_its_own_source(self):
         files = {'a.py': 'def alpha(): pass\n', 'b.py': 'def beta(): pass\n'}
