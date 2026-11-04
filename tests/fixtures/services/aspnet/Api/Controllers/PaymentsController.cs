@@ -21,3 +21,5 @@ public class PaymentsController : ControllerBase
     [HttpGet("/status")]
     public IActionResult Status() => Ok();
 }
+
+public record ChargeRequest(string Card, decimal Amount);

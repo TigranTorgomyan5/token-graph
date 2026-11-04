@@ -155,6 +155,76 @@ class FrameworkLifecycleTests(unittest.TestCase):
         self.assertEqual('', frameworks.lifecycle_label('cmd/main.go', '// srv.ListenAndServe() is called below'))
 
 
+class FrameworkBodyTests(unittest.TestCase):
+    """Request body type, its JSON field names and the response statuses, per framework, found by code."""
+
+    CASES = [
+        # (handler file, text on the handler's declaration line, body type, type file, JSON field names)
+        ('fastapi/app/routers/orders.py', 'async def create_order', 'OrderIn', 'fastapi/app/routers/orders.py', ['sku', 'quantity']),
+        ('nestjs/src/auth/auth.controller.ts', 'async login(', 'LoginDto', 'nestjs/src/auth/auth.controller.ts', ['phone', 'password']),
+        ('aspnet/Api/Controllers/PaymentsController.cs', 'Charge(', 'ChargeRequest', 'aspnet/Api/Controllers/PaymentsController.cs', ['card', 'amount']),
+        ('spring/src/main/java/com/example/shop/OrderController.java', 'place(', 'Order', 'spring/src/main/java/com/example/shop/Order.java', ['sku', 'quantity']),
+        ('axum/src/main.rs', 'async fn create_entry', 'NewEntry', 'axum/src/main.rs', ['accountId', 'amountCents']),   # serde rename_all
+    ]
+
+    @staticmethod
+    def body_at(path, needle):
+        lines = (SERVICES / path).read_text().splitlines()
+        number = next(n for n, text in enumerate(lines, 1) if needle in text and not text.strip().startswith(('@', '[', '#[')))
+        return lines, [(number + offset, text) for offset, text in enumerate(frameworks.function_body(lines, number, 80))]
+
+    def test_request_body_types_and_their_json_field_names(self):
+        for path, needle, type_name, type_path, names in self.CASES:
+            with self.subTest(framework=path.split('/')[0]):
+                _, body = self.body_at(path, needle)
+                self.assertEqual(type_name, (frameworks.request_body(path, body) or {}).get('type'))
+                type_lines = (SERVICES / type_path).read_text().splitlines()
+                pattern = frameworks.type_declaration(frameworks.language(type_path), type_name)
+                line = next(n for n, text in enumerate(type_lines, 1) if pattern.search(text))
+                self.assertEqual(names, [name for name, _, _ in frameworks.type_fields(type_path, type_lines, line)])
+
+    def test_response_statuses_per_framework(self):
+        cases = [('fastapi/app/routers/orders.py', 'async def cancel_order', 409),     # raise HTTPException(status_code=409)
+                 ('aspnet/Api/Controllers/PaymentsController.cs', 'Charge(', 200),       # return Ok()
+                 ('axum/src/main.rs', 'async fn create_entry', 201)]                     # (StatusCode::CREATED, Json(...))
+        for path, needle, status in cases:
+            with self.subTest(framework=path.split('/')[0]):
+                _, body = self.body_at(path, needle)
+                self.assertIn(status, [write['status'] for write in frameworks.response_writes(path, body)])
+
+    def test_go_bodies_inline_grouped_embedded_and_writers(self):
+        # Live nh-player-service-go register: inline struct with json tags; nh-gateway-go-sync initGameRequest:
+        # grouped names on one line; a writer whose status is set inside it is returned for the caller to resolve.
+        lines = ['func (m *Module) register(w http.ResponseWriter, r *http.Request) {', '\tvar req struct {',
+                 '\t\tPhoneNumber string `json:"phoneNumber"`', '\t\tSecret string `json:"-"`', '\t\tAffiliate *string `json:"affiliate,omitempty"`',
+                 '\t}', '\tif err := httpx.DecodeJSON(r, &req); err != nil {', '\t\tapierror.WriteValidation(w, r, nil)', '\t\treturn', '\t}',
+                 '\tif req.PhoneNumber == "" {', '\t\tapierror.Write(w, r, http.StatusBadRequest, apierror.ValidationFailed, nil)', '\t\treturn', '\t}',
+                 '\th.info(r, "done")', '\thttpx.WriteJSON(w, http.StatusOK, map[string]any{', '\t\t"sessionId": id,', '\t})', '}']
+        body = [(n, text) for n, text in enumerate(lines, 1)]
+        request = frameworks.request_body('register.go', body)
+        self.assertEqual(2, request['inline'])
+        self.assertEqual([('phoneNumber', 'string', 3), ('affiliate', '*string', 5)], frameworks.type_fields('register.go', lines, 2))
+        writes = frameworks.response_writes('register.go', body)
+        self.assertEqual([(8, None, 'apierror.WriteValidation'), (12, 400, 'apierror.Write'), (16, 200, 'httpx.WriteJSON')],
+                         [(w['line'], w['status'], w['writer']) for w in writes])          # h.info(r, ...) is not a response
+        self.assertEqual('req.PhoneNumber == ""', writes[1]['when'])
+        self.assertEqual(['sessionId'], frameworks.response_keys('register.go', writes, body))   # multi-line map literal
+        grouped = ['type initGameRequest struct {', '\tAuthToken, GameUrl string', '\tDemo bool', '\tbaseRequest', '}']
+        self.assertEqual(['AuthToken', 'GameUrl', 'Demo', '*baseRequest'], [name for name, _, _ in frameworks.type_fields('r.go', grouped, 1)])
+
+    def test_status_names_in_each_language(self):
+        for text, status in [('http.StatusUnprocessableEntity', 422), ('StatusCodes.Status404NotFound', 404), ('HttpStatus.NOT_FOUND', 404),
+                             ('StatusCode::CREATED', 201), ('status.HTTP_201_CREATED', 201), ('return NotFound();', 404),
+                             ('throw new ConflictException("x")', 409), ('res.status(201).json(x)', 201), ('Results.Ok(x)', 200)]:
+            self.assertEqual(status, frameworks.status_code(text), text)
+
+    def test_multiline_signature_body_starts_after_it_opens(self):
+        # Live nh-player-service-go dynamicValidate: the signature spans three lines.
+        lines = ['func (m *Module) dynamicValidate(', '\tw http.ResponseWriter, r *http.Request,', ') (handled bool) {',
+                 '\tapierror.Write(w, r, http.StatusServiceUnavailable, code, nil)', '\treturn true', '}', 'func next() {}']
+        self.assertEqual(lines[:6], frameworks.function_body(lines, 1, 40))
+
+
 class FrameworkHandlerTests(unittest.TestCase):
     def test_route_handlers_are_named_in_each_framework(self):
         for location, expected in EXPECTED_HANDLERS.items():

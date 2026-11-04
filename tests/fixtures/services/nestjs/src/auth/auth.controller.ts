@@ -14,3 +14,8 @@ export class AuthController {
     return 'ok';
   }
 }
+
+export class LoginDto {
+  phone: string;
+  password?: string;
+}

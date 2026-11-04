@@ -979,6 +979,70 @@ class ExplorerGroundingTests(unittest.TestCase):
         self.assertIn('InsertSelfExclusion', whys)
         self.assertNotIn('RequireUser', whys)        # an auth guard is a helper
 
+    def registration_project(self):
+        # Modelled on nh-player-service-go: register returns sessionId; otp/verify takes authSessionId and
+        # returns authorizationCode; oauth/token takes code. WriteValidation sets 422 inside apierror.
+        files = {
+            'internal/auth/auth.go': ('package auth\nfunc (m *Module) Mount(r chi.Router) {\n\tr.Post("/v1/authentication/register", m.register)\n'
+                                      '\tr.Post("/v1/otp/verify", m.otpVerify)\n\tr.Post("/v1/oauth/token", m.exchangeToken)\n'
+                                      '\tr.Post("/v1/promo/apply", m.promoApply)\n}\n'),
+            'internal/auth/register.go': (
+                'package auth\nfunc (m *Module) register(w http.ResponseWriter, r *http.Request) {\n\tvar req struct {\n'
+                '\t\tPhoneNumber string `json:"phoneNumber"`\n\t\tPassword    string `json:"password"`\n\t}\n'
+                '\tif err := httpx.DecodeJSON(r, &req); err != nil {\n\t\tapierror.WriteValidation(w, r, nil)\n\t\treturn\n\t}\n'
+                '\tif req.PhoneNumber == "" {\n\t\tapierror.Write(w, r, http.StatusBadRequest, apierror.ValidationFailed, nil)\n\t\treturn\n\t}\n'
+                '\tid := m.createSession(req.PhoneNumber)\n\thttpx.WriteJSON(w, http.StatusOK, map[string]any{"sessionId": id})\n}\n'
+                'func (m *Module) otpVerify(w http.ResponseWriter, r *http.Request) {\n\tvar req struct {\n'
+                '\t\tAuthSessionID string `json:"authSessionId"`\n\t\tOtpCode string `json:"otpCode"`\n\t}\n'
+                '\tif err := httpx.DecodeJSON(r, &req); err != nil {\n\t\tapierror.WriteValidation(w, r, nil)\n\t\treturn\n\t}\n'
+                '\tout := map[string]any{"otpVerified": true}\n\tout["authorizationCode"] = m.code(req.AuthSessionID)\n'
+                '\thttpx.WriteJSON(w, http.StatusOK, out)\n}\n'
+                'func (m *Module) promoApply(w http.ResponseWriter, r *http.Request) {\n\tvar req struct {\n\t\tPromo string `json:"promo"`\n\t}\n'
+                '\thttpx.DecodeJSON(r, &req)\n\thttpx.WriteJSON(w, http.StatusOK, nil)\n}\n'),
+            'internal/auth/oauth.go': ('package auth\ntype tokenRequest struct {\n\tGrantType string `json:"grantType"`\n\tCode string `json:"code"`\n}\n'
+                                       'func (m *Module) exchangeToken(w http.ResponseWriter, r *http.Request) {\n\tvar req tokenRequest\n'
+                                       '\tif err := httpx.DecodeJSON(r, &req); err != nil {\n\t\tapierror.WriteValidation(w, r, nil)\n\t\treturn\n\t}\n'
+                                       '\thttpx.WriteJSON(w, http.StatusOK, tokenResponse{AccessToken: "a"})\n}\n'),
+            'internal/apierror/apierror.go': ('package apierror\n// WriteValidation writes a validation failure.\n'
+                                              'func WriteValidation(w http.ResponseWriter, r *http.Request, errs map[string][]string) {\n'
+                                              '\tWrite(w, r, http.StatusUnprocessableEntity, ValidationFailed, nil)\n}\n'),
+        }
+        root = self.make_project(files)
+        nodes = [{'source_file': name} for name in files] + [
+            {'id': 'reg', 'label': '.register()', 'source_file': 'internal/auth/register.go', 'source_location': 'L2'},
+            {'id': 'ver', 'label': '.otpVerify()', 'source_file': 'internal/auth/register.go', 'source_location': 'L18'},
+            {'id': 'pro', 'label': '.promoApply()', 'source_file': 'internal/auth/register.go', 'source_location': 'L30'},
+            {'id': 'tok', 'label': '.exchangeToken()', 'source_file': 'internal/auth/oauth.go', 'source_location': 'L6'},
+            {'id': 'tr', 'label': 'tokenRequest', 'source_file': 'internal/auth/oauth.go', 'source_location': 'L2'},
+            {'id': 'wv', 'label': 'WriteValidation()', 'source_file': 'internal/apierror/apierror.go', 'source_location': 'L2'}]  # doc-comment line
+        (root / 'graphify-out/graph.json').write_text(json.dumps({'nodes': nodes}))
+        return root
+
+    def test_endpoint_contract_has_request_fields_statuses_and_related_endpoints(self):
+        # Live nh-player-service-go "how is the user registration done": bodies and statuses by code, and the
+        # follow-up endpoints found through the fields one returns and the next takes.
+        root = self.registration_project()
+        text = '\n'.join(explorer.endpoint_contracts(root, explorer.question_route_sources(root, 'How is the user registration done?')))
+        self.assertIn('Request and responses: POST /v1/authentication/register', text)
+        self.assertIn('`phoneNumber` string · `password` string', text)
+        self.assertIn('422 (set in `apierror.WriteValidation`) when `err := httpx.DecodeJSON(r, &req); err != nil`', text)
+        self.assertIn('400 when `req.PhoneNumber == ""`', text)
+        self.assertIn('200 — `httpx.WriteJSON(w, http.StatusOK, map[string]any{"sessionId": id})`', text)
+        self.assertIn('POST /v1/otp/verify takes `authSessionId` (from `sessionId`)', text)
+        self.assertIn('POST /v1/oauth/token takes `code` (from `authorizationCode`)', text)       # through out["authorizationCode"] = ...
+        self.assertIn('`grantType` string · `code` string', text)                               # named type, json tags
+        self.assertNotIn('/v1/promo/apply', text)                                               # shares no field
+
+    def test_request_and_response_wording_keeps_a_named_route_in_flow_mode(self):
+        # Live: "request and response" switched to the every-endpoint inventory and the flow never ran.
+        root = self.registration_project()
+        with patch.object(explorer, 'graph_query', return_value=json.dumps({'results': []})), \
+             patch.object(explorer, 'chat_json', return_value=json.dumps({'facts': []})), \
+             patch.object(explorer, 'chat', side_effect=AssertionError('no free-form answer expected')):
+            answer = explorer.explore(root, 'How is the user registration done? Show the request and response body of the endpoints involved.', 'm')
+        self.assertIn('**Code path**', answer)
+        self.assertIn('Request and responses: POST /v1/authentication/register', answer)
+
     def test_helper_names_need_a_word_boundary(self):
         for name in ('WriteJSON', 'write_json', 'serverError', 'opt_guid', 'Read', 'val', 'RequireUser', 'requireWebexUser', 'Exec', 'valid'):
             self.assertTrue(explorer.HELPER_NAME.search(name), name)
@@ -1003,7 +1067,9 @@ class ExplorerGroundingTests(unittest.TestCase):
         def fake_chat(messages, model):
             sent.append(list(messages))
             return {'role': 'assistant', 'content': 'ANSWER\n- login checks credentials via `validateCredentials` internal/auth/auth.go:12-12\nUNCERTAINTIES\n- none'}
-        with patch.object(explorer, 'graph_query', return_value=json.dumps({'results': []})), patch.object(explorer, 'chat', side_effect=fake_chat):
+        # No model facts and no code-found contract: the free-form answer gets the prefetched sources.
+        with patch.object(explorer, 'graph_query', return_value=json.dumps({'results': []})), patch.object(explorer, 'chat', side_effect=fake_chat), \
+             patch.object(explorer, 'endpoint_contracts', return_value=[]):
             answer = explorer.explore(root, 'How does the login endpoint work?', 'm')
         self.assertIn('handler login of POST /v1/authentication/login', sent[0][-1]['content'])
         self.assertIn('internal/auth/auth.go:12-12', answer)

@@ -522,6 +522,213 @@ def question_route_sources(project: Path, question: str, hints: str | None = Non
     return list(dict.fromkeys(sources))
 
 
+MAX_RELATED_ENDPOINTS = 4
+
+
+def endpoint_contracts(project: Path, sources: list[tuple[str, int, int, str]]) -> list[str]:
+    """Request body, responses and related endpoints of each handler in sources, found by code.
+
+    The request body is the type the handler reads its JSON into (inline or named, resolved through the
+    graph or the handler's package); each response is a line that writes one, with the status it sets,
+    or the status the writer function sets (WriteValidation -> 422). Related endpoints are other routes
+    registered in the same file whose request takes a field this endpoint returns (register's sessionId ->
+    otp/send's authSessionId). These are source lines, not a model's reading; fields set elsewhere
+    (middleware, nested types) are not expanded."""
+    try:
+        graph = json.loads((project / 'graphify-out' / 'graph.json').read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        graph = {}
+    definitions: dict[str, list[tuple[str, int]]] = {}
+    for node in graph.get('nodes', []):
+        label = re.fullmatch(r'\.?(\w+)(?:\(\))?', str(node.get('label', '')))
+        location = re.fullmatch(r'L(\d+)', str(node.get('source_location', '')))
+        if label and location and classify_source(str(node.get('source_file', ''))) == 'production':
+            definitions.setdefault(label.group(1), []).append((str(node['source_file']), int(location.group(1))))
+    cache: dict[str, list[str]] = {}
+
+    def lines_of(file: str) -> list[str]:
+        if file not in cache:
+            path = _source_path(project, file)
+            try:
+                text = path.read_text(encoding='utf-8') if path else ''
+            except (OSError, UnicodeError):
+                text = ''
+            cache[file] = (text[:-1] if text.endswith('\n') else text).split('\n') if text else []
+        return cache[file]
+
+    def numbered_body(file: str, line: int, limit: int = 120) -> list[tuple[int, str]]:
+        return [(line + offset, text) for offset, text in enumerate(frameworks.function_body(lines_of(file), line, limit))]
+
+    def find(name: str, near: str, declaration: re.Pattern | None = None) -> tuple[str, int] | None:
+        """Where name is declared: graph definitions in near's language, nearest package first; else a scan of
+        near's directory for the declaration pattern (types are not always graph nodes)."""
+        lang = frameworks.language(near)
+        found = [item for item in definitions.get(name, []) if frameworks.language(item[0]) == lang]
+        found.sort(key=lambda item: (item[0] != near, Path(item[0]).parent != Path(near).parent, item[0]))
+        # The declaration line itself, nearest the graph's location first: a doc comment above it names it too.
+        declares = declaration or re.compile(r'\b' + re.escape(name) + r'\s*(?:<[^>]*>|\[[^\]]*\])?\s*\(')
+        for file, line in found:
+            source = lines_of(file)
+            for candidate in (line, line + 1, line - 1, line + 2, line - 2, line + 3, line - 3):
+                if 0 < candidate <= len(source) and declares.search(source[candidate - 1]) \
+                        and not frameworks.is_comment(frameworks.language(file), source[candidate - 1]):
+                    return file, candidate
+        if declaration:
+            folder = Path(near).parent
+            files = sorted({item[0] for items in definitions.values() for item in items if Path(item[0]).parent == folder}
+                           | {near})
+            for file in files:
+                for number, text in enumerate(lines_of(file), 1):
+                    if declaration.search(text):
+                        return file, number
+        return None
+
+    def fields_of(type_name: str, near: str, depth: int = 0) -> tuple[list[tuple[str, str, int]], str | None]:
+        located = find(type_name, near, frameworks.type_declaration(frameworks.language(near), type_name))
+        if not located:
+            return [], None
+        file, line = located
+        fields = []
+        for name, kind, number in frameworks.type_fields(file, lines_of(file), line):
+            if name.startswith('*'):          # an embedded struct contributes its own fields
+                fields += fields_of(name[1:], file, depth + 1)[0] if depth < 2 else []
+            else:
+                fields.append((name, kind, number))
+        return fields, f'{file}:{line}'
+
+    def writer_status(name: str, near: str, depth: int = 0) -> list[int]:
+        """Statuses a writer function sets in its own body, or through the writers it calls (two levels)."""
+        simple = name.split('.')[-1]
+        located = find(simple, near)
+        if not located or depth > 1:
+            return []
+        body = numbered_body(*located, limit=40)
+        # A one-line body sits on the declaration line: func writeOK(w, r, v any) { apierror.WriteOK(w, r, v) }
+        inline = body[0][1].split('{', 1)[1] if body and '{' in body[0][1] else ''
+        body = body[:1] + ([(body[0][0], inline)] if inline.strip() else []) + body[1:]
+        statuses = {status for _, text in body[1:] for status in [frameworks.status_code(text)] if status}
+        # Plus what the writers it calls set (dynamicValidate: 503 itself, then WriteFieldErrors' status).
+        for write in frameworks.response_writes(located[0], body):
+            if write['status'] is None and write['writer'] and write['writer'].split('.')[-1] != simple:
+                statuses |= set(writer_status(write['writer'], located[0], depth + 1))
+        return sorted(statuses)
+
+    def contract(file: str, line: int) -> dict:
+        body = numbered_body(file, line)
+        request = frameworks.request_body(file, body) or {}
+        fields, where = [], None
+        if request.get('inline'):
+            fields = frameworks.type_fields(file, lines_of(file), request['inline'])
+            where = f'{file}:{request["inline"]}'
+        elif request.get('type'):
+            fields, where = fields_of(request['type'], file)
+        elif request.get('via'):
+            binder = find(request['via'], file)
+            if binder:
+                signature = lines_of(binder[0])[binder[1] - 1]
+                returned = re.search(r'\)\s*\(?\s*\*?([A-Za-z_]\w*)', signature.split(request['via'], 1)[-1])
+                if returned:
+                    request['type'] = returned.group(1)
+                    fields, where = fields_of(returned.group(1), binder[0])
+        elif request.get('validator'):
+            # The validator's typed parameter names the body: validateLogin(s *mvc.ModelState, r *loginRequest)
+            validator = find(request['validator'], file)
+            if validator:
+                signature = lines_of(validator[0])[validator[1] - 1]
+                typed = re.findall(r'\w+\s+\*([A-Za-z_]\w*)', signature.split(request['validator'], 1)[-1].split(')')[0])
+                if typed:
+                    request['type'] = typed[-1]
+                    fields, where = fields_of(typed[-1], validator[0])
+        elif request.get('keys'):
+            fields = [(key, '?', request['line']) for key in request['keys']]
+        writes = frameworks.response_writes(file, body)
+        for write in writes:
+            if write['status'] is None and write['writer']:
+                write['resolved'] = writer_status(write['writer'], file)
+        keys = frameworks.response_keys(file, writes, body)
+        for write in writes:          # a struct literal in a success response names its type: loginResponse{...}
+            literal = re.search(r'\b([A-Za-z_]\w*)\{', write.get('call', write['text'])) if write['status'] in (200, 201) else None
+            if literal and literal.group(1) not in {'map', 'struct'}:
+                keys += [name for name, _, _ in fields_of(literal.group(1), file)[0]]
+        return {'request': request, 'fields': fields, 'where': where, 'writes': writes, 'keys': list(dict.fromkeys(keys))}
+
+    def render(route: str, file: str, line: int, info: dict, brief: bool = False) -> list[str]:
+        out = [] if brief else [f'**Request and responses: {route}** (found by code; handler {file}:{line})']
+        request, fields = info['request'], info['fields']
+        if fields:
+            listed = ' · '.join(f'`{name}` {kind}' for name, kind, _ in fields[:20])
+            kind = 'inline struct' if request.get('inline') else (f'`{request["type"]}`' if request.get('type') else 'keys read')
+            # Go fields without json tags keep their Go names; the binder decides how JSON names map to them.
+            untagged = frameworks.language(file) == 'go' and any(name[:1].isupper() for name, _, _ in fields)
+            note = '; Go field names, no json tags, so the binder maps the JSON names' if untagged else ''
+            out.append(f'- Request body ({kind}, {info["where"] or file}; read at {file}:{request["line"]}{note}): {listed}')
+        elif request:
+            out.append(f'- Request body: read at {file}:{request["line"]} (`{request["decoder"]}`); its fields were not found')
+        else:
+            out.append('- Request body: none read by the handler')
+        keys = f'; body keys: {", ".join(f"`{key}`" for key in info["keys"])}' if info['keys'] else ''
+        if brief:
+            success = next((w for w in info['writes'] if w['status'] in (200, 201)), None)
+            if success:
+                out.append(f'- Success: {success["status"]} `{success.get("call", success["text"])[:200]}`{keys} — {file}:{success["line"]}')
+            return out
+        if keys:
+            out.append(f'- Success body keys (from the writing call, or how its variable is built){keys[len("; body keys"):]}')
+        if info['writes']:
+            out.append('- Responses:')
+            for write in info['writes']:
+                status = str(write['status']) if write['status'] else (
+                    f'{"/".join(map(str, write["resolved"]))} (set in `{write["writer"]}`)' if write.get('resolved')
+                    else f'status set in `{write["writer"]}`' if write['writer'] else 'status not shown')
+                when = f' when `{write["when"]}`' if write['when'] else ''
+                out.append(f'  - {status}{when} — `{write["text"]}` — {file}:{write["line"]}')
+        return out
+
+    handlers = []
+    for file, line, _, why in sources:
+        match = re.match(r'handler (\w+) of (\S+ \S+)', why)
+        if match:
+            handlers.append((match.group(2), file, line))
+    if not handlers:
+        return []
+    hints = endpoint_route_hints(project).splitlines()
+    lines_out: list[str] = []
+    for route, file, line in handlers:
+        info = contract(file, line)
+        lines_out += render(route, file, line, info)
+        # Related endpoints: same registration file, request field matching a returned key (either suffix).
+        registration = next((s for s in sources if s[3] == f'registration of {route}' or s[3].startswith(f'registration of {route} ')), None)
+        if not registration or not info['keys']:
+            continue
+        returned = {key.casefold(): key for key in info['keys'] if len(key) >= 4}
+        related, frontier, seen = [], list(returned.items()), {route}
+        siblings = [hint for hint in hints if f' — {registration[0]}:' in hint]
+        while frontier and len(related) < MAX_RELATED_ENDPOINTS:
+            key_fold, key = frontier.pop(0)
+            for hint in siblings:
+                parsed = re.match(r'(\S+ \S+).* — (.+):(\d+)$', hint)
+                if not parsed or parsed.group(1) in seen or len(related) >= MAX_RELATED_ENDPOINTS:
+                    continue
+                reg_lines = lines_of(parsed.group(2))
+                name, qualifier = frameworks.handler_reference(parsed.group(2), reg_lines, int(parsed.group(3)))
+                located = find(name, parsed.group(2)) if name else None
+                if not located:
+                    continue
+                other = contract(*located)
+                takes = [field for field, _, _ in other['fields']
+                         if field.casefold().endswith(key_fold) or (len(field) >= 4 and key_fold.endswith(field.casefold()))]
+                if takes:
+                    seen.add(parsed.group(1))
+                    related.append((parsed.group(1), takes[0], key, located, other))
+                    frontier += [(k.casefold(), k) for k in other['keys'] if len(k) >= 4 and k.casefold() not in returned]
+        if related:
+            lines_out.append('**Related endpoints** (found by code: same module, and their request takes a field an earlier step returns)')
+            for other_route, field, key, (other_file, other_line), other in related:
+                lines_out.append(f'- {other_route} takes `{field}` (from `{key}`) — handler {other_file}:{other_line}')
+                lines_out += ['  ' + text for text in render(other_route, other_file, other_line, other, brief=True)]
+    return lines_out
+
+
 def read_source(project: Path, filename: str, line: int = 1, count: int = 50, *, max_lines: int = 50, max_chars: int = 6000) -> str:
     # The model-facing tool never passes max_lines/max_chars, so it stays capped at 50 lines / 6000 chars.
     # Only the deterministic prefetch asks for a larger window; every access check below still applies.
@@ -846,7 +1053,13 @@ def installed_models() -> set[str]:
 
 
 def explore(project: Path, question: str, model: str, history: list | None = None) -> str:
-    inventory_question = bool(re.search(r'\b(inventory|all|every|each)\b.{0,60}\b(HTTP\s+)?(endpoints?|routes?)\b|\b(HTTP\s+)?(endpoints?|routes?)\s+inventory\b|\brequest\s+and\s+response\b|\bAPI\s+endpoints?\b', question, re.I))
+    # Listing every endpoint is what "all/every endpoint", "endpoint inventory" or "API endpoints" ask for.
+    # "Request and response" asks for bodies: of the routes the question names when it names any
+    # ("how is registration done? show the request and response bodies"), of every endpoint otherwise.
+    listing = bool(re.search(r'\b(inventory|all|every|each)\b.{0,60}\b(HTTP\s+)?(endpoints?|routes?)\b|\b(HTTP\s+)?(endpoints?|routes?)\s+inventory\b|\bAPI\s+endpoints?\b', question, re.I))
+    asks_bodies = bool(re.search(r'\brequests?\s+and\s+responses?\b|\b(?:request|response)\s+(?:body|bodies|payloads?|shape|schema)\b|\bpayloads?\b', question, re.I))
+    route_sources = [] if listing or ARCHITECTURE_QUESTION.search(question) else question_route_sources(project, question)
+    inventory_question = listing or (asks_bodies and not route_sources)
     graph_context = json.dumps({'status': 'source_inventory', 'results': []}) if inventory_question else graph_query(project, question)
     # shown[file][line] = the text the model was actually given for that line. A citation is only
     # accepted against lines in here, and claims are checked against this text (not the disk).
@@ -911,7 +1124,7 @@ def explore(project: Path, question: str, model: str, history: list | None = Non
         architecture_context = '\n\n'.join(excerpts)
     else:
         excerpts = []
-        for filename, line, count, why in question_route_sources(project, question):
+        for filename, line, count, why in route_sources:
             # A function window may exceed the model tool's 50-line cap; access checks still apply.
             excerpt = read_source(project, filename, line, count, max_lines=HANDLER_LINES, max_chars=9000)
             matches = re.findall(r'^(\d+):', excerpt, re.M)
@@ -1175,13 +1388,15 @@ def explore(project: Path, question: str, model: str, history: list | None = Non
                 if outcomes:
                     sections.append('- Outcomes (exit lines quoted by code): ' + '; '.join(f'`{text[:110]}` {filename}:{n}' for n, text in outcomes))
                 kept += len(accepted[:limit]) + len(outcomes)
-        if not kept:
+        # Request bodies, responses and related endpoints, found by code from the handlers' own lines.
+        contracts = endpoint_contracts(project, route_sources)
+        if not kept and not contracts:
             return ''
         path = [f'- {why} — {filename}:{int(re.search(r":(\d+)-", excerpt).group(1)) if re.search(r":(\d+)-", excerpt) else 1}'
                 for filename, excerpt, why in flow_parts]
         return ('QUESTION: ' + question + '\nANSWER (assembled from per-function extractions):\n'
                 + '**Code path** (route, handler and the functions it calls, found by code from route declarations and the graph)\n'
-                + '\n'.join(path) + '\n' + '\n'.join(sections)
+                + '\n'.join(path) + '\n' + ('\n'.join(contracts) + '\n' if contracts else '') + '\n'.join(sections)
                 + f'\nUNCERTAINTIES: Functions examined: {", ".join(dict.fromkeys(examined))}. {dropped} candidate claim(s) were dropped for failing '
                 + ('citation checks or the second model check against the cited lines' if VERIFY_CLAIMS else 'citation checks')
                 + (f'; {unchecked} claim(s) could not be second-checked' if unchecked else '')

@@ -6,7 +6,7 @@ client = httpx.AsyncClient()
 
 
 @router.post("/create")
-async def create_order(body: dict):
+async def create_order(body: OrderIn):
     # client.post("/not-a-route") is an outgoing call, not a route
     await client.post("/payments/charge", json=body)
     return {"id": 1}
@@ -19,4 +19,9 @@ async def get_order(order_id: int):
 
 @router.api_route("/{order_id}/cancel", methods=["POST", "DELETE"])
 async def cancel_order(order_id: int):
-    return {}
+    raise HTTPException(status_code=409, detail="already shipped")
+
+
+class OrderIn(BaseModel):
+    sku: str
+    quantity: int = 1

@@ -23,3 +23,14 @@ async fn shutdown_signal() {
 
 #[get("/v1/legacy")]
 async fn legacy() -> &'static str { "old" }
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct NewEntry {
+    account_id: String,
+    amount_cents: i64,
+}
+
+async fn create_entry(Json(payload): Json<NewEntry>) -> (StatusCode, Json<Entry>) {
+    (StatusCode::CREATED, Json(save(payload)))
+}

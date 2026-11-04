@@ -581,7 +581,15 @@ def function_body(lines: list[str], number: int, limit: int) -> list[str]:
         return []
     indent = len(lines[number - 1]) - len(lines[number - 1].lstrip())
     body = [lines[number - 1]]
-    for text in lines[number:number - 1 + limit]:
+    # A signature can span lines (func (m *Module) dynamicValidate(\n\tw ..., r ...,\n) (handled bool) {): the body
+    # starts after the line that opens it, not at the first line back at the declaration's indent.
+    opened = '{' in lines[number - 1] or lines[number - 1].rstrip().endswith(':') or lines[number - 1].rstrip().endswith('=>')
+    while not opened and len(body) < min(12, limit) and number - 1 + len(body) < len(lines):
+        text = lines[number - 1 + len(body)]
+        body.append(text)
+        opened = '{' in text or text.rstrip().endswith(':') or text.rstrip().endswith('=>') or text.rstrip().endswith(';')
+    start = number - 1 + len(body)
+    for text in lines[start:number - 1 + limit]:
         if text.strip() and len(text) - len(text.lstrip()) <= indent:
             if text.strip()[:1] in '})]':
                 body.append(text)
@@ -627,3 +635,291 @@ def outcome_lines(filename: str, numbered: list[tuple[int, str]], limit: int = 5
 
 def handler_name(filename: str, lines: list[str], number: int) -> str | None:
     return handler_reference(filename, lines, number)[0]
+
+
+# ── Request and response bodies ──────────────────────────────────────────────
+#
+# Found by code from the handler's own lines and the type definitions they name. A body type is
+# reported with the fields its declaration shows (JSON names as the serializer writes them where the
+# declaration says so); a response is each line that writes one, with the status that line sets.
+
+from http import HTTPStatus  # noqa: E402
+
+_STATUS_BY_NAME = {status.name.replace('_', '').casefold(): status.value for status in HTTPStatus}
+_STATUS_BY_NAME.update({'ok': 200, 'requestentitytoolarge': 413, 'unprocessableentity': 422, 'teapot': 418})
+# Framework result helpers whose name is the status: Ok(), NotFound(), ResponseEntity.ok(), NotFoundException.
+_STATUS_HELPERS = {'ok': 200, 'created': 201, 'accepted': 202, 'nocontent': 204, 'badrequest': 400, 'unauthorized': 401,
+                   'forbid': 403, 'forbidden': 403, 'notfound': 404, 'conflict': 409, 'unprocessableentity': 422,
+                   'internalservererror': 500, 'serviceunavailable': 503}
+
+
+def status_code(text: str) -> int | None:
+    """The HTTP status a source fragment names: http.StatusBadRequest, StatusCodes.Status404NotFound,
+    HttpStatus.NOT_FOUND, StatusCode::CREATED, status.HTTP_201_CREATED, a bare 3-digit code."""
+    named = re.search(r'\b(?:http\.)?Status([A-Z]\w+)\b', text)
+    if named and named.group(1).casefold() in _STATUS_BY_NAME:
+        return _STATUS_BY_NAME[named.group(1).casefold()]
+    digits = re.search(r'\bStatus(\d{3})\w*|\bHTTP_(\d{3})_|(?<![\w.])([1-5]\d\d)(?![\w.])', text)
+    if digits:
+        return int(next(group for group in digits.groups() if group))
+    upper = re.search(r'\b(?:HttpStatus|StatusCode|HttpStatusCode)(?:\.|::)([A-Z][A-Za-z_]+)\b', text)
+    if upper and upper.group(1).replace('_', '').casefold() in _STATUS_BY_NAME:
+        return _STATUS_BY_NAME[upper.group(1).replace('_', '').casefold()]
+    helper = re.search(r'(?:\bResults\.|\bResponseEntity\.|\breturn\s+(?:new\s+)?|\bthrow\s+new\s+)(\w+?)(?:Result|Exception|ObjectResult)?\s*\(', text)
+    if helper and helper.group(1).casefold() in _STATUS_HELPERS:
+        return _STATUS_HELPERS[helper.group(1).casefold()]
+    return None
+
+
+def _camel(name: str) -> str:
+    return name[:1].lower() + name[1:]
+
+
+def type_fields(filename: str, lines: list[str], number: int) -> list[tuple[str, str, int]]:
+    """(JSON name, type, line) of the fields declared by the type at lines[number - 1], as its language and
+    serializer name them: Go json tags, C# camelCase or [JsonPropertyName], TS/Python/Java/Rust field names
+    (serde rename and rename_all = "camelCase" respected)."""
+    lang = language(filename)
+    if not 0 < number <= len(lines):
+        return []
+    head = lines[number - 1]
+    fields: list[tuple[str, str, int]] = []
+    record = re.search(r'\brecord\s+\w+\s*\((.*)\)', head)
+    if record and lang in {'csharp', 'jvm'}:          # positional record: record ChargeRequest(string Card, decimal Amount)
+        for part in re.split(r',(?![^<]*>)', record.group(1)):
+            bits = part.strip().split()
+            if len(bits) >= 2:
+                fields.append((_camel(bits[-1]) if lang == 'csharp' else bits[-1], ' '.join(bits[:-1]), number))
+        return fields
+    rename_all = any('rename_all' in text and 'camel' in text.casefold() for text in lines[max(0, number - 4):number - 1])
+    depth, pending_name = 0, None
+    for index in range(number - 1, min(len(lines), number + 80)):
+        text = lines[index]
+        depth += text.count('{') - text.count('}')
+        if index == number - 1 and lang == 'python':
+            depth = 1
+        if lang == 'python' and index > number - 1 and text.strip() and len(text) - len(text.lstrip()) <= len(head) - len(head.lstrip()):
+            break
+        stripped = text.strip()
+        if index > number - 1 and (depth <= 0 and lang != 'python'):
+            break
+        if index == number - 1 or not stripped or is_comment(lang, text):
+            continue
+        attribute = re.search(r'\[JsonPropertyName\(\s*"([^"]+)"|#\[serde\(\s*rename\s*=\s*"([^"]+)"|@JsonProperty\(\s*"([^"]+)"', stripped)
+        if attribute and stripped.startswith(('[', '#[', '@')):
+            pending_name = next(group for group in attribute.groups() if group)
+            continue
+        if lang == 'go':
+            # A lone type name in a struct body is an embedding, exported or not (baseRequest, *pkg.Base).
+            embedded = re.match(r'\*?([A-Za-z_]\w*(?:\.[A-Z]\w*)?)\s*(?:`[^`]*`)?\s*$', stripped)
+            if embedded:                      # an embedded struct: its fields are the caller's to expand
+                fields.append(('*' + embedded.group(1).split('.')[-1], 'embedded', index + 1))
+                continue
+            # One or several names sharing a type: AuthToken, GameUrl, Language string
+            match = re.match(r'(\w+(?:\s*,\s*\w+)*)\s+([^`]+?)\s*(?:`([^`]*)`)?\s*$', stripped)
+            if match and match.group(1)[0].isupper():
+                tag = re.search(r'json:"([^",]*)', match.group(3) or '')
+                if tag and tag.group(1) == '-':
+                    continue
+                names = [name.strip() for name in match.group(1).split(',')]
+                for name in names:
+                    if name[:1].isupper():
+                        fields.append(((tag.group(1) if tag and tag.group(1) and len(names) == 1 else name), match.group(2).strip(), index + 1))
+        elif lang == 'python':
+            match = re.match(r'(\w+)\s*:\s*([^=#]+)', stripped)
+            if match and not stripped.startswith(('def ', 'class ', '@')):
+                fields.append((match.group(1), match.group(2).strip(), index + 1))
+        elif lang == 'js':
+            match = re.match(r'(?:readonly\s+|public\s+|private\s+)*(\w+)(\??)\s*[:!]\s*([^;=]+)', stripped)
+            if match and not re.match(r'(?:constructor|get|set|static)\b', stripped):
+                fields.append((match.group(1), match.group(3).strip() + ('?' if match.group(2) else ''), index + 1))
+        elif lang == 'csharp':
+            match = re.match(r'public\s+(?:required\s+)?([\w<>\[\]?, .]+?)\s+(\w+)\s*\{\s*get', stripped)
+            if match:
+                fields.append((pending_name or _camel(match.group(2)), match.group(1).strip(), index + 1))
+        elif lang == 'jvm':
+            match = re.match(r'(?:private|public|protected)?\s*(?:final\s+)?([\w<>\[\]?, .]+?)\s+(\w+)\s*(?:=.*)?;', stripped) or \
+                    re.match(r'(?:val|var)\s+(\w+)\s*:\s*([^,=)]+)', stripped)
+            if match and not stripped.startswith(('return', 'package', 'import')):
+                name, kind = (match.group(2), match.group(1)) if stripped[:3] not in {'val', 'var'} else (match.group(1), match.group(2))
+                fields.append((pending_name or name, kind.strip(), index + 1))
+        elif lang == 'rust':
+            match = re.match(r'(?:pub(?:\([^)]*\))?\s+)?(\w+)\s*:\s*([^,]+),?', stripped)
+            if match:
+                name = match.group(1)
+                if rename_all:
+                    name = re.sub(r'_(\w)', lambda m: m.group(1).upper(), name)
+                fields.append((pending_name or name, match.group(2).strip(), index + 1))
+        pending_name = None
+    return fields
+
+
+def type_declaration(lang: str | None, name: str) -> re.Pattern | None:
+    """A pattern for the line that declares a body type named name, in its language."""
+    word = re.escape(name)
+    return {
+        'go': re.compile(r'^\s*type\s+' + word + r'\s+struct\b'),
+        'python': re.compile(r'^\s*class\s+' + word + r'\b'),
+        'js': re.compile(r'^\s*(?:export\s+)?(?:class|interface)\s+' + word + r'\b|^\s*(?:export\s+)?type\s+' + word + r'\s*=\s*\{'),
+        'csharp': re.compile(r'\b(?:class|record|struct)\s+' + word + r'\b'),
+        'jvm': re.compile(r'\b(?:class|record|data\s+class)\s+' + word + r'\b'),
+        'rust': re.compile(r'^\s*(?:pub(?:\([^)]*\))?\s+)?struct\s+' + word + r'\b'),
+        'php': re.compile(r'\bclass\s+' + word + r'\b'),
+    }.get(lang or '')
+
+
+def request_body(filename: str, body: list[tuple[int, str]]) -> dict | None:
+    """How the handler reads its JSON body, from its own lines: {'type': name or None, 'inline': (start line,
+    field lines) or None, 'decoder': the reading call, 'line': where, 'via': a binder function to resolve}.
+
+    Go: DecodeJSON(r, &req) / json.NewDecoder(r.Body).Decode(&req) / mvc.Read[T](...) / bindX(w, r)
+    (the binder's return type names the body); Python/FastAPI and TS/Nest: a typed body parameter;
+    C#: a [FromBody] or complex action parameter; Java: @RequestBody; Rust: Json<T> extractor."""
+    lang = language(filename)
+    text = '\n'.join(line for _, line in body)
+    if lang == 'go':
+        for number, line in body:
+            generic = re.search(r'\b[\w.]*Read\[(\w+)\]\(', line)
+            if generic:
+                return {'type': generic.group(1), 'decoder': line.strip()[:110], 'line': number}
+            # Any decoder or binder that fills a variable: DecodeJSON(r, &req), json.Unmarshal(b, &req), bind(r, &req, ...)
+            target = re.search(r'\b(?i:[\w.]*(?:decode|unmarshal|bind|read)\w*)\(\s*(?:[^,()&]*,\s*)?&(\w+)', line)
+            typed = re.search(r'\b[\w.]*Read\(\s*r\s*,\s*\w+\s*,\s*(\w+)\s*\)', line)
+            if typed and not target:          # mvc.Read(r, loginModel, validateLogin): the validator's parameter names T
+                return {'type': None, 'validator': typed.group(1), 'decoder': line.strip()[:110], 'line': number}
+            if target:
+                var = target.group(1)
+                for start, decl in body:
+                    inline = re.search(r'\bvar\s+' + re.escape(var) + r'\s+struct\s*\{', decl)
+                    if inline:
+                        return {'type': None, 'inline': start, 'decoder': line.strip()[:110], 'line': number}
+                    named = re.search(r'\bvar\s+' + re.escape(var) + r'\s+\*?([\w.]+)\s*$', decl) or \
+                            re.search(r'\b' + re.escape(var) + r'\s*:=\s*&?([\w.]+)\{', decl)
+                    if named:
+                        return {'type': named.group(1).split('.')[-1], 'decoder': line.strip()[:110], 'line': number}
+                return {'type': None, 'decoder': line.strip()[:110], 'line': number}
+            binder = re.search(r'\b\w+\s*(?:,\s*\w+)?\s*:?=\s*((?i:bind|read|decode|parse)\w*)\(\s*(?:w\s*,\s*)?r\b', line)
+            if binder:
+                return {'type': None, 'via': binder.group(1), 'decoder': line.strip()[:110], 'line': number}
+        # A handler that receives the decoded body as a parameter: balance(w, r, req *balanceRequest) error
+        signature = ' '.join(line for _, line in body[:3]).split('{', 1)[0]
+        params = re.search(r'\w+\s*\(([^()]*(?:\([^()]*\)[^()]*)*)\)\s*[^()]*$', signature.split(')', 1)[-1] if signature.lstrip().startswith('func (') else signature)
+        for name, kind in re.findall(r'(\w+)\s+\*?([A-Za-z_][\w.]*)', params.group(1) if params else ''):
+            if kind not in {'http.ResponseWriter', 'http.Request', 'context.Context', 'string', 'int', 'bool', 'any'} and not kind.startswith('func'):
+                return {'type': kind.split('.')[-1], 'decoder': f'parameter {name}', 'line': body[0][0]}
+    elif lang == 'python':
+        signature = body[0][1] if body else ''
+        for name, kind in re.findall(r'(\w+)\s*:\s*([A-Z]\w+)', signature):
+            if kind not in {'Request', 'Response', 'Session', 'Depends', 'Optional', 'List', 'Dict', 'Any', 'AsyncSession'}:
+                return {'type': kind, 'decoder': signature.strip()[:110], 'line': body[0][0]}
+        keys = re.findall(r'\b(?:request\.json|request\.get_json\(\)|data|payload|body)\s*(?:\[\s*[\'"](\w+)[\'"]\s*\]|\.get\(\s*[\'"](\w+)[\'"])', text)
+        if keys:
+            return {'type': None, 'keys': list(dict.fromkeys(a or b for a, b in keys)), 'decoder': 'request JSON keys used', 'line': body[0][0]}
+    elif lang == 'js':
+        for number, line in body[:3]:
+            dto = re.search(r'@Body\(\s*\)\s*\w+\s*:\s*(\w+)', line)
+            if dto:
+                return {'type': dto.group(1), 'decoder': line.strip()[:110], 'line': number}
+        keys = re.findall(r'\breq\.body\.(\w+)', text) + [key.strip().split(':')[0].strip() for group in
+                                                           re.findall(r'\{([^}]*)\}\s*=\s*req\.body', text) for key in group.split(',')]
+        if keys:
+            return {'type': None, 'keys': list(dict.fromkeys(key for key in keys if key)), 'decoder': 'req.body fields used', 'line': body[0][0]}
+    elif lang == 'csharp':
+        signature = ' '.join(line for _, line in body[:2])
+        param = re.search(r'\[FromBody\]\s*([A-Z]\w+)', signature) or re.search(r'\(\s*([A-Z]\w+)\s+\w+\s*[,)]', signature)
+        if param and param.group(1) not in {'HttpContext', 'CancellationToken', 'String', 'Guid', 'Int32'}:
+            return {'type': param.group(1), 'decoder': signature.strip()[:110], 'line': body[0][0]}
+    elif lang == 'jvm':
+        signature = ' '.join(line for _, line in body[:3])
+        param = re.search(r'@RequestBody\s+(?:@\w+\s+)*([A-Z]\w+)', signature)
+        if param:
+            return {'type': param.group(1), 'decoder': signature.strip()[:110], 'line': body[0][0]}
+    elif lang == 'rust':
+        signature = ' '.join(line for _, line in body[:4])
+        param = re.search(r'Json\s*\(\s*\w+\s*\)\s*:\s*Json\s*<\s*(\w+)\s*>', signature) or re.search(r'web::Json<\s*(\w+)\s*>', signature)
+        if param:
+            return {'type': param.group(1), 'decoder': signature.strip()[:110], 'line': body[0][0]}
+    return None
+
+
+_WRITER = {
+    # A line that writes a response: Go writers take the ResponseWriter first; the others return or raise.
+    'go': re.compile(r'\b([\w.]*\w)\(\s*w\s*[,)]|\bw\.WriteHeader\(|\bhttp\.(?:Error|Redirect)\('),
+    'python': re.compile(r'\braise\s+HTTPException\(|\b(?:JSONResponse|Response|jsonify|abort)\(|^\s*return\s+[\[{(]|^\s*return\s+\w'),
+    'js': re.compile(r'\bres\.(?:status|json|send|sendStatus|end)\(|\breply\.(?:code|send)\(|\bthrow\s+new\s+\w+Exception\(|\bc\.json\(|^\s*return\s+'),
+    'csharp': re.compile(r'\breturn\s+(?:new\s+)?\w+\(|\bResults\.\w+\(|\bTypedResults\.\w+\(|\bthrow\s+new\s+\w+Exception\('),
+    'jvm': re.compile(r'\bResponseEntity\.|\bthrow\s+new\s+ResponseStatusException\(|^\s*return\s+'),
+    'rust': re.compile(r'\bStatusCode::\w+|\bJson\(|^\s*(?:return\s+)?(?:Ok|Err)\('),
+    'php': re.compile(r'\bresponse\(\)->json\(|\babort\(|^\s*return\s+'),
+    'ruby': re.compile(r'\b(?:render|status|halt|json)\b'),
+}
+
+
+def response_writes(filename: str, body: list[tuple[int, str]], limit: int = 12) -> list[dict]:
+    """Each line of the handler that writes a response: {'line', 'status' (int or None), 'writer', 'text', 'when'}.
+
+    'when' is the nearest enclosing if-condition, quoted. A writer whose status is not on the line (Go's
+    apierror.WriteValidation(w, r, nil)) is returned with status None and its name, for the caller to resolve."""
+    lang = language(filename)
+    pattern = _WRITER.get(lang or '')
+    if not pattern:
+        return []
+    out = []
+    for index, (number, line) in enumerate(body[1:], 1):
+        if is_comment(lang, line) or not pattern.search(line):
+            continue
+        if lang in {'python', 'js', 'jvm', 'php'} and re.match(r'\s*return\b', line) and _BARE_EXIT.match(line):
+            continue
+        writer = pattern.search(line).group(1) if lang == 'go' else None
+        if writer and HTTP_NON_WRITERS.search(writer):
+            continue
+        status = status_code(line)
+        if status is None and lang == 'js' and re.search(r'\bres\.json\(|\bc\.json\(', line):
+            status = 200
+        if status is None and lang == 'rust' and re.search(r'^\s*(?:return\s+)?Ok\(\s*Json\(', line):
+            status = 200
+        indent = len(line) - len(line.lstrip())
+        when = None
+        for _, previous in reversed(body[max(0, index - 6):index]):
+            condition = re.match(r'\s*(?:\}\s*else\s+)?(?:if|elif|else\s+if)\s*(.+?)\s*[{:]\s*$|\s*case\s+(.+?):\s*$', previous)
+            if condition and len(previous) - len(previous.lstrip()) < indent:
+                when = (condition.group(1) or condition.group(2)).strip()
+                if when.startswith('(') and when.endswith(')'):     # C-like if (cond) { ... }
+                    when = when[1:-1].strip()
+                when = when[:90]
+                break
+        # The whole call, joined until its parentheses close: map[string]any{ "messageSent": true, ... })
+        call, depth = [line.strip()], line.count('(') - line.count(')')
+        for _, following in body[index + 1:index + 8]:
+            if depth <= 0:
+                break
+            call.append(following.strip())
+            depth += following.count('(') - following.count(')')
+        out.append({'line': number, 'status': status, 'writer': writer, 'text': line.strip()[:120], 'when': when,
+                    'call': ' '.join(call)[:600]})
+        if len(out) >= limit:
+            break
+    return out
+
+
+# Calls that take the ResponseWriter but only log or read (h.info(r, ...), r.Header.Get) are not responses.
+HTTP_NON_WRITERS = re.compile(r'(?:^|\.)(?:log|info|warn|debug|Info|Warn|Debug|Log|Error\w*Context|InfoContext|WarnContext|With\w*|Header|ServeHTTP|Use)$')
+
+
+def response_keys(filename: str, writes: list[dict], body: list[tuple[int, str]] | None = None) -> list[str]:
+    """JSON keys a success response visibly carries: literal keys in the writing call, or, when it writes a
+    variable (WriteJSON(w, 200, out)), the keys that variable is built with: out := map...{"k": ...}, out["k"] = ..."""
+    keys = []
+    for write in writes:
+        if write['status'] not in (None, 200, 201):
+            continue
+        call = write.get('call', write['text'])
+        keys += re.findall(r'["\'](\w+)["\']\s*:', call)
+        variable = re.search(r',\s*([a-z_]\w*)\s*\)+\s*;?\s*$', call)
+        if variable and body:
+            name = re.escape(variable.group(1))
+            for _, text in body:
+                if re.search(r'\b' + name + r'\s*:?=', text):
+                    keys += re.findall(r'["\'](\w+)["\']\s*:', text)
+                keys += re.findall(r'\b' + name + r'\[\s*["\'](\w+)["\']\s*\]\s*=', text)
+    return list(dict.fromkeys(keys))
