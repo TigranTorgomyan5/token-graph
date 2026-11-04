@@ -45,7 +45,7 @@ LEGACY_SYSTEMS = SKILL / ".explorer-systems.json"   # before systems were shared
 CACHE_DIR = HOME_DIR / "system-cache"               # last scan per system, for the fast edit hook
 _self = Path(__file__).stat()
 SCANNER_VERSION = f"{_self.st_size}:{int(_self.st_mtime)}"   # a changed scanner invalidates cached scans
-MAX_SERVICES = 40
+MAX_SERVICES = 60
 MAX_FILES = 40_000
 MAX_FILE_BYTES = 1_000_000
 MAX_EVIDENCE = 8
@@ -914,6 +914,12 @@ def system_graph(name: str, scan: dict) -> dict:
             "cross_links": cross, "missing_graphs": missing, "directed": True}
 
 
+# Sub-folders that are parts of one service, not services of their own.
+SERVICE_PARTS = frozenset({"src", "source", "sources", "lib", "libs", "app", "test", "tests", "spec", "specs",
+                           "docs", "doc", "samples", "examples", "tools", "scripts", "build", "benchmarks",
+                           "benchmark", "cmd", "internal", "pkg", "api", "web", "client", "server"})
+
+
 def discover_services(parent: Path, depth: int = 2) -> list[dict]:
     """Sub-folders of a parent folder that look like services (they hold a project or Dockerfile)."""
     found = []
@@ -935,6 +941,14 @@ def discover_services(parent: Path, depth: int = 2) -> list[dict]:
             continue
         if has_project(child, 1):
             found.append({"name": child.name, "path": str(child.resolve())})
+    # A service folder chosen by mistake (Slot_3x3 with Slot_3x3.sln, src/ and tests/): its own
+    # sub-folders are parts of one service, so the folder itself is the service.
+    try:
+        own_project = any(e.is_file() and PROJECT_MARKERS.search(e.name) for e in parent.iterdir())
+    except OSError:
+        own_project = False
+    if own_project and all(item["name"].lower() in SERVICE_PARTS for item in found):
+        return [{"name": parent.resolve().name, "path": str(parent.resolve())}]
     return found
 
 

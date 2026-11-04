@@ -2,7 +2,7 @@
   // The server scans every service for NATS / Kafka / RabbitMQ / MassTransit / gRPC / HTTP endpoints
   // and links producer to consumer (scripts/system_links.py). This page draws the service map and
   // shows the code lines behind each connection; a service opens as a normal code graph.
-  const sysState = { list: [], current: null, scan: null, loading: false, error: '', note: '', editing: null, selected: null, projectQuery: '', hidden: new Set(), pos: new Map(), drag: null, noClick: false, graphIds: new Map(), building: false };
+  const sysState = { list: [], current: null, scan: null, loading: false, error: '', note: '', editing: null, selected: null, projectQuery: '', hidden: new Set(), pos: new Map(), drag: null, noClick: false, graphIds: new Map(), building: false, browser: null, noteError: false, saving: false };
   const TECH_COLOR = { nats: '#52c9e8', http: '#8877ff', grpc: '#55d6a2', kafka: '#e6ad63', rabbitmq: '#f09461', masstransit: '#e58bd4', redis: '#f07883', websocket: '#b2d66e', mqtt: '#e0d56b', sqs: '#6f9cff', servicebus: '#53b9a6' };
   const TECH_LABEL = { nats: 'NATS', http: 'HTTP', grpc: 'gRPC', kafka: 'Kafka', rabbitmq: 'RabbitMQ', masstransit: 'MassTransit', redis: 'Redis', websocket: 'WebSocket', mqtt: 'MQTT', sqs: 'SQS/SNS', servicebus: 'Service Bus', pubsub: 'Pub/Sub', zeromq: 'ZeroMQ', jms: 'JMS' };
   const MATCH_NOTE = { exact: 'same subject/topic text on both sides', 'shared name': 'both sides use the same constant name', route: 'client path matches a server route; the destination is inferred', url: 'a URL names this service (caller side only)', 'config key': 'a config key names this service (caller side only)' };
@@ -196,9 +196,11 @@
       <label class="eyebrow" for="sys-name">NAME</label><input id="sys-name" class="sys-input" value="${escapeHtml(ed.name)}" placeholder="e.g. SparkleGaming" maxlength="80">
       <p class="dash-note">Choose the project folder to find the services inside it, and/or add service folders from anywhere — any language.</p>
       <div class="dash-footer"><button type="button" class="dash-link" data-sys="pick-root">Choose project folder…</button><button type="button" class="dash-link" data-sys="pick-service">Add service folder…</button></div>
+      ${folderBrowserHtml()}
       <div class="sys-path-row"><input id="sys-path" class="sys-input" placeholder="or paste a folder path"><button type="button" class="dash-link" data-sys="add-path">Add as service</button><button type="button" class="dash-link" data-sys="discover-path">Find services inside</button></div>
       <ul class="sys-service-list">${ed.services.map((s, i) => `<li><label><input type="checkbox" data-sys="toggle" data-i="${i}"${s.on ? ' checked' : ''}> <strong>${escapeHtml(s.name)}</strong> <span class="dash-note">${escapeHtml(s.path)}</span></label><button type="button" class="sys-x" data-sys="remove" data-i="${i}" aria-label="Remove ${escapeHtml(s.name)}">×</button></li>`).join('') || '<li class="dash-note">No services yet.</li>'}</ul>
-      <div class="dash-footer"><button type="button" class="dash-link primary" data-sys="save">Save &amp; scan</button><button type="button" class="dash-link" data-sys="cancel">Cancel</button>${sysState.note ? `<span class="dash-note">${escapeHtml(sysState.note)}</span>` : ''}</div>
+      ${sysState.note ? `<p class="sys-note${sysState.noteError ? ' error' : ''}" role="${sysState.noteError ? 'alert' : 'status'}">${escapeHtml(sysState.note)}</p>` : ''}
+      <div class="dash-footer"><button type="button" class="dash-link primary" data-sys="save"${sysState.saving ? ' disabled aria-busy="true"' : ''}>${sysState.saving ? 'Saving…' : 'Save &amp; scan'}</button><button type="button" class="dash-link" data-sys="cancel">Cancel</button></div>
     </div></article>`;
   }
 
@@ -209,10 +211,57 @@
     return added;
   }
 
-  async function pickFolder() {
-    const picked = await api('/api/pick', { start: sysState.editing.root || state.projectPath || '' });
-    if (picked.manual) { sysState.note = 'A native folder picker is unavailable; paste the full folder path instead.'; renderSystem(); $('#sys-path')?.focus(); return ''; }
-    return picked.path;
+  // ---- folder browser inside the page: works on every OS and never hides behind the browser
+  // window, unlike a native dialog. The server lists folder names only (/api/folders).
+  const lastName = path => path.split(/[\\/]/).filter(Boolean).pop() || path;
+  async function openFolderBrowser(purpose, path) {
+    const start = path ?? (sysState.editing.root || (state.projectPath ? state.projectPath.replace(/[\\/][^\\/]+[\\/]?$/, '') : ''));
+    sysState.browser = { purpose, data: sysState.browser?.data || null, loading: true, error: '' };
+    renderSystem();
+    try { sysState.browser.data = await api(`/api/folders?path=${encodeURIComponent(start)}`); }
+    catch (error) {
+      if (sysState.browser.data || !start) sysState.browser.error = error.message;  // keep the folder that was open
+      else {  // a remembered folder may be gone: start from the home folder instead
+        try { sysState.browser.data = await api('/api/folders'); } catch (_) { sysState.browser.error = error.message; }
+      }
+    }
+    if (!sysState.browser) return;
+    sysState.browser.loading = false;
+    renderSystem();
+    $('.sys-browser-list button')?.focus();
+  }
+
+  function folderBrowserHtml() {
+    const fb = sysState.browser;
+    if (!fb) return '';
+    const data = fb.data;
+    const title = fb.purpose === 'root' ? 'Choose the project folder that contains the services' : 'Choose a service folder';
+    const roots = (data?.roots || []).map(r => `<button type="button" class="sys-chip-btn" data-sys="fb-open" data-path="${escapeHtml(r.path)}">${escapeHtml(r.name)}</button>`).join('');
+    const list = !data ? `<li class="dash-note">${fb.loading ? 'Loading…' : 'Could not open a folder.'}</li>`
+      : data.folders.map(f => `<li><button type="button" data-sys="fb-open" data-path="${escapeHtml(f.path)}"><span aria-hidden="true">▸</span> ${escapeHtml(f.name)}</button></li>`).join('') || '<li class="dash-note">No sub-folders here.</li>';
+    return `<section class="sys-browser" aria-label="${escapeHtml(title)}" aria-busy="${fb.loading}">
+      <p class="sys-browser-title"><strong>${escapeHtml(title)}</strong></p>
+      <div class="sys-browser-bar">${roots}<button type="button" class="sys-chip-btn" data-sys="fb-open" data-path="${escapeHtml(data?.parent || '')}"${data?.parent ? '' : ' disabled'} aria-label="Up one folder">↑ Up</button></div>
+      <div class="sys-path-row"><input id="sys-fb-path" class="sys-input" value="${escapeHtml(data?.path || '')}" aria-label="Folder path" spellcheck="false"><button type="button" class="dash-link" data-sys="fb-go">Go</button></div>
+      ${fb.error ? `<div class="dash-error" role="alert">${escapeHtml(fb.error)}</div>` : ''}
+      <ul class="sys-browser-list">${list}</ul>
+      ${data?.truncated ? '<p class="dash-note">Only the first 1,000 folders are shown; type a path above to go further.</p>' : ''}
+      <div class="dash-footer"><button type="button" class="dash-link primary" data-sys="fb-choose"${data ? '' : ' disabled'}>${fb.purpose === 'root' ? 'Find services in' : 'Add'} “${escapeHtml(data ? lastName(data.path) : '')}”</button><button type="button" class="dash-link" data-sys="fb-cancel">Cancel</button><button type="button" class="dash-link" data-sys="fb-native" title="Open the operating system's own folder dialog instead">Use system dialog…</button></div>
+    </section>`;
+  }
+
+  async function useFolder(purpose, path) {
+    sysState.browser = null;
+    if (purpose === 'root') await discoverInto(path);
+    else { addServices([{ name: lastName(path), path }]); sysState.note = ''; }
+  }
+
+  async function nativePick(purpose, start) {
+    sysState.note = 'Choose a folder in the system dialog…'; renderSystem();
+    const picked = await api('/api/pick', { start: start || sysState.editing.root || state.projectPath || '' });
+    sysState.note = '';
+    if (picked.manual) { sysState.note = 'No system folder dialog is available here; choose the folder in the list instead.'; await openFolderBrowser(purpose, start); return; }
+    if (picked.path) await useFolder(purpose, picked.path);
   }
 
   async function discoverInto(path) {
@@ -220,18 +269,26 @@
     const ed = sysState.editing;
     ed.root = path;
     if (!ed.name) ed.name = path.split(/[\\/]/).filter(Boolean).pop() || '';
+    if (!services.length) {  // nothing that looks like a service inside: use the folder itself
+      const added = addServices([{ name: lastName(path), path }]);
+      sysState.note = `No service folders inside “${lastName(path)}”${added ? ', so it was added as one service' : ''}. Add more with “Add service folder…”.`;
+      return;
+    }
     const added = addServices(services);
-    sysState.note = services.length ? `Found ${services.length} service folders (${added} new).` : 'No service folders found inside; add them one by one.';
+    sysState.note = services.length === 1 && services[0].path === path
+      ? `“${services[0].name}” is one service${added ? ' and was added' : ''}. Add the other services with “Add service folder…”.`
+      : `Found ${services.length} service folders (${added} new).`;
   }
 
   async function onSystemAction(target) {
     const action = target.dataset.sys, i = Number(target.dataset.i);
     const ed = sysState.editing;
     if (ed && $('#sys-name')) ed.name = $('#sys-name').value;
+    if (action !== 'toggle' && action !== 'save') sysState.noteError = false;
     try {
       if (action === 'new') { sysState.editing = { id: '', name: '', root: '', services: [] }; sysState.note = ''; }
       else if (action === 'edit' && sysState.current) { const c = sysState.current; sysState.editing = { id: c.id, name: c.name, root: c.root || '', services: c.services.map(s => ({ ...s, on: true })) }; sysState.note = ''; }
-      else if (action === 'cancel') sysState.editing = null;
+      else if (action === 'cancel') { sysState.editing = null; sysState.browser = null; }
       else if (action === 'rescan') { scanSystem(true); return; }
       else if (action === 'system-graph') { openSystemGraph(); return; }
       else if (action === 'delete' && sysState.current) {
@@ -239,8 +296,12 @@
         await api('/api/systems/delete', { id: sysState.current.id });
         sysState.current = null; sysState.scan = null; await loadSystems(); return;
       }
-      else if (action === 'pick-root') { const path = await pickFolder(); if (path) await discoverInto(path); }
-      else if (action === 'pick-service') { const path = await pickFolder(); if (path) { addServices([{ name: path.split(/[\\/]/).filter(Boolean).pop(), path }]); sysState.note = ''; } }
+      else if (action === 'pick-root' || action === 'pick-service') { await openFolderBrowser(action === 'pick-root' ? 'root' : 'service'); return; }
+      else if (action === 'fb-open' && sysState.browser) { await openFolderBrowser(sysState.browser.purpose, target.dataset.path); return; }
+      else if (action === 'fb-go' && sysState.browser) { await openFolderBrowser(sysState.browser.purpose, $('#sys-fb-path').value.trim()); return; }
+      else if (action === 'fb-choose' && sysState.browser?.data) await useFolder(sysState.browser.purpose, sysState.browser.data.path);
+      else if (action === 'fb-cancel') sysState.browser = null;
+      else if (action === 'fb-native' && sysState.browser) { const { purpose, data } = sysState.browser; sysState.browser = null; await nativePick(purpose, data?.path); }
       else if (action === 'add-path' || action === 'discover-path') {
         const path = $('#sys-path').value.trim();
         if (!path) { $('#sys-path').focus(); return; }
@@ -250,12 +311,17 @@
       else if (action === 'toggle') { ed.services[i].on = target.checked; return; }
       else if (action === 'remove') ed.services.splice(i, 1);
       else if (action === 'save') {
+        if (sysState.saving) return;
         const services = ed.services.filter(s => s.on).map(({ name, path }) => ({ name, path }));
-        if (!ed.name.trim()) { sysState.note = 'Give the system a name.'; }
-        else if (!services.length) { sysState.note = 'Add at least one service folder.'; }
+        if (!ed.name.trim()) { sysState.note = 'Give the system a name first.'; sysState.noteError = true; renderSystem(); $('#sys-name')?.focus(); return; }
+        else if (!services.length) { sysState.note = ed.services.length ? 'Tick at least one service to save.' : 'Add at least one service folder first: “Choose project folder…” or “Add service folder…”.'; sysState.noteError = true; }
         else {
-          const { system } = await api('/api/systems/save', { id: ed.id, name: ed.name, root: ed.root, services });
-          sysState.editing = null; sysState.current = system; sysState.scan = null;
+          sysState.saving = true; sysState.note = ''; renderSystem();
+          let saved;
+          try { saved = await api('/api/systems/save', { id: ed.id, name: ed.name, root: ed.root, services }); }
+          finally { sysState.saving = false; }
+          const { system } = saved;
+          sysState.editing = null; sysState.browser = null; sysState.note = ''; sysState.current = system; sysState.scan = null;
           try { localStorage.setItem('tokenGraph.system', system.id); } catch (_) { /* per-viewer convenience only */ }
           await loadSystems(); return;
         }
@@ -276,7 +342,7 @@
         sysState.note = `Opened ${target.dataset.file}:${target.dataset.line} in VS Code.`;
       }
       else return;
-    } catch (error) { sysState.note = error.message; if (!sysState.editing) sysState.error = error.message; }
+    } catch (error) { sysState.note = error.message; sysState.noteError = true; if (!sysState.editing) sysState.error = error.message; }
     renderSystem();
   }
 

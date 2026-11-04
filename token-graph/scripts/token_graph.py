@@ -300,12 +300,51 @@ def sanitize_local_html(path: Path) -> None:
     path.write_text(page, encoding="utf-8")
 
 
+def add_line_ranges(root: Path) -> None:
+    """Record each symbol's last line (end_line) so answers can show `L1200-1236`. Optional:
+    a failure only leaves answers with start lines."""
+    command = [engine_python(), str(Path(__file__).with_name("line_ranges.py")), str(graph_file(root)), str(root)]
+    if QUIET_LOG is None:
+        subprocess.run(command, cwd=root, env=clean_env(), check=False)
+        return
+    with QUIET_LOG.open("a", encoding="utf-8") as log:
+        subprocess.run(command, cwd=root, env=clean_env(), stdout=log, stderr=subprocess.STDOUT, check=False)
+
+
 def finish_graph(root: Path) -> int:
     # cluster-only creates the engine's report and its interactive graph.html locally.
     if run_engine(root, "cluster-only", str(root), "--graph", str(graph_file(root)), "--no-label", "--no-viz"):
         return 1
+    add_line_ranges(root)
     write_embedded_viewer(root)
     return 0
+
+
+def refresh_if_stale(root: Path, auto_update: bool = True) -> str:
+    """Bring graph.json up to date with the code before an answer; return a one-line note
+    for the answer ('' when the graph was already current).
+
+    A stale graph answers with old line numbers: the assistant then opens the wrong place
+    and reads the file again, which costs more than the incremental update."""
+    import time
+    from graph_freshness import stale_reason
+    graph = root / "graphify-out" / "graph.json"
+    reason = stale_reason(root, graph)
+    if not reason:
+        return ""
+    if not auto_update:
+        return f"[STALE] {reason}; line numbers may be off. Refresh with --action update."
+    global QUIET_LOG
+    previous, QUIET_LOG = QUIET_LOG, root / "graphify-out" / "token-graph.log"
+    started = time.monotonic()
+    try:
+        failed = run_engine(root, "update", str(root), "--no-cluster") or finish_graph(root)
+    finally:
+        QUIET_LOG = previous
+    if failed:
+        return f"[STALE] {reason}; the automatic refresh failed (graphify-out/token-graph.log), line numbers may be off."
+    os.utime(graph)  # the graph now covers files edited before this moment, even if it did not change
+    return f"[graph refreshed: {reason}; {time.monotonic() - started:.0f}s]"
 
 
 def finish_local_graph(root: Path, model: str, vision: bool) -> int:
@@ -392,7 +431,7 @@ def build_local(root: Path, model: str, vision: bool, whisper_model_dir: str | N
     return finish_local_graph(root, model, vision)
 
 
-def launch_local(root: Path, question: str | None, refresh: bool, *, open_page: bool = False, budget: int = 800, contexts: list[str] | None = None, tests: bool = True, generated: bool = False) -> int:
+def launch_local(root: Path, question: str | None, refresh: bool, *, open_page: bool = False, budget: int = 800, contexts: list[str] | None = None, tests: bool = True, generated: bool = False, external: bool = False, auto_update: bool = True) -> int:
     """Build/query locally; return only the focused query result, or save the graph locally."""
     global QUIET_LOG
     output = root / "graphify-out"
@@ -401,7 +440,10 @@ def launch_local(root: Path, question: str | None, refresh: bool, *, open_page: 
     mode = "existing graph"
     graph = output / "graph.json"
     query_return_code = 0
+    freshness_note = ""
     try:
+        if question and not refresh and graph.is_file():
+            freshness_note = refresh_if_stale(root, auto_update)
         if refresh or not graph.is_file():
             require_runtime()
             if run_engine(root, "extract", str(root), "--code-only", "--no-cluster") or finish_graph(root):
@@ -410,7 +452,7 @@ def launch_local(root: Path, question: str | None, refresh: bool, *, open_page: 
         if question:
             if budget < 1: raise ValueError("--budget must be positive")
             from node_filters import scoped_graph
-            answer_graph = scoped_graph(graph, tests=tests, generated=generated)
+            answer_graph = scoped_graph(graph, tests=tests, generated=generated, external=external, line_ranges=True)
             query_command = [*engine_command(), "query", question, "--graph", str(answer_graph), "--budget", str(budget)]
             for context in contexts or []: query_command.extend(["--context", context])
             with QUIET_LOG.open("a", encoding="utf-8") as log:
@@ -441,6 +483,7 @@ def launch_local(root: Path, question: str | None, refresh: bool, *, open_page: 
             encoding="utf-8",
         )
         if question:
+            if freshness_note: print(freshness_note)
             print(query_text or "The local graph query returned no matching context.")
         else:
             print(f"Token Graph saved locally: {destination}. Open it manually when needed.")
@@ -473,17 +516,21 @@ def local_feature(root: Path, action: str, *, question: str | None = None,
                   node: str | None = None, relations: list[str] | None = None,
                   depth: int = 2, top: int = 10, export_format: str | None = None,
                   queries: int = 1, budget: int = 800, contexts: list[str] | None = None,
-                  merge_graphs: list[str] | None = None, tests: bool = True, generated: bool = False) -> int:
+                  merge_graphs: list[str] | None = None, tests: bool = True, generated: bool = False,
+                  external: bool = False, auto_update: bool = True) -> int:
     """Run one allowlisted local action; return bounded query context or save a local artifact."""
     global QUIET_LOG
     output = root / "graphify-out"
     output.mkdir(parents=True, exist_ok=True)
     QUIET_LOG = output / "token-graph.log"
+    answering = action in ("query", "path", "explain", "affected", "hubs")
+    freshness_note = refresh_if_stale(root, auto_update) if answering else ""
     graph = graph_file(root)
     # Question-answering actions read a copy without generated code (and without tests on request):
     # those nodes crowd the bounded answer without explaining the code.
     from node_filters import scoped_graph
-    answer_graph = scoped_graph(graph, tests=tests, generated=generated) if action in ("query", "path", "explain", "affected", "hubs") else graph
+    # External names (json, os, ILogger ...) have no source file and only crowd the answer.
+    answer_graph = scoped_graph(graph, tests=tests, generated=generated, external=external, line_ranges=True) if answering else graph
     commands: dict[str, list[str]] = {
         "query": ["query", question or "", "--graph", str(answer_graph)],
         "path": ["path", source or "", target or "", "--graph", str(answer_graph)],
@@ -651,6 +698,7 @@ def local_feature(root: Path, action: str, *, question: str | None = None,
         if action in {"query", "path", "explain", "affected", "hubs"}:
             # This bounded graph result is the only project-derived payload
             # returned to the hosted assistant for answering the user's question.
+            if freshness_note: print(freshness_note)
             if completed.returncode == 0:
                 print(result or "The local graph action returned no matching context.")
             else:
@@ -681,6 +729,8 @@ def main() -> int:
     one.add_argument("--budget", type=int, default=800, help="local graph query context budget (raise it when the answer says TRUNCATED and lacks what you need)")
     one.add_argument("--no-tests", action="store_true", help="answer from the graph without test files")
     one.add_argument("--include-generated", action="store_true", help="include generated code (gen/, *.pb.go, *.g.cs …) in answers")
+    one.add_argument("--include-external", action="store_true", help="include names the project only imports (json, os, ILogger ...) in answers")
+    one.add_argument("--no-auto-update", action="store_true", help="answer from the graph as it is; only warn when it is older than the code")
     one.add_argument("--context", action="append", default=[], help="edge context filter for a query; repeat as needed")
     one.add_argument("--refresh", action="store_true", help="refresh the graph before generating artifacts")
     one.add_argument("--action", choices=("graph", "query", "path", "explain", "affected", "hubs", "stats", "benchmark", "update", "tree", "recluster", "export", "hook-install", "hook-uninstall", "reflect", "merge", "diagnose", "watch-start", "watch-stop", "watch-status"), default="graph", help="local graph operation to run; results stay on this device")
@@ -703,15 +753,16 @@ def main() -> int:
         command_parser = subs.choices[name]
         command_parser.add_argument("--no-tests", action="store_true", help="exclude test nodes from answers")
         command_parser.add_argument("--include-generated", action="store_true", help="include generated nodes in answers")
+        command_parser.add_argument("--include-external", action="store_true", help="include imported-only names in answers")
     args = parser.parse_args()
     try:
         root = project_path(args.project)
         if args.command == "launch":
             if args.action == "graph":
-                return launch_local(root, args.question, args.refresh, budget=args.budget, contexts=args.context, tests=not args.no_tests, generated=args.include_generated)
+                return launch_local(root, args.question, args.refresh, budget=args.budget, contexts=args.context, tests=not args.no_tests, generated=args.include_generated, external=args.include_external, auto_update=not args.no_auto_update)
             if not (root / "graphify-out" / "graph.json").is_file():
                 if launch_local(root, None, True, open_page=False): return 1
-            return local_feature(root, args.action, question=args.question, source=args.source, target=args.target, node=args.node, relations=args.relation, depth=args.depth, top=args.top, export_format=args.export_format, queries=args.queries, budget=args.budget, contexts=args.context, merge_graphs=args.merge_graphs, tests=not args.no_tests, generated=args.include_generated)
+            return local_feature(root, args.action, question=args.question, source=args.source, target=args.target, node=args.node, relations=args.relation, depth=args.depth, top=args.top, export_format=args.export_format, queries=args.queries, budget=args.budget, contexts=args.context, merge_graphs=args.merge_graphs, tests=not args.no_tests, generated=args.include_generated, external=args.include_external, auto_update=not args.no_auto_update)
         if args.command == "build":
             require_runtime()
             if run_engine(root, "extract", str(root), "--code-only", "--no-cluster"): return 1
@@ -744,7 +795,7 @@ def main() -> int:
             return run_engine(root, "export", args.format, "--graph", graph)
         if args.command in {"query", "path", "explain", "affected", "hubs"}:
             from node_filters import scoped_graph
-            answer_graph = scoped_graph(graph_file(root), tests=not args.no_tests, generated=args.include_generated)
+            answer_graph = scoped_graph(graph_file(root), tests=not args.no_tests, generated=args.include_generated, external=args.include_external, line_ranges=True)
         if args.command == "query":
             if args.budget < 1: raise ValueError("--budget must be positive")
             cmd = ["query", args.question, "--graph", str(answer_graph), "--budget", str(args.budget)]

@@ -62,6 +62,7 @@ sys.stdout.write(path or '')
 
 APPLE_FOLDER_PICKER = r'''on run argv
 set startFolder to item 1 of argv
+activate
 try
     if startFolder is "" then
         set chosenFolder to choose folder with prompt "Choose a project folder for Token Graph"
@@ -75,12 +76,19 @@ return POSIX path of chosenFolder
 end run'''
 
 WINDOWS_FOLDER_PICKER = r'''
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 Add-Type -AssemblyName System.Windows.Forms
+$owner = New-Object System.Windows.Forms.Form
+$owner.TopMost = $true; $owner.ShowInTaskbar = $false; $owner.StartPosition = 'CenterScreen'
+$owner.Size = New-Object System.Drawing.Size(1, 1); $owner.Opacity = 0
+$owner.Show(); $owner.Activate()
 $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
 $dialog.Description = 'Choose a project folder for Token Graph'
 $dialog.SelectedPath = $env:TOKEN_GRAPH_FOLDER_START
 $dialog.ShowNewFolderButton = $false
-if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { [Console]::Out.Write($dialog.SelectedPath) }
+$answer = $dialog.ShowDialog($owner)
+$owner.Close()
+if ($answer -eq [System.Windows.Forms.DialogResult]::OK) { [Console]::Out.Write($dialog.SelectedPath) }
 '''
 
 
@@ -92,21 +100,34 @@ def _run_folder_picker(command: list[str], *, env: dict | None = None) -> subpro
         return None
 
 
-def _picked_path(result: subprocess.CompletedProcess | None) -> tuple[str, bool] | None:
-    """Return (path, cancelled), or None when the dialog command is unavailable/broken."""
+def _picked_path(result: subprocess.CompletedProcess | None, *, cancel_code: int | None = None) -> tuple[str, bool] | None:
+    """Return (path, cancelled), or None when the dialog command is unavailable/broken.
+
+    zenity and kdialog exit with 1 when the user presses Cancel (`cancel_code`); that is an
+    answer, not a missing dialog, so no second (Tk) dialog may open after it."""
     if result is None:
         return None
     if result.returncode == 0:
         return result.stdout.strip(), not result.stdout.strip()
+    if cancel_code is not None and result.returncode == cancel_code and not result.stdout.strip() and not result.stderr.strip():
+        return "", True
     return None
+
+
+def desktop_os() -> str:
+    """'mac', 'windows' or 'linux' (any other Unix desktop): which native dialog to try."""
+    if sys.platform == "darwin":
+        return "mac"
+    return "windows" if os.name == "nt" else "linux"
 
 
 def pick_folder(start: str) -> dict:
     """Open a native chooser on macOS/Windows/Linux, then Tk if installed; otherwise allow path entry."""
-    result = None
-    if sys.platform == "darwin" and shutil.which("osascript"):
+    result, cancel_code = None, None
+    system = desktop_os()
+    if system == "mac" and shutil.which("osascript"):
         result = _run_folder_picker([shutil.which("osascript"), "-e", APPLE_FOLDER_PICKER, start])
-    elif os.name == "nt":
+    elif system == "windows":
         powershell = shutil.which("powershell.exe") or shutil.which("powershell") or shutil.which("pwsh.exe") or shutil.which("pwsh")
         if powershell:
             env = os.environ.copy()
@@ -114,6 +135,7 @@ def pick_folder(start: str) -> dict:
             result = _run_folder_picker([powershell, "-NoProfile", "-STA", "-Command", WINDOWS_FOLDER_PICKER], env=env)
     else:
         zenity, kdialog = shutil.which("zenity"), shutil.which("kdialog")
+        cancel_code = 1
         if zenity:
             start_dir = str(Path(start).resolve())
             result = _run_folder_picker([zenity, "--file-selection", "--directory", "--title=Choose a project folder for Token Graph",
@@ -121,7 +143,7 @@ def pick_folder(start: str) -> dict:
         elif kdialog:
             result = _run_folder_picker([kdialog, "--getexistingdirectory", start, "--title", "Choose a project folder for Token Graph"])
 
-    picked = _picked_path(result)
+    picked = _picked_path(result, cancel_code=cancel_code)
     if picked is not None:
         path, _cancelled = picked
         return {"path": str(Path(path).resolve()) if path else "", "manual": False}
@@ -134,6 +156,57 @@ def pick_folder(start: str) -> dict:
         path, _cancelled = picked
         return {"path": str(Path(path).resolve()) if path else "", "manual": False}
     return {"path": "", "manual": True}
+
+
+MAX_FOLDERS = 1000
+
+
+def folder_roots() -> list[dict]:
+    """Starting points for the in-page folder browser: home, then the drives (Windows) or /."""
+    home = Path.home()
+    roots = [{"name": "Home", "path": str(home)}]
+    if os.name == "nt":
+        import string
+        roots += [{"name": f"{letter}:", "path": f"{letter}:\\"} for letter in string.ascii_uppercase if os.path.isdir(f"{letter}:\\")]
+    else:
+        roots.append({"name": "/", "path": "/"})
+        for mounts in ("/Volumes", "/mnt", "/media"):
+            if os.path.isdir(mounts):
+                roots.append({"name": mounts, "path": mounts})
+    return roots
+
+
+def list_folders(raw: str | None) -> dict:
+    """Sub-folders of a folder, for choosing a folder inside the page on any OS, with no native
+    dialog. Only folder names are listed (no files); hidden folders are left out."""
+    path = Path(raw).expanduser() if raw else Path.home()
+    try:
+        path = path.resolve()
+    except OSError:
+        pass
+    if not path.is_dir():
+        raise ValueError(f"Not a folder: {path}")
+    folders, truncated = [], False
+    try:
+        with os.scandir(path) as entries:
+            for entry in entries:
+                if entry.name.startswith((".", "$")):
+                    continue
+                try:
+                    if not entry.is_dir():
+                        continue
+                except OSError:
+                    continue
+                if len(folders) >= MAX_FOLDERS:
+                    truncated = True
+                    break
+                folders.append({"name": entry.name, "path": str(path / entry.name)})
+    except PermissionError:
+        raise PermissionError(f"No permission to open {path}")
+    folders.sort(key=lambda item: item["name"].lower())
+    parent = path.parent if path.parent != path else None
+    return {"path": str(path), "parent": str(parent) if parent else "", "folders": folders,
+            "truncated": truncated, "roots": folder_roots(), "separator": os.sep}
 
 
 def find_rider() -> str | None:
@@ -764,6 +837,16 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(200, {"models": ollama_models()})
             if url.path == "/api/dashboard":
                 return self._json(200, dashboard(self._known_project(query.get("project"))))
+            if url.path == "/api/folders":
+                return self._json(200, list_folders(query.get("path")))
+            if url.path == "/api/savings":
+                # Tokens saved by graph answers about this project in recent Claude Code sessions,
+                # estimated from the transcripts on this computer (no model involved).
+                from session_savings import recent_savings
+                keep = ("session", "updated", "title", "folder", "started", "last_prompt", "graph_answers", "files", "graph_tokens", "read_tokens",
+                        "without_graph_tokens", "with_graph_tokens", "saved_tokens", "saved_percent")
+                sessions = recent_savings(self._known_project(query.get("project")))
+                return self._json(200, {"sessions": [{k: s[k] for k in keep} for s in sessions]})
             if url.path == "/api/ai/status":
                 return self._json(200, ai_status())
             if url.path == "/api/graph":
