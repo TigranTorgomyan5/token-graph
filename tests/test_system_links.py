@@ -28,6 +28,27 @@ def edges(result):
 
 
 class ScannerTests(unittest.TestCase):
+    def test_go_config_service_setting_links_only_when_target_is_unambiguous(self):
+        files = [('config.go', '.go', 'package config\nfunc Load() { base := req("CONFIG_SERVICE_URI"); _ = base }')]
+        gateway = {'name': 'nh-gateway-go', 'scan': {'endpoints': system_links.extract(files, system_links.collect_consts(files))}}
+        target = lambda name: {'name': name, 'scan': {'endpoints': []}}
+        edges = system_links.link([gateway, target('nh-config-service-go')])
+        self.assertEqual([(e['source'], e['target'], e['confidence']) for e in edges], [(0, 1, ['config key'])])
+        self.assertEqual(edges[0]['channels'][0]['from'][0]['line'], 2)
+        self.assertEqual(system_links.link([gateway, target('nh-config-service-go'), target('nh-config-service')]), [])
+
+    def test_routes_without_destination_do_not_link_to_shared_or_suffix_matches(self):
+        def service(name, source):
+            files = [(name + '.go', '.go', source)]
+            return {'name': name, 'scan': {'endpoints': system_links.extract(files, system_links.collect_consts(files))}}
+        caller = service('caller', 'func run() { http.NewRequest(http.MethodGet, "/api/v1/users", nil) }')
+        first = service('first', 'func routes(r Router) { r.Get("/api/v1/users", handler) }')
+        second = service('second', 'func routes(r Router) { r.Get("/api/v1/users", handler) }')
+        self.assertEqual(system_links.link([caller, first, second]), [])
+        suffix = service('suffix', 'func routes(r Router) { r.Get("/internal/api/v1/users", handler) }')
+        self.assertEqual(system_links.link([caller, suffix]), [])
+        self.assertEqual(len(system_links.link([caller, first])), 1)
+
     def test_go_http_helper_follows_route_arguments(self):
         source = '''package gateway
 const tokenPath = "api/v1/auth/token"

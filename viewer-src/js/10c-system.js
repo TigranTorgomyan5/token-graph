@@ -5,7 +5,7 @@
   const sysState = { list: [], current: null, scan: null, loading: false, error: '', note: '', editing: null, selected: null, projectQuery: '', hidden: new Set(), pos: new Map(), drag: null, noClick: false, graphIds: new Map(), building: false };
   const TECH_COLOR = { nats: '#52c9e8', http: '#8877ff', grpc: '#55d6a2', kafka: '#e6ad63', rabbitmq: '#f09461', masstransit: '#e58bd4', redis: '#f07883', websocket: '#b2d66e', mqtt: '#e0d56b', sqs: '#6f9cff', servicebus: '#53b9a6' };
   const TECH_LABEL = { nats: 'NATS', http: 'HTTP', grpc: 'gRPC', kafka: 'Kafka', rabbitmq: 'RabbitMQ', masstransit: 'MassTransit', redis: 'Redis', websocket: 'WebSocket', mqtt: 'MQTT', sqs: 'SQS/SNS', servicebus: 'Service Bus', pubsub: 'Pub/Sub', zeromq: 'ZeroMQ', jms: 'JMS' };
-  const MATCH_NOTE = { exact: 'same subject/topic text on both sides', 'shared name': 'both sides use the same constant name', route: 'client path matches a server route', url: 'a URL names this service (caller side only)', 'config key': 'a config key names this service (caller side only)' };
+  const MATCH_NOTE = { exact: 'same subject/topic text on both sides', 'shared name': 'both sides use the same constant name', route: 'client path matches a server route; the destination is inferred', url: 'a URL names this service (caller side only)', 'config key': 'a config key names this service (caller side only)' };
   const techColor = t => TECH_COLOR[t] || '#bb91f4';
   const techLabel = t => TECH_LABEL[t] || t;
   const techChip = (t, text = techLabel(t)) => `<span class="sys-chip" style="--tc:${techColor(t)}">${escapeHtml(text)}</span>`;
@@ -85,7 +85,7 @@
       const on = sel?.type === 'edge' && sel.index === index;
       const dim = (sel && !on && !(sel.type === 'service' && (e.source === sel.index || e.target === sel.index))) || (query && !matchesService(services[e.source]) && !matchesService(services[e.target]));
       const color = techColor(e.tech);
-      lines += `<g class="sys-edge${on ? ' on' : ''}${dim ? ' dim' : ''}" data-sys="edge" data-i="${index}"><path d="${d}" class="hit"/><path d="${d}" stroke="${color}" marker-end="url(#sys-arrow-${e.tech.replace(/\W/g, '')})"${e.confidence.every(x => x === 'url' || x === 'config key' || x === 'shared name') ? ' stroke-dasharray="6 4"' : ''}/><title>${escapeHtml(`${services[e.source].name} → ${services[e.target].name} · ${techLabel(e.tech)}\n${e.channels.map(ch => ch.name).join('\n')}`)}</title></g>`;
+      lines += `<g class="sys-edge${on ? ' on' : ''}${dim ? ' dim' : ''}" data-sys="edge" data-i="${index}"><path d="${d}" class="hit"/><path d="${d}" stroke="${color}" marker-end="url(#sys-arrow-${e.tech.replace(/\W/g, '')})"${e.confidence.every(x => x === 'url' || x === 'config key' || x === 'shared name' || x === 'route') ? ' stroke-dasharray="6 4"' : ''}/><title>${escapeHtml(`${services[e.source].name} → ${services[e.target].name} · ${techLabel(e.tech)}\n${e.channels.map(ch => ch.name).join('\n')}`)}</title></g>`;
       const m = { x: 0.25 * s.x + 0.5 * c.x + 0.25 * t.x, y: 0.25 * s.y + 0.5 * c.y + 0.25 * t.y };
       const text = `${techLabel(e.tech)}${e.count > 1 ? ` · ${e.count}` : ''}`, w = text.length * 6.4 + 12;
       labels += `<g class="sys-label${dim ? ' dim' : ''}" data-sys="edge" data-i="${index}"><rect x="${(m.x - w / 2).toFixed(1)}" y="${(m.y - 9).toFixed(1)}" width="${w.toFixed(1)}" height="18" rx="9" stroke="${color}"/><text x="${m.x.toFixed(1)}" y="${(m.y + 3.5).toFixed(1)}" fill="${color}">${escapeHtml(text)}</text></g>`;
@@ -186,7 +186,7 @@
     edges.forEach(e => { by[e.tech] = (by[e.tech] || 0) + 1; });
     return `<p class="dash-note">${services.length} services · ${edges.length} connections · scanned in ${sysState.scan.seconds}s</p>
       <div class="sys-chips">${Object.entries(by).map(([t, n]) => techChip(t, `${techLabel(t)} ${n}`)).join('')}</div>
-      <p class="dash-note">Click a service to see what it sends and receives, or a connection to see the exact code lines on both sides. Drag services to rearrange. Dashed lines are matched by name or URL only. <b>Open as graph</b> shows all services' code in the 2D/3D graph with these links between the exact functions.</p>`;
+      <p class="dash-note">Click a service or connection to inspect the available code evidence. Drag services to rearrange. Dashed lines are inferred from routes, names or configuration; verify their destinations. <b>Open as graph</b> shows service code and the links found between them.</p>`;
   }
 
   // ---- editor (create / edit a system) ----

@@ -189,6 +189,12 @@ def core_tokens(text: str) -> list[str]:
     return [t for t in toks if t not in GENERIC_TOKENS] or toks
 
 
+def service_key_tokens(text: str) -> list[str]:
+    """Keep meaningful service names such as 'config' in endpoint settings."""
+    ignored = (GENERIC_TOKENS - {'config'}) | {'nh', 'go', 'rust', 'dotnet'}
+    return [t for t in tokens(text) if t not in ignored]
+
+
 def contains_seq(hay: list[str], needle: list[str]) -> bool:
     n = len(needle)
     return bool(n) and any(hay[i:i + n] == needle for i in range(len(hay) - n + 1))
@@ -547,6 +553,12 @@ def extract(files, consts: dict) -> list[dict]:
                     add(t, r, channel, resolved, rel, text, nl, m.start())
             scan_routes(text, rel, nl, add, consts, ext)
             if ext == ".go":
+                # A configured endpoint is useful evidence even when a URL is assembled at runtime.
+                setting = re.compile(r'\b(?:os\.(?:Getenv|LookupEnv)|req|readRequired)\s*\(\s*["\']([A-Z][A-Z0-9_]*(?:_URL|_URI|_ENDPOINT|_ADDRESS))["\']')
+                for m in setting.finditer(text):
+                    key = m.group(1)
+                    if not re.search(r'(?i)secret|password|token|api.?key|credential', key):
+                        add('http', 'out', key, True, rel, text, nl, m.start(), kind='config_ref', key=key)
                 # net/http request constructors take the URL after the method.
                 request = re.compile(rf"\bhttp\.NewRequest(?:WithContext)?\s*\(\s*(?:[^,\n]+,\s*)?(?:http\.Method\w+|{STR})\s*,\s*(?P<arg>{STR}|{IDENT})\s*,")
                 for m in request.finditer(text):
@@ -668,6 +680,7 @@ def service_for_tokens(toks: list[str], cores: list[list[str]], exclude: int) ->
 
 def link(services: list[dict]) -> list[dict]:
     cores = [core_tokens(s["name"]) for s in services]
+    key_cores = [service_key_tokens(s['name']) for s in services]
     edges: dict[tuple, dict] = {}
 
     def evidence(e):
@@ -731,8 +744,8 @@ def link(services: list[dict]) -> list[dict]:
             return False
         top = max(f[0] for f in found)
         best = [f for f in found if f[0] == top]
-        if only is None and len({b for _, b, _ in best}) > 2:
-            return False  # too many services share this route shape
+        if only is None and (top < 2 or len({b for _, b, _ in best}) != 1):
+            return False  # A suffix or shared route cannot identify its destination alone.
         for _, b, in_e in best:
             connect(a, b, tech, in_e["channel"], out_e, in_e, "route")
         return True
@@ -742,19 +755,19 @@ def link(services: list[dict]) -> list[dict]:
             kind = out_e["kind"]
             if kind == "path":
                 match_routes(a, route_segments(out_e["channel"]), out_e)
-            elif kind in ("url", "host", "env_url"):
-                host_toks = out_e.get("host_tokens") if kind == "env_url" else core_tokens(out_e["host"])
+            elif kind in ("url", "host", "env_url", "config_ref"):
+                host_toks = out_e.get("host_tokens") if kind == "env_url" else core_tokens(out_e["host"]) if kind != 'config_ref' else []
                 b = service_for_tokens(host_toks, cores, a)
                 via = "url"
                 if b is None and out_e.get("key"):
-                    b = service_for_tokens(core_tokens(out_e["key"]), cores, a)
+                    b = service_for_tokens(service_key_tokens(out_e["key"]), key_cores, a)
                     via = "config key"
                 segs = route_segments(out_e.get("path") or "")
                 if b is not None:
                     if not (segs and match_routes(a, segs, out_e, only=b, tech=out_e["tech"])):
-                        label = out_e["channel"] if kind == "env_url" else out_e["host"] + (out_e.get("path") or "")
+                        label = out_e["channel"] if kind in ('env_url', 'config_ref') else out_e["host"] + (out_e.get("path") or "")
                         connect(a, b, out_e["tech"], label, out_e, None, via)
-                elif kind != "env_url" and segs and out_e["tech"] == "http" and (out_e["host"] in LOCAL_HOSTS or "." not in out_e["host"]
+                elif kind not in ("env_url", "config_ref") and segs and out_e["tech"] == "http" and (out_e["host"] in LOCAL_HOSTS or "." not in out_e["host"]
                                                           or re.fullmatch(r"[\d.]+", out_e["host"])):
                     match_routes(a, segs, out_e)
     result = []
