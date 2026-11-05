@@ -169,18 +169,18 @@ TIMEOUT = 1500
 STDERR_DIR: Path | None = None      # --stderr-dir: where each case's stderr (EXPLORE_DEBUG_DROPS notes) is saved
 
 
-def run(cmd: list[str], label: str = '') -> tuple[str | None, float]:
-    """The command's output and seconds taken; None as output when it timed out (one slow answer must not
-    end the whole eval and lose the remaining cases)."""
+def run(cmd: list[str], label: str = '') -> tuple[str | None, float, int]:
+    """The command's output, seconds taken and exit code; None as output when it timed out (one slow answer
+    must not end the whole eval and lose the remaining cases)."""
     started = time.monotonic()
     try:
         done = subprocess.run(cmd, capture_output=True, text=True, timeout=TIMEOUT)
     except subprocess.TimeoutExpired:
-        return None, time.monotonic() - started
+        return None, time.monotonic() - started, -1
     if STDERR_DIR and label:
         STDERR_DIR.mkdir(parents=True, exist_ok=True)
         (STDERR_DIR / (re.sub(r'\W+', '-', label).strip('-') + '.txt')).write_text(done.stderr, encoding='utf-8')
-    return done.stdout, time.monotonic() - started
+    return done.stdout, time.monotonic() - started, done.returncode
 
 
 def overlaps(cites, facts):
@@ -235,9 +235,14 @@ def main() -> int:
                 print(f'  {name}: FAILED, no graph at {root / project}')
                 failures += 1
                 continue
-            out, secs = run([sys.executable, str(SCRIPTS / 'explore_agent.py'), str(root / project), question, '--model', model], name)
+            out, secs, code_exit = run([sys.executable, str(SCRIPTS / 'explore_agent.py'), str(root / project), question, '--model', model], name)
             if out is None:
                 print(f'  {name}: FAILED, no answer within {TIMEOUT}s', flush=True)
+                failures += 1
+                continue
+            if code_exit != 0 or not out.strip():
+                # A crashed agent (Ollama down, model missing) prints nothing; with no code checks that must not pass.
+                print(f'  {name}: FAILED, the agent exited {code_exit} with {"no output" if not out.strip() else "output"}', flush=True)
                 failures += 1
                 continue
             result = score(out, facts, code, wrong)
@@ -253,8 +258,11 @@ def main() -> int:
         for name, r, secs in rows:
             print(f'| {name} | {r["model"]}/{r["of"]} | {r["answer"]}/{r["of"]} | {len(r["code_ok"])}/{len(r["code_ok"]) + len(r["code_missing"])} | {len(r["wrong"])} | {secs:.0f} |')
         if args.logs:
-            out, secs = run([sys.executable, str(SCRIPTS / 'log_analyzer.py'), str(LOG), 'Why is this service failing and what should I check?', '--model', model])
+            out, secs, code_exit = run([sys.executable, str(SCRIPTS / 'log_analyzer.py'), str(LOG), 'Why is this service failing and what should I check?', '--model', model])
             logs = score_logs(out or '')
+            if out is None or code_exit != 0 or not logs['findings']:
+                print('  logs: FAILED, the log analyzer timed out, crashed or reported no findings')
+                failures += 1
             print(f'\n  logs: {logs["findings"]} findings, observation={logs["observation"]}, names target={logs["names_target"]}, '
                   f'rate in report={logs["rate_in_report"]}, {secs:.0f}s')
     # Code checks and known-wrong phrases are hard failures; fact counts depend on the model and are reported only.

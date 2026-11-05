@@ -131,8 +131,10 @@ def pinned_by(project: Path, graph: dict, pattern: re.Pattern | None) -> list[st
         lines = read(project, file)
         # A name the file gives the path counts as the path: selfExcludePath = "/v1/user/security/selfExclude",
         # then e.postJSON(selfExcludePath, ...) in each test.
+        # Only a distinctive name counts (selfExcludePath, SELF_EXCLUDE_URL), never path, url, name or body.
         aliases = {match.group(1) for text in lines if pattern.search(text)
-                   for match in [re.search(r'\b([A-Za-z_]\w*)\s*:?=\s*["\'`][^"\'`]*["\'`]\s*[;,]?\s*$', text)] if match}
+                   for match in [re.search(r'\b([A-Za-z_]\w*)\s*:?=\s*["\'`][^"\'`]*["\'`]\s*[;,]?\s*$', text)]
+                   if match and len(match.group(1)) >= 8 and re.search(r'[a-z][A-Z]|_[A-Za-z]', match.group(1))}
         named = re.compile(pattern.pattern + ''.join(r'|\b' + re.escape(alias) + r'\b' for alias in sorted(aliases))) if aliases else pattern
         names, helpers, numbers = [], [], []
         for number, text in enumerate(lines, 1):
@@ -228,7 +230,10 @@ def scout(project: Path, repo_label: str, question: str, model: str | None, sibl
     handlers = [(why, file, line) for file, line, _, why in sources if why.startswith('handler ')]
     answer = ''
     if model:
-        answer = explorer.explore(project, question, model)
+        try:
+            answer = explorer.explore(project, question, model)
+        except (OSError, ValueError) as error:       # Ollama down, model not installed (URLError is an OSError)
+            unsure.append(f'the model gave no answer ({type(error).__name__}: {str(error)[:100]}); every field here is code-found')
     if handlers:
         graph_used.append('call edges followed from ' + ', '.join(f'`{why.split()[1]}`' for why, _, _ in handlers[:3]))
         contracts = explorer.endpoint_contracts(project, sources)
@@ -325,7 +330,7 @@ def main() -> int:
         if args.ref:
             try:
                 siblings.append((other.name, snapshot(other, args.ref)[0]))
-            except (OSError, subprocess.CalledProcessError):
+            except (OSError, subprocess.CalledProcessError, SystemExit):
                 print(f'note: {other.name} has no {args.ref}; not searched for callers', file=sys.stderr)
         else:
             siblings.append((other.name, other))

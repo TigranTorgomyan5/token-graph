@@ -368,6 +368,17 @@ class ExplorerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaises(ValueError): explorer.graph_query(Path(directory), 'find it')
 
+    def test_malformed_tool_arguments_do_not_crash_the_agent(self):
+        for arguments in ({'file': 'a.py', 'line': None, 'count': None}, '[1, 2]', 'null', {'file': 'a.py', 'line': 'x'}):
+            messages = []
+            def chat(input_messages, model, arguments=arguments):
+                messages.append(input_messages)
+                if len(messages) == 1: return {'role':'assistant', 'tool_calls':[{'function':{'name':'read_source', 'arguments':arguments}}]}
+                return {'role':'assistant', 'content':'No evidence.'}
+            evidence = json.dumps({'status':'complete','results':[]})
+            with tempfile.TemporaryDirectory() as directory, patch.object(explorer, 'graph_query', return_value=evidence), patch.object(explorer, 'chat', side_effect=chat):
+                self.assertIn('Insufficient verified evidence', explorer.explore(Path(directory), 'question', 'local'))
+
     def test_model_cannot_create_arbitrary_tool_calls(self):
         messages = []
         def chat(input_messages, model):

@@ -839,7 +839,10 @@ def status_code(text: str) -> int | None:
     named = re.search(r'\b(?:http\.)?Status([A-Z]\w+)\b', text)
     if named and named.group(1).casefold() in _STATUS_BY_NAME:
         return _STATUS_BY_NAME[named.group(1).casefold()]
-    digits = re.search(r'\bStatus(\d{3})\w*|\bHTTP_(\d{3})_|(?<![\w.])([1-5]\d\d)(?![\w.])', text)
+    # A bare 3-digit number is a status only as an argument next to a response word or a status/code name:
+    # WriteHeader(404), c.JSON(500, ...), Status(404), status = 404, but not make([]byte, 512).
+    bare = r'(?:\b(?:WriteHeader|Status|StatusCode|JSON|String|Send|SendStatus|AbortWithStatus|AbortWithStatusJSON|Error|abort|status|sendStatus)\s*\(\s*|\b(?:status|statusCode|status_code|code|Code)\s*[:=]+\s*)([1-5]\d\d)(?![\w.])|\breturn\b[^\n]*,\s*([1-5]\d\d)\s*;?\s*$'
+    digits = re.search(r'\bStatus(\d{3})\w*|\bHTTP_(\d{3})_|' + bare, text)
     if digits:
         return int(next(group for group in digits.groups() if group))
     upper = re.search(r'\b(?:HttpStatus|StatusCode|HttpStatusCode)(?:\.|::)([A-Z][A-Za-z_]+)\b', text)

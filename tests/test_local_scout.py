@@ -61,6 +61,24 @@ class LocalScoutTests(unittest.TestCase):
         self.assertEqual(['Repo', 'Question', 'Behaviour', 'Callers', 'Pinned by', 'Rules', 'Unsure', 'Graph'], labels)
         self.assertTrue(block.startswith('Repo:      nh-player-service (origin/V5.0 @ abc)'))
 
+    def test_model_failure_keeps_the_code_found_fields(self):
+        from unittest.mock import patch
+        with patch.object(scout.explorer, 'explore', side_effect=OSError('connection refused')):
+            block = scout.scout(self.root, 'repo', 'How does self exclusion work?', 'no-such-model')
+        self.assertIn('the model gave no answer', block)
+        self.assertIn('Pinned by:', block)
+        self.assertNotIn('Traceback', block)
+
+    def test_generic_variable_is_not_a_route_alias(self):
+        (Path(self.directory.name) / 'e2e' / 'alias_test.go').write_text(
+            'package e2e\nfunc TestSomethingElse(t *testing.T) {\n\tpath := "/v1/user/security/selfExclude"\n\tget(t, path)\n}\n'
+            'func TestOtherRoute(t *testing.T) {\n\tpath := "/v1/other"\n\tget(t, path)\n}\n')
+        graph = scout.graph_of(self.root)
+        graph['nodes'].append({'source_file': 'e2e/alias_test.go'})
+        pattern = scout.mentions(['/v1/user/security/selfExclude'], [])
+        found = scout.pinned_by(self.root, graph, pattern)
+        self.assertFalse([line for line in found if 'TestOtherRoute' in line])
+
     def test_code_found_fields(self):
         block = scout.scout(self.root, 'repo', 'How does self exclusion work?', None)
         self.assertIn('POST /v1/user/security/selfExclude is handled by `selfExclude` (internal/security/security.go:5)', block)

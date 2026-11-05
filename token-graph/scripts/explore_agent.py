@@ -1665,6 +1665,8 @@ def explore(project: Path, question: str, model: str, history: list | None = Non
                     args = json.loads(args)
                 except ValueError:
                     args = {}
+            if not isinstance(args, dict):
+                args = {}                                  # the model sent a list or a bare value
             try:
                 if index >= 4:
                     result = 'Per-round tool limit reached.'
@@ -1673,14 +1675,14 @@ def explore(project: Path, question: str, model: str, history: list | None = Non
                     record_evidence(result)
                 elif function.get('name') == 'read_source':
                     filename = str(args.get('file', ''))
-                    result = read_source(project, filename, int(args.get('line', 1)), int(args.get('count', 50)))
+                    result = read_source(project, filename, int(args.get('line') or 1), int(args.get('count') or 50))
                     lines = [int(match) for match in re.findall(r'^(\d+): ', result, re.M)]
                     if lines:
                         note(filename, {int(n): t for n, t in SHOWN_LINE.findall(result)})
                         verified_items.append(f"- {filename}:{min(lines)}-{max(lines)}: {result.splitlines()[0][:250]}")
                 else:
                     result = 'Unknown tool.'
-            except (ValueError, subprocess.TimeoutExpired):
+            except (ValueError, TypeError, AttributeError, subprocess.TimeoutExpired):
                 result = 'Invalid input or tool timed out.'
             messages.append({'role': 'tool', 'tool_name': function.get('name', ''), 'content': result})
         # Keep a user turn after the tool replies. Current Ollama releases can

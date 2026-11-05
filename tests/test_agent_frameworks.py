@@ -359,5 +359,14 @@ class FrameworkHandlerTests(unittest.TestCase):
         self.assertIsNone(frameworks.handler_name('express/src/index.js', lines, 8))   # app.get('/health', (req, res) => ...)
 
 
+
+class StatusCodeTests(unittest.TestCase):
+    def test_bare_numbers_are_statuses_only_next_to_a_response_word(self):
+        for text, expected in (('w.WriteHeader(404)', 404), ('c.JSON(500, x)', 500), ('return jsonify(e), 404', 404),
+                               ('status = 201', 201), ('HTTPException(status_code=403)', 403),
+                               ('buf := make([]byte, 512)', None), ('return cache.Get(ctx, 300)', None),
+                               ('limit = 100 * 2', None)):
+            self.assertEqual(expected, frameworks.status_code(text), text)
+
 if __name__ == '__main__':
     unittest.main()
