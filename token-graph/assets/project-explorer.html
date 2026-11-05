@@ -300,6 +300,17 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       .sys-editor .dash-body{display:flex;flex-direction:column;gap:10px}
       .sys-input{border:1px solid #2c3953;border-radius:7px;background:#0d1426;color:#edf1fa;font:12px var(--sans);padding:7px 10px;min-width:0;flex:1}
       .sys-path-row{display:flex;flex-wrap:wrap;gap:8px}
+      .sys-note{margin:0;border:1px solid #2c3953;border-left:3px solid #9f91ff;border-radius:7px;background:#111a2e;color:#dfe5f2;font-size:12px;padding:8px 10px}
+      .sys-note.error{border-color:#6b2b36;border-left-color:#ff6b81;background:#2a1219;color:#ffd5dc}
+      .sys-browser{border:1px solid #2c3953;border-radius:9px;background:#0b1222;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+      .sys-browser-title{margin:0;font-size:12px;color:#cfd6e6}
+      .sys-browser-bar{display:flex;flex-wrap:wrap;gap:6px}
+      .sys-chip-btn{border:1px solid #2c3953;border-radius:999px;background:#111a2e;color:#cfd6e6;font:12px var(--sans);padding:3px 10px;cursor:pointer}
+      .sys-chip-btn:hover:not(:disabled),.sys-chip-btn:focus-visible{border-color:#9f91ff;color:#edf1fa}
+      .sys-chip-btn:disabled{opacity:.45;cursor:default}
+      .sys-browser-list{list-style:none;margin:0;padding:0;max-height:260px;overflow:auto;border-top:1px solid #1a2338}
+      .sys-browser-list button{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid #1a2338;background:none;color:#dfe5f2;font:12px var(--sans);padding:6px 4px;cursor:pointer;overflow-wrap:anywhere}
+      .sys-browser-list button:hover,.sys-browser-list button:focus-visible{background:#16203a;color:#fff}
       .sys-service-list li{display:flex;align-items:center;gap:8px;border-top:1px solid #1a2338;padding:6px 0;font-size:12px;color:#cfd6e6}
       .sys-service-list label{flex:1;min-width:0;display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}
       @media(max-width:820px){.sys-table th:nth-child(5),.sys-table td:nth-child(5){display:none}}
@@ -375,6 +386,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
             <article class="dash-card" id="dash-overview" aria-labelledby="dash-overview-title"><header><h2 id="dash-overview-title">Project overview</h2><span class="dash-head"></span></header><div class="dash-body"></div></article>
             <article class="dash-card w-7" id="dash-architecture" aria-labelledby="dash-architecture-title"><header><h2 id="dash-architecture-title">How it is built</h2><span class="dash-head"></span></header><div class="dash-body"></div></article>
             <article class="dash-card w-5" id="dash-components" aria-labelledby="dash-components-title"><header><h2 id="dash-components-title">Key components</h2><span class="dash-head"></span></header><div class="dash-body"></div></article>
+            <article class="dash-card" id="dash-savings" aria-labelledby="dash-savings-title"><header><h2 id="dash-savings-title">Token savings in Claude Code</h2><span class="dash-head"></span></header><div class="dash-body"></div></article>
           </div>
           <section class="benchmark-strip" id="benchmark-strip" aria-label="Token Graph context reduction estimate">
             <span class="benchmark-mark">↘</span>
@@ -2454,7 +2466,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
   // The server scans every service for NATS / Kafka / RabbitMQ / MassTransit / gRPC / HTTP endpoints
   // and links producer to consumer (scripts/system_links.py). This page draws the service map and
   // shows the code lines behind each connection; a service opens as a normal code graph.
-  const sysState = { list: [], current: null, scan: null, loading: false, error: '', note: '', editing: null, selected: null, projectQuery: '', hidden: new Set(), pos: new Map(), drag: null, noClick: false, graphIds: new Map(), building: false };
+  const sysState = { list: [], current: null, scan: null, loading: false, error: '', note: '', editing: null, selected: null, projectQuery: '', hidden: new Set(), pos: new Map(), drag: null, noClick: false, graphIds: new Map(), building: false, browser: null, noteError: false, saving: false };
   const TECH_COLOR = { nats: '#52c9e8', http: '#8877ff', grpc: '#55d6a2', kafka: '#e6ad63', rabbitmq: '#f09461', masstransit: '#e58bd4', redis: '#f07883', websocket: '#b2d66e', mqtt: '#e0d56b', sqs: '#6f9cff', servicebus: '#53b9a6' };
   const TECH_LABEL = { nats: 'NATS', http: 'HTTP', grpc: 'gRPC', kafka: 'Kafka', rabbitmq: 'RabbitMQ', masstransit: 'MassTransit', redis: 'Redis', websocket: 'WebSocket', mqtt: 'MQTT', sqs: 'SQS/SNS', servicebus: 'Service Bus', pubsub: 'Pub/Sub', zeromq: 'ZeroMQ', jms: 'JMS' };
   const MATCH_NOTE = { exact: 'same subject/topic text on both sides', 'shared name': 'both sides use the same constant name', route: 'client path matches a server route; the destination is inferred', url: 'a URL names this service (caller side only)', 'config key': 'a config key names this service (caller side only)' };
@@ -2648,9 +2660,11 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       <label class="eyebrow" for="sys-name">NAME</label><input id="sys-name" class="sys-input" value="${escapeHtml(ed.name)}" placeholder="e.g. SparkleGaming" maxlength="80">
       <p class="dash-note">Choose the project folder to find the services inside it, and/or add service folders from anywhere — any language.</p>
       <div class="dash-footer"><button type="button" class="dash-link" data-sys="pick-root">Choose project folder…</button><button type="button" class="dash-link" data-sys="pick-service">Add service folder…</button></div>
+      ${folderBrowserHtml()}
       <div class="sys-path-row"><input id="sys-path" class="sys-input" placeholder="or paste a folder path"><button type="button" class="dash-link" data-sys="add-path">Add as service</button><button type="button" class="dash-link" data-sys="discover-path">Find services inside</button></div>
       <ul class="sys-service-list">${ed.services.map((s, i) => `<li><label><input type="checkbox" data-sys="toggle" data-i="${i}"${s.on ? ' checked' : ''}> <strong>${escapeHtml(s.name)}</strong> <span class="dash-note">${escapeHtml(s.path)}</span></label><button type="button" class="sys-x" data-sys="remove" data-i="${i}" aria-label="Remove ${escapeHtml(s.name)}">×</button></li>`).join('') || '<li class="dash-note">No services yet.</li>'}</ul>
-      <div class="dash-footer"><button type="button" class="dash-link primary" data-sys="save">Save &amp; scan</button><button type="button" class="dash-link" data-sys="cancel">Cancel</button>${sysState.note ? `<span class="dash-note">${escapeHtml(sysState.note)}</span>` : ''}</div>
+      ${sysState.note ? `<p class="sys-note${sysState.noteError ? ' error' : ''}" role="${sysState.noteError ? 'alert' : 'status'}">${escapeHtml(sysState.note)}</p>` : ''}
+      <div class="dash-footer"><button type="button" class="dash-link primary" data-sys="save"${sysState.saving ? ' disabled aria-busy="true"' : ''}>${sysState.saving ? 'Saving…' : 'Save &amp; scan'}</button><button type="button" class="dash-link" data-sys="cancel">Cancel</button></div>
     </div></article>`;
   }
 
@@ -2661,10 +2675,57 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     return added;
   }
 
-  async function pickFolder() {
-    const picked = await api('/api/pick', { start: sysState.editing.root || state.projectPath || '' });
-    if (picked.manual) { sysState.note = 'A native folder picker is unavailable; paste the full folder path instead.'; renderSystem(); $('#sys-path')?.focus(); return ''; }
-    return picked.path;
+  // ---- folder browser inside the page: works on every OS and never hides behind the browser
+  // window, unlike a native dialog. The server lists folder names only (/api/folders).
+  const lastName = path => path.split(/[\\/]/).filter(Boolean).pop() || path;
+  async function openFolderBrowser(purpose, path) {
+    const start = path ?? (sysState.editing.root || (state.projectPath ? state.projectPath.replace(/[\\/][^\\/]+[\\/]?$/, '') : ''));
+    sysState.browser = { purpose, data: sysState.browser?.data || null, loading: true, error: '' };
+    renderSystem();
+    try { sysState.browser.data = await api(`/api/folders?path=${encodeURIComponent(start)}`); }
+    catch (error) {
+      if (sysState.browser.data || !start) sysState.browser.error = error.message;  // keep the folder that was open
+      else {  // a remembered folder may be gone: start from the home folder instead
+        try { sysState.browser.data = await api('/api/folders'); } catch (_) { sysState.browser.error = error.message; }
+      }
+    }
+    if (!sysState.browser) return;
+    sysState.browser.loading = false;
+    renderSystem();
+    $('.sys-browser-list button')?.focus();
+  }
+
+  function folderBrowserHtml() {
+    const fb = sysState.browser;
+    if (!fb) return '';
+    const data = fb.data;
+    const title = fb.purpose === 'root' ? 'Choose the project folder that contains the services' : 'Choose a service folder';
+    const roots = (data?.roots || []).map(r => `<button type="button" class="sys-chip-btn" data-sys="fb-open" data-path="${escapeHtml(r.path)}">${escapeHtml(r.name)}</button>`).join('');
+    const list = !data ? `<li class="dash-note">${fb.loading ? 'Loading…' : 'Could not open a folder.'}</li>`
+      : data.folders.map(f => `<li><button type="button" data-sys="fb-open" data-path="${escapeHtml(f.path)}"><span aria-hidden="true">▸</span> ${escapeHtml(f.name)}</button></li>`).join('') || '<li class="dash-note">No sub-folders here.</li>';
+    return `<section class="sys-browser" aria-label="${escapeHtml(title)}" aria-busy="${fb.loading}">
+      <p class="sys-browser-title"><strong>${escapeHtml(title)}</strong></p>
+      <div class="sys-browser-bar">${roots}<button type="button" class="sys-chip-btn" data-sys="fb-open" data-path="${escapeHtml(data?.parent || '')}"${data?.parent ? '' : ' disabled'} aria-label="Up one folder">↑ Up</button></div>
+      <div class="sys-path-row"><input id="sys-fb-path" class="sys-input" value="${escapeHtml(data?.path || '')}" aria-label="Folder path" spellcheck="false"><button type="button" class="dash-link" data-sys="fb-go">Go</button></div>
+      ${fb.error ? `<div class="dash-error" role="alert">${escapeHtml(fb.error)}</div>` : ''}
+      <ul class="sys-browser-list">${list}</ul>
+      ${data?.truncated ? '<p class="dash-note">Only the first 1,000 folders are shown; type a path above to go further.</p>' : ''}
+      <div class="dash-footer"><button type="button" class="dash-link primary" data-sys="fb-choose"${data ? '' : ' disabled'}>${fb.purpose === 'root' ? 'Find services in' : 'Add'} “${escapeHtml(data ? lastName(data.path) : '')}”</button><button type="button" class="dash-link" data-sys="fb-cancel">Cancel</button><button type="button" class="dash-link" data-sys="fb-native" title="Open the operating system's own folder dialog instead">Use system dialog…</button></div>
+    </section>`;
+  }
+
+  async function useFolder(purpose, path) {
+    sysState.browser = null;
+    if (purpose === 'root') await discoverInto(path);
+    else { addServices([{ name: lastName(path), path }]); sysState.note = ''; }
+  }
+
+  async function nativePick(purpose, start) {
+    sysState.note = 'Choose a folder in the system dialog…'; renderSystem();
+    const picked = await api('/api/pick', { start: start || sysState.editing.root || state.projectPath || '' });
+    sysState.note = '';
+    if (picked.manual) { sysState.note = 'No system folder dialog is available here; choose the folder in the list instead.'; await openFolderBrowser(purpose, start); return; }
+    if (picked.path) await useFolder(purpose, picked.path);
   }
 
   async function discoverInto(path) {
@@ -2672,18 +2733,26 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     const ed = sysState.editing;
     ed.root = path;
     if (!ed.name) ed.name = path.split(/[\\/]/).filter(Boolean).pop() || '';
+    if (!services.length) {  // nothing that looks like a service inside: use the folder itself
+      const added = addServices([{ name: lastName(path), path }]);
+      sysState.note = `No service folders inside “${lastName(path)}”${added ? ', so it was added as one service' : ''}. Add more with “Add service folder…”.`;
+      return;
+    }
     const added = addServices(services);
-    sysState.note = services.length ? `Found ${services.length} service folders (${added} new).` : 'No service folders found inside; add them one by one.';
+    sysState.note = services.length === 1 && services[0].path === path
+      ? `“${services[0].name}” is one service${added ? ' and was added' : ''}. Add the other services with “Add service folder…”.`
+      : `Found ${services.length} service folders (${added} new).`;
   }
 
   async function onSystemAction(target) {
     const action = target.dataset.sys, i = Number(target.dataset.i);
     const ed = sysState.editing;
     if (ed && $('#sys-name')) ed.name = $('#sys-name').value;
+    if (action !== 'toggle' && action !== 'save') sysState.noteError = false;
     try {
       if (action === 'new') { sysState.editing = { id: '', name: '', root: '', services: [] }; sysState.note = ''; }
       else if (action === 'edit' && sysState.current) { const c = sysState.current; sysState.editing = { id: c.id, name: c.name, root: c.root || '', services: c.services.map(s => ({ ...s, on: true })) }; sysState.note = ''; }
-      else if (action === 'cancel') sysState.editing = null;
+      else if (action === 'cancel') { sysState.editing = null; sysState.browser = null; }
       else if (action === 'rescan') { scanSystem(true); return; }
       else if (action === 'system-graph') { openSystemGraph(); return; }
       else if (action === 'delete' && sysState.current) {
@@ -2691,8 +2760,12 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
         await api('/api/systems/delete', { id: sysState.current.id });
         sysState.current = null; sysState.scan = null; await loadSystems(); return;
       }
-      else if (action === 'pick-root') { const path = await pickFolder(); if (path) await discoverInto(path); }
-      else if (action === 'pick-service') { const path = await pickFolder(); if (path) { addServices([{ name: path.split(/[\\/]/).filter(Boolean).pop(), path }]); sysState.note = ''; } }
+      else if (action === 'pick-root' || action === 'pick-service') { await openFolderBrowser(action === 'pick-root' ? 'root' : 'service'); return; }
+      else if (action === 'fb-open' && sysState.browser) { await openFolderBrowser(sysState.browser.purpose, target.dataset.path); return; }
+      else if (action === 'fb-go' && sysState.browser) { await openFolderBrowser(sysState.browser.purpose, $('#sys-fb-path').value.trim()); return; }
+      else if (action === 'fb-choose' && sysState.browser?.data) await useFolder(sysState.browser.purpose, sysState.browser.data.path);
+      else if (action === 'fb-cancel') sysState.browser = null;
+      else if (action === 'fb-native' && sysState.browser) { const { purpose, data } = sysState.browser; sysState.browser = null; await nativePick(purpose, data?.path); }
       else if (action === 'add-path' || action === 'discover-path') {
         const path = $('#sys-path').value.trim();
         if (!path) { $('#sys-path').focus(); return; }
@@ -2702,12 +2775,17 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       else if (action === 'toggle') { ed.services[i].on = target.checked; return; }
       else if (action === 'remove') ed.services.splice(i, 1);
       else if (action === 'save') {
+        if (sysState.saving) return;
         const services = ed.services.filter(s => s.on).map(({ name, path }) => ({ name, path }));
-        if (!ed.name.trim()) { sysState.note = 'Give the system a name.'; }
-        else if (!services.length) { sysState.note = 'Add at least one service folder.'; }
+        if (!ed.name.trim()) { sysState.note = 'Give the system a name first.'; sysState.noteError = true; renderSystem(); $('#sys-name')?.focus(); return; }
+        else if (!services.length) { sysState.note = ed.services.length ? 'Tick at least one service to save.' : 'Add at least one service folder first: “Choose project folder…” or “Add service folder…”.'; sysState.noteError = true; }
         else {
-          const { system } = await api('/api/systems/save', { id: ed.id, name: ed.name, root: ed.root, services });
-          sysState.editing = null; sysState.current = system; sysState.scan = null;
+          sysState.saving = true; sysState.note = ''; renderSystem();
+          let saved;
+          try { saved = await api('/api/systems/save', { id: ed.id, name: ed.name, root: ed.root, services }); }
+          finally { sysState.saving = false; }
+          const { system } = saved;
+          sysState.editing = null; sysState.browser = null; sysState.note = ''; sysState.current = system; sysState.scan = null;
           try { localStorage.setItem('tokenGraph.system', system.id); } catch (_) { /* per-viewer convenience only */ }
           await loadSystems(); return;
         }
@@ -2728,7 +2806,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
         sysState.note = `Opened ${target.dataset.file}:${target.dataset.line} in VS Code.`;
       }
       else return;
-    } catch (error) { sysState.note = error.message; if (!sysState.editing) sysState.error = error.message; }
+    } catch (error) { sysState.note = error.message; sysState.noteError = true; if (!sysState.editing) sysState.error = error.message; }
     renderSystem();
   }
 
@@ -2830,7 +2908,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
   // ---- Dashboard page: an overview of the open project. Figures come from the loaded graph
   // and the local server (/api/dashboard, /api/ai/status); anything that cannot be measured
   // is shown as unavailable with the reason, never estimated. Detail stays on the Graph page.
-  const dash = { seq: 0, data: null, dataProject: null, error: '', loading: false, ai: null, aiAt: 0, aiError: '', aiLoading: false, job: null, docs: null, pending: null, pendingError: '' };
+  const dash = { seq: 0, data: null, dataProject: null, error: '', loading: false, ai: null, aiAt: 0, aiError: '', aiLoading: false, job: null, docs: null, pending: null, pendingError: '', savings: null, savingsProject: null, savingsError: '' };
   const STATUS_ICON = { good: '✓', warning: '!', critical: '✕', busy: '⟳', info: 'i', off: '–' };
   const ACTIVITY_ICON = { build: '◉', update: '↻', ai: '✦', question: '?', ai_question: '✦', analysis: '▦', docs: '≡' };
   const pill = (status, text, title = '') => `<span class="dash-pill ${status}"${title ? ` title="${escapeHtml(title)}"` : ''}><span aria-hidden="true">${STATUS_ICON[status]}</span>${escapeHtml(text)}</span>`;
@@ -2906,9 +2984,10 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     const aiFresh = dash.ai && Date.now() - dash.aiAt < 15000;
     dash.aiLoading = !aiFresh;
     renderDashboard();
-    const [summary, ai] = await Promise.allSettled([
+    const [summary, ai, savings] = await Promise.allSettled([
       api(`/api/dashboard?project=${encodeURIComponent(project)}`),
       aiFresh ? Promise.resolve(dash.ai) : api('/api/ai/status'),
+      api(`/api/savings?project=${encodeURIComponent(project)}`),
     ]);
     if (seq !== dash.seq || project !== state.projectPath) return;  // a newer refresh or another project won
     dash.loading = false; dash.aiLoading = false;
@@ -2916,6 +2995,8 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     else { dash.error = summary.reason?.message || 'The dashboard could not be loaded.'; }
     if (ai.status === 'fulfilled') { dash.ai = ai.value; dash.aiAt = Date.now(); dash.aiError = ''; }
     else { dash.aiError = ai.reason?.message || 'Could not check the local AI provider.'; }
+    if (savings.status === 'fulfilled') { dash.savings = savings.value.sessions || []; dash.savingsProject = project; dash.savingsError = ''; }
+    else { dash.savingsError = savings.reason?.message || 'Could not read the Claude Code sessions.'; }
     renderDashboard();
   }
 
@@ -2947,7 +3028,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     const want = id => !only || only.includes(id);
     const hasGraph = state.nodes.length > 0;
     const data = dash.dataProject === state.projectPath ? dash.data : null;
-    for (const id of ['ask', 'health', 'ai', 'index', 'intel', 'architecture', 'components', 'activity']) showCard(id, hasGraph);
+    for (const id of ['ask', 'health', 'ai', 'index', 'intel', 'architecture', 'components', 'activity', 'savings']) showCard(id, hasGraph);
     updateAiChip(); updateNav();
     $('#dash-docs').disabled = Boolean(serverToken) && !state.projectPath;  // without the server it explains how to start it
     if (!hasGraph && dash.pending) { setCard('overview', loadingHtml(`Loading the ${dash.pending} graph…`), '', true); return; }
@@ -2965,6 +3046,44 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     if (want('intel')) renderIntel(data);
     if (want('architecture')) renderArchitecture();
     if (want('activity')) renderActivity(data);
+    if (want('savings')) renderSavings();
+  }
+
+  // Tokens Claude Code saved by asking this project's graph instead of reading whole files,
+  // per recent session (session_savings.py over the local transcripts; an estimate).
+  const tokensText = n => Math.abs(n) >= 1000 ? `${(n / 1000).toFixed(1)}K` : format(n);
+  const percentText = p => p === null || p === undefined ? '—' : `${p}%`;
+  function renderSavings() {
+    if (!serverToken) { setCard('savings', serverOnlyHtml('Counting saved tokens'), pill('off', 'Server off')); return; }
+    const sessions = dash.savingsProject === state.projectPath ? dash.savings : null;
+    if (!sessions) { setCard('savings', dash.savingsError ? errorHtml(dash.savingsError) : loadingHtml('Reading Claude Code sessions…'), '', true); return; }
+    const refresh = '<div class="dash-footer"><button type="button" class="dash-link" data-dash="savings-refresh">Refresh</button></div>';
+    if (!sessions.length) {
+      setCard('savings', `<div class="dash-empty"><p>No recent Claude Code session asked this project's graph yet. Ask Claude about the code with the token-graph skill, then refresh.</p></div>${refresh}`, pill('off', 'No sessions'));
+      return;
+    }
+    const latest = sessions[0];
+    const without = sessions.reduce((sum, s) => sum + s.without_graph_tokens, 0);
+    const saved = sessions.reduce((sum, s) => sum + s.saved_tokens, 0);
+    const overall = without ? Math.round(1000 * saved / without) / 10 : null;
+    const status = latest.saved_percent === null ? 'off' : latest.saved_percent >= 50 ? 'good' : latest.saved_percent > 0 ? 'info' : 'warning';
+    const tiles = [
+      tile('Saved, latest session', tokensText(latest.saved_tokens), `${percentText(latest.saved_percent)} · ${count(latest.graph_answers, 'graph answer')}`),
+      tile('Without graph', tokensText(latest.without_graph_tokens), `${count(latest.files, 'file')} read in full`),
+      tile('With graph', tokensText(latest.with_graph_tokens), `answers ${tokensText(latest.graph_tokens)} + reads ${tokensText(latest.read_tokens)}`),
+      tile(`Saved, ${count(sessions.length, 'session')}`, tokensText(saved), `${percentText(overall)} of ${tokensText(without)}`),
+    ].join('');
+    const started = s => s.started ? new Date(s.started).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'unknown time';
+    const sessionName = s => s.title || `Session ${s.session.slice(0, 8)}`;
+    const where = s => `<p class="dash-note"><strong>${escapeHtml(sessionName(s))}</strong> · started ${escapeHtml(started(s))} · last active ${ago(s.updated)}<br>Folder: <code>${escapeHtml(s.folder || 'unknown')}</code> · session <code>${escapeHtml(s.session.slice(0, 8))}</code>${s.last_prompt ? `<br>Last request: “${escapeHtml(s.last_prompt.slice(0, 140))}”` : ''}</p>`;
+    const rows = bars(sessions.map(s => ({
+      name: `${sessionName(s)} · ${ago(s.updated)}`,
+      value: Math.max(0, s.saved_tokens),
+      text: `${tokensText(s.saved_tokens)} · ${percentText(s.saved_percent)}`,
+      title: `${sessionName(s)} — folder ${s.folder || 'unknown'}, started ${started(s)}, session ${s.session}: without graph ${format(s.without_graph_tokens)}, with graph ${format(s.with_graph_tokens)}, saved ${format(s.saved_tokens)} tokens (${percentText(s.saved_percent)}) in ${count(s.graph_answers, 'graph answer')}`,
+    })));
+    setCard('savings', `<p class="dash-sub">Latest session</p>${where(latest)}<div class="dash-tiles">${tiles}</div><p class="dash-sub">Saved per session (hover for folder and time)</p>${rows}<p class="dash-note">Estimate from the Claude Code transcripts on this computer (4 characters ≈ 1 token, no model used). Without graph: the files a graph answer pointed to and Claude then opened, read in full. With graph: the answers plus what Claude read from those files.</p>${refresh}`,
+      pill(status, `${percentText(latest.saved_percent)} saved`, 'Latest session'));
   }
 
   function renderOverview(data) {
@@ -3142,6 +3261,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     if (action === 'search') { showPage('graph'); $('#search').focus(); return; }
     if (action === 'docs') { generateDocs(); return; }
     if (action === 'retry') { dash.aiAt = 0; refreshDashboard(); return; }
+    if (action === 'savings-refresh') { refreshDashboard(); return; }
     if (action === 'server-help') { showServerInstructions(); return; }
     if (action === 'build-first') { if (serverToken) buildProject(); else showServerInstructions(); return; }
     if (action === 'update') { if (state.projectPath) buildProject(state.projectPath); return; }

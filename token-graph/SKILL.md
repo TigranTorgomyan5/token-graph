@@ -39,6 +39,9 @@ Keep answers small — every line of tool output costs the user tokens:
 - Prefer the narrowest action: `path`, `affected` or `explain` on a named symbol before an open `query`.
 - `query` defaults to `--budget 800`. Raise it (1500, 3000) only when the output says TRUNCATED and the needed node is not in it.
 - `query`, `path`, `explain`, `affected` and `hubs` answer from the graph **without generated code** (gen/ folders, `*.pb.go`, `*.g.cs`, `*.Designer.cs`, EF migrations …). Add `--include-generated` only when the question is about generated code. Tests are included; add `--no-tests` when the question is clearly about production code only and test nodes crowd the answer.
+- Answers leave out names the project only imports (`json`, `os`, `ILogger` …); add `--include-external` to ask about one. Locations are line ranges (`L1200-1236`): read just that range.
+- When the graph is older than the code, the answer first refreshes it and starts with `[graph refreshed: …]`; `[STALE] …` means the refresh failed or `--no-auto-update` was given, so line numbers may be off.
+- Tokens saved in a session (offline, no model): `python3 <skill>/scripts/session_savings.py` (latest session), `--session <id>`, `--list 10`.
 
 The source engine is bundled under `vendor/`. Local compatibility commands are available through `scripts/offline_engine.py`; only local analysis operations are exposed. Normal skill use should go through the launcher, which creates the offline viewer and benchmark alongside the graph.
 

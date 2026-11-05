@@ -450,6 +450,8 @@ ROUTES = {'go': _go_routes, 'python': _python_routes, 'js': _js_routes, 'csharp'
 
 
 def file_routes(filename: str, lines: list[str], constants: dict[str, str] | None = None) -> list[str]:
+    # Routes cite `file:line` with forward slashes on every OS (Windows paths come with `\`).
+    filename = filename.replace('\\', '/')
     extractor = ROUTES.get(language(filename) or '')
     return extractor(filename, lines, constants or {}) if extractor else []
 

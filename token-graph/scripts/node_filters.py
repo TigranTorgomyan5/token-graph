@@ -40,24 +40,49 @@ def is_generated(node: dict) -> bool:
     return bool(file) and bool(GENERATED_PATH.search(file))
 
 
-def scoped_graph(graph_file: Path, *, tests: bool, generated: bool) -> Path:
-    """graph.json itself when nothing is excluded; else a cached copy without test and/or generated nodes.
+def is_external(node: dict) -> bool:
+    """A name the code imports or references but the project does not define (json, os, Path,
+    ILogger ...): the parser saw it, but it has no source file, so it only crowds an answer."""
+    if _file(node):
+        return False
+    # AST references to unknown names, and the modules the engine itself marks external.
+    # Concept nodes from document mapping have no file either and are kept.
+    return node.get("_origin") == "ast" or node.get("external") is True or node.get("type") == "external"
 
-    The copy sits next to graph.json (graph.scope-<variant>.json) and is rewritten
-    whenever graph.json is newer, so answers never come from a stale graph.
+
+def with_range(node: dict) -> dict:
+    """`L1200-1236` instead of `L1200` when line_ranges.py recorded the symbol's last line."""
+    end = node.get("end_line")
+    match = re.fullmatch(r"L(\d+)", str(node.get("source_location") or ""))
+    if isinstance(end, int) and match and end > int(match.group(1)):
+        return dict(node, source_location=f"L{match.group(1)}-{end}")
+    return node
+
+
+def scoped_graph(graph_file: Path, *, tests: bool, generated: bool,
+                 external: bool = True, line_ranges: bool = False) -> Path:
+    """graph.json itself when nothing changes; else a cached answer copy of it.
+
+    The copy drops test, generated and/or external nodes and, with `line_ranges`, shows
+    each symbol's location as a line range. It sits next to graph.json
+    (graph.scope-<variant>.json) and is rewritten whenever graph.json is newer, so
+    answers never come from a stale graph.
     """
-    if tests and generated:
+    if tests and generated and external and not line_ranges:
         return graph_file
-    variant = "-".join(name for name, keep in (("notests", tests), ("nogen", generated)) if not keep)
+    variant = "-".join(name for name, on in (("notests", not tests), ("nogen", not generated),
+                                               ("noext", not external), ("ranges", line_ranges)) if on)
     scoped = graph_file.with_name(f"graph.scope-{variant}.json")
     if scoped.is_file() and scoped.stat().st_mtime >= graph_file.stat().st_mtime:
         return scoped
     data = json.loads(graph_file.read_text(encoding="utf-8"))
-    drop = {n["id"] for n in data.get("nodes", []) if "id" in n and ((not tests and is_test(n)) or (not generated and is_generated(n)))}
-    if not drop:
+    drop = {n["id"] for n in data.get("nodes", []) if "id" in n and ((not tests and is_test(n)) or (not generated and is_generated(n))
+                                                                     or (not external and is_external(n)))}
+    ranged = line_ranges and any("end_line" in n for n in data.get("nodes", []))
+    if not drop and not ranged:
         return graph_file
     key = "links" if "links" in data else "edges"
-    data["nodes"] = [n for n in data.get("nodes", []) if n.get("id") not in drop]
+    data["nodes"] = [with_range(n) if ranged else n for n in data.get("nodes", []) if n.get("id") not in drop]
     data[key] = [l for l in data.get(key, []) if l.get("source") not in drop and l.get("target") not in drop]
     if isinstance(data.get("hyperedges"), list):
         data["hyperedges"] = [h for h in data["hyperedges"] if not drop.intersection(map(str, h.get("nodes", h.get("members", [])) if isinstance(h, dict) else []))]

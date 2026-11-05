@@ -208,6 +208,17 @@
       .sys-editor .dash-body{display:flex;flex-direction:column;gap:10px}
       .sys-input{border:1px solid #2c3953;border-radius:7px;background:#0d1426;color:#edf1fa;font:12px var(--sans);padding:7px 10px;min-width:0;flex:1}
       .sys-path-row{display:flex;flex-wrap:wrap;gap:8px}
+      .sys-note{margin:0;border:1px solid #2c3953;border-left:3px solid #9f91ff;border-radius:7px;background:#111a2e;color:#dfe5f2;font-size:12px;padding:8px 10px}
+      .sys-note.error{border-color:#6b2b36;border-left-color:#ff6b81;background:#2a1219;color:#ffd5dc}
+      .sys-browser{border:1px solid #2c3953;border-radius:9px;background:#0b1222;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+      .sys-browser-title{margin:0;font-size:12px;color:#cfd6e6}
+      .sys-browser-bar{display:flex;flex-wrap:wrap;gap:6px}
+      .sys-chip-btn{border:1px solid #2c3953;border-radius:999px;background:#111a2e;color:#cfd6e6;font:12px var(--sans);padding:3px 10px;cursor:pointer}
+      .sys-chip-btn:hover:not(:disabled),.sys-chip-btn:focus-visible{border-color:#9f91ff;color:#edf1fa}
+      .sys-chip-btn:disabled{opacity:.45;cursor:default}
+      .sys-browser-list{list-style:none;margin:0;padding:0;max-height:260px;overflow:auto;border-top:1px solid #1a2338}
+      .sys-browser-list button{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid #1a2338;background:none;color:#dfe5f2;font:12px var(--sans);padding:6px 4px;cursor:pointer;overflow-wrap:anywhere}
+      .sys-browser-list button:hover,.sys-browser-list button:focus-visible{background:#16203a;color:#fff}
       .sys-service-list li{display:flex;align-items:center;gap:8px;border-top:1px solid #1a2338;padding:6px 0;font-size:12px;color:#cfd6e6}
       .sys-service-list label{flex:1;min-width:0;display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}
       @media(max-width:820px){.sys-table th:nth-child(5),.sys-table td:nth-child(5){display:none}}
