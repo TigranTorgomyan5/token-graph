@@ -1104,6 +1104,44 @@ class ExplorerGroundingTests(unittest.TestCase):
         self.assertIn('  - 202 — `apierror.WriteJSONStrict(w, http.StatusAccepted, nil)`', text)
         self.assertNotIn('500', text)
 
+    def test_runtime_statuses_follow_the_mapping_and_name_the_ones_an_error_carries(self):
+        # Live nh-config-service-go: a.fail -> Exception -> `status, code, retry := Mapping(err)`; nh_identity otp: a fail
+        # that is not a graph node while another package has one; nh_identity serverError: 500 or the error's own Status.
+        files = {
+            'internal/api/api.go': ('package api\nfunc (a *API) Mount(r chi.Router) {\n\tr.Get("/config/api/v1/config", a.getConfig)\n'
+                                    '\tr.Post("/config/api/v1/other", a.other)\n}\n'
+                                    'func (a *API) getConfig(w http.ResponseWriter, r *http.Request) {\n\tif err := a.svc.Get(r.Context()); err != nil {\n'
+                                    '\t\ta.fail(w, r, err)\n\t\treturn\n\t}\n}\n'
+                                    'func (a *API) other(w http.ResponseWriter, r *http.Request) {\n\tif err := a.svc.Get(r.Context()); err != nil {\n'
+                                    '\t\ta.serverError(w, r, err)\n\t\treturn\n\t}\n}\n'
+                                    'func (a *API) fail(w http.ResponseWriter, r *http.Request, err error) {\n'
+                                    '\tstatus, code, retryable := Mapping(err)\n\tif retryable {\n\t\tw.Header().Set("Retry-After", "30")\n\t}\n'
+                                    '\thttpx.WriteJSON(w, status, body(code))\n}\n'
+                                    'func Mapping(err error) (status int, code string, retryable bool) {\n\tswitch KindOf(err) {\n'
+                                    '\tcase KindNotFound:\n\t\treturn http.StatusNotFound, "NF", false\n\tcase KindConflict:\n'
+                                    '\t\treturn http.StatusConflict, "C", false\n\t}\n\treturn http.StatusInternalServerError, "I", false\n}\n'
+                                    'func (a *API) serverError(w http.ResponseWriter, r *http.Request, err error) {\n\tvar ae *Error\n'
+                                    '\tif errors.As(err, &ae) {\n\t\tWrite(w, r, ae.Status, ae.Code)\n\t\treturn\n\t}\n'
+                                    '\tWrite(w, r, http.StatusInternalServerError, "I")\n}\n'),
+            'internal/mvc/bind.go': 'package mvc\nfunc (b *Binder) fail(w http.ResponseWriter, r *http.Request, err error) {\n\thttp.Error(w, "x", 400)\n}\n',
+            'internal/httpx/httpx.go': 'package httpx\nfunc WriteJSON(w http.ResponseWriter, status int, body any) {\n\tw.WriteHeader(status)\n}\n',
+            'internal/api/write.go': 'package api\nfunc Write(w http.ResponseWriter, r *http.Request, status int, code string) {\n\tw.WriteHeader(status)\n}\n',
+        }
+        root = self.make_project(files)
+        lines = files['internal/api/api.go'].split('\n')
+        at = lambda name: next(i for i, text in enumerate(lines, 1) if f') {name}(' in text and text.startswith('func'))
+        nodes = [{'source_file': name} for name in files] + [
+            {'label': '.getConfig()', 'source_file': 'internal/api/api.go', 'source_location': f'L{at("getConfig")}'},
+            {'label': '.other()', 'source_file': 'internal/api/api.go', 'source_location': f'L{at("other")}'},
+            {'label': '.fail()', 'source_file': 'internal/mvc/bind.go', 'source_location': 'L2'},            # the decoy; api.go's is no node
+            {'label': 'Mapping()', 'source_file': 'internal/api/api.go', 'source_location': f'L{next(i for i, t in enumerate(lines, 1) if t.startswith("func Mapping"))}'},
+            {'label': 'WriteJSON()', 'source_file': 'internal/httpx/httpx.go', 'source_location': 'L2'},
+            {'label': 'Write()', 'source_file': 'internal/api/write.go', 'source_location': 'L2'}]
+        (root / 'graphify-out/graph.json').write_text(json.dumps({'nodes': nodes, 'edges': []}))
+        text = '\n'.join(explorer.endpoint_contracts(root, explorer.question_route_sources(root, 'What do /config/api/v1/config and /config/api/v1/other return?')))
+        self.assertIn('404/409/500 (set in `a.fail`) when `err := a.svc.Get(r.Context()); err != nil`', text)                 # not 400 from the other package's fail
+        self.assertIn('500 or the status in `ae.Status` (set in `a.serverError`)', text)
+
     def test_a_written_route_path_does_not_pull_in_the_routes_under_it(self):
         hints = ('POST /v1/user (and /v1/user/* via catchAll) — internal/forwarding/routes.go:39\n'
                  'POST /v1/user/GetRecentPlayed — internal/gaming/gaming.go:97\n'

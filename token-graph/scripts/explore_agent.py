@@ -672,6 +672,12 @@ def endpoint_contracts(project: Path, sources: list[tuple[str, int, int, str]]) 
         found.sort(key=lambda item: (item[0] != near, Path(item[0]).parent != Path(near).parent, item[0]))
         # The declaration line itself, nearest the graph's location first: a doc comment above it names it too.
         declares = declaration or re.compile(r'\b' + re.escape(name) + r'\s*(?:<[^>]*>|\[[^\]]*\])?\s*\(')
+        if not declaration:
+            # A function declared in near's own file is the one meant, graph node or not (otp's `fail` is not a
+            # node, and another package has a `fail` that the graph does know).
+            for number, text in enumerate(lines_of(near), 1):
+                if declares.search(text) and frameworks.DECLARATION_START.match(text) and not frameworks.is_comment(lang, text):
+                    return near, number
         for file, line in found:
             source = lines_of(file)
             for candidate in (line, line + 1, line - 1, line + 2, line - 2, line + 3, line - 3):
@@ -714,8 +720,28 @@ def endpoint_contracts(project: Path, sources: list[tuple[str, int, int, str]]) 
             return None
         return frameworks.status_code(args[index]), args[index]
 
-    def writer_status(name: str, near: str, depth: int = 0) -> list[int]:
-        """Statuses a writer function sets in its own body, or through the writers it calls (two levels)."""
+    def mapped_statuses(function: str, near: str) -> list[int]:
+        """Statuses a mapping function returns: Mapping(err) -> return http.StatusNotFound, ResourceNotFound, false."""
+        located = find(function.split('.')[-1], near)
+        if not located:
+            return []
+        return sorted({status for _, text in numbered_body(*located, limit=60)[1:] if re.match(r'\s*return\b', text)
+                       for status in [frameworks.status_code(text)] if status})
+
+    def status_variable(expression: str, body: list[tuple[int, str]], near: str) -> list[int]:
+        """A status passed as a plain variable, resolved through what it was assigned from:
+        `status, code, retryable := Mapping(err)` -> the statuses Mapping returns."""
+        if not re.fullmatch(r'[A-Za-z_]\w*', expression):
+            return []
+        for _, text in body:
+            assigned = re.match(r'\s*([\w\s,]+?)\s*:?=\s*([\w.]+)\(', text)
+            if assigned and expression in [name.strip() for name in assigned.group(1).split(',')]:
+                return mapped_statuses(assigned.group(2), near)
+        return []
+
+    def writer_status(name: str, near: str, depth: int = 0, dynamic: set | None = None) -> list[int]:
+        """Statuses a writer function sets in its own body, or through the writers it calls (two levels).
+        A status only known at runtime (the status an error value carries: `ae.Status`) is added to dynamic."""
         simple = name.split('.')[-1]
         located = find(simple, near)
         if not located or depth > 1:
@@ -730,9 +756,12 @@ def endpoint_contracts(project: Path, sources: list[tuple[str, int, int, str]]) 
             if write['status'] is None and write['writer'] and write['writer'].split('.')[-1] != simple:
                 passed = passed_status(write, located[0])
                 if passed:            # writeJSON(w, 200, v): the 200 passed in, not writeJSON's encode-failure 500
-                    statuses |= {passed[0]} if passed[0] else set()
+                    mapped = [] if passed[0] else status_variable(passed[1], body, located[0])
+                    statuses |= {passed[0]} if passed[0] else set(mapped)
+                    if not passed[0] and not mapped and dynamic is not None:
+                        dynamic.add(passed[1])      # ae.Status: chosen where the error is made
                 else:
-                    statuses |= set(writer_status(write['writer'], located[0], depth + 1))
+                    statuses |= set(writer_status(write['writer'], located[0], depth + 1, dynamic))
         return sorted(statuses)
 
     def contract(file: str, line: int) -> dict:
@@ -767,12 +796,17 @@ def endpoint_contracts(project: Path, sources: list[tuple[str, int, int, str]]) 
         for write in writes:
             if write['status'] is None and write['writer']:
                 passed = passed_status(write, file)
+                mapped = status_variable(passed[1], body, file) if passed and not passed[0] else []
                 if passed and passed[0]:
                     write['status'] = passed[0]
+                elif mapped:
+                    write['resolved'] = mapped
                 elif passed:
                     write['passed'] = passed[1]
                 else:
-                    write['resolved'] = writer_status(write['writer'], file)
+                    dynamic: set = set()
+                    write['resolved'] = writer_status(write['writer'], file, dynamic=dynamic)
+                    write['dynamic'] = sorted(dynamic)
         keys = frameworks.response_keys(file, writes, body)
         for write in writes:          # a struct literal in a success response names its type: loginResponse{...}
             literal = re.search(r'\b([A-Za-z_]\w*)\{', write.get('call', write['text'])) if write['status'] in (200, 201) else None
@@ -805,9 +839,11 @@ def endpoint_contracts(project: Path, sources: list[tuple[str, int, int, str]]) 
         if info['writes']:
             out.append('- Responses:')
             for write in info['writes']:
+                carried = ' or the status in ' + ', '.join(f'`{expression}`' for expression in write.get('dynamic', ())) if write.get('dynamic') else ''
                 status = str(write['status']) if write['status'] else (
                     f'status `{write["passed"]}` (passed to `{write["writer"]}`)' if write.get('passed')
-                    else f'{"/".join(map(str, write["resolved"]))} (set in `{write["writer"]}`)' if write.get('resolved')
+                    else f'{"/".join(map(str, write["resolved"]))}{carried} (set in `{write["writer"]}`)' if write.get('resolved')
+                    else f'status in {carried[len(" or the status in "):]} (set in `{write["writer"]}`)' if carried
                     else f'status set in `{write["writer"]}`' if write['writer'] else 'status not shown')
                 when = f' when `{write["when"]}`' if write['when'] else ''
                 out.append(f'  - {status}{when} — `{write["text"]}` — {file}:{write["line"]}')

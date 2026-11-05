@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Local repo-scout: answer one question about one repo in the nh-agent-kit repo-scout format, locally.
 
-    python3 local_scout.py <repo> "<question>" [--ref origin/V5.0] [--model qwen3:14b-q4_K_M] [--no-llm]
+    python3 local_scout.py <repo> "<question>" [--ref origin/V5.0] [--model qwen3:14b-q4_K_M] [--no-llm] [--with REPO ...]
 
 With --ref, the scout reads that commit, not the working tree (other sessions use the working tree):
 it takes a `git archive` snapshot of the commit, which holds committed files only, builds its graph
@@ -32,6 +32,7 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True
 import agent_frameworks as frameworks  # noqa: E402
+import system_links  # noqa: E402
 import explore_agent as explorer  # noqa: E402
 from explorer_evidence import classify_source  # noqa: E402
 
@@ -178,12 +179,43 @@ def rules_for(project: Path, pattern: re.Pattern | None) -> list[str]:
     return found
 
 
+FORWARD_ROUTE = re.compile(r'^\S+ (/\S*) \(and \1/\* via (\w+)\) — (.+):(\d+)$')    # POST /v1/user (and /v1/user/* via catchAll) — file:39
+
+
+def other_services(project: Path, siblings: list[tuple[str, Path]], route_paths: list[str], notes: list[str]) -> list[str]:
+    """Callers in other services: which of the given services call this one (system_links' scan: a base-URL config
+    key or a matched route) and which forward a route prefix that covers the routes asked about
+    (catchAll "/v1/user" -> toPlayerService covers POST /v1/user/security/selfExclude)."""
+    name = project.name.split('@')[0]
+    scan = system_links.scan_system([{'name': name, 'path': str(project)}, *({'name': n, 'path': str(p)} for n, p in siblings)])
+    lines = []
+    for edge in scan['edges']:
+        if edge['target'] != 0:
+            continue
+        caller, path = siblings[edge['source'] - 1]
+        # The channel named like a config key (NH_PLAYER_SERVICE_URI) says more than a host name does.
+        channels = sorted(edge['channels'], key=lambda channel: not re.fullmatch(r'[A-Z][A-Z0-9_]+', channel['name']))
+        channel = next((c for c in channels if c['from']), None)
+        evidence = channel['from'][0] if channel else None
+        how = (f" ({edge['tech']}, {channel['name']}: {evidence['file']}:{evidence['line']})" if evidence else f" ({edge['tech']})")
+        lines.append(f'{caller} calls this service{how}')
+        for hint in explorer.endpoint_route_hints(path).splitlines():
+            forward = FORWARD_ROUTE.match(hint)
+            if forward and any(route == forward.group(1) or route.startswith(forward.group(1) + '/') for route in route_paths):
+                lines.append(f'{caller} forwards {forward.group(1)}/* here via `{forward.group(2)}` ({forward.group(3)}:{forward.group(4)})')
+    if not lines:
+        notes.append('none of the other services given calls this one by a base URL or a route the scan could match')
+    else:
+        notes.append('other services: found by a config key or route match in their files, so a caller that reaches this service another way is missing')
+    return lines
+
+
 def field(label: str, values: list[str], empty: str) -> str:
     values = values or [empty]
     return f'{label + ":":<11}' + values[0] + ''.join('\n' + INDENT + value for value in values[1:])
 
 
-def scout(project: Path, repo_label: str, question: str, model: str | None) -> str:
+def scout(project: Path, repo_label: str, question: str, model: str | None, siblings: list[tuple[str, Path]] | None = None) -> str:
     graph = graph_of(project)
     sources = explorer.question_route_sources(project, question) if graph else []
     unsure, behaviour, graph_used = [], [], []
@@ -241,6 +273,8 @@ def scout(project: Path, repo_label: str, question: str, model: str | None) -> s
                 caller_lines.append(f'{route} route, registered at {file}:{line}')
         for why, file, line in handlers[:3]:
             caller_lines += callers(project, graph, file, line, why.split()[1])
+        if siblings:
+            caller_lines += other_services(project, siblings, route_paths, unsure)
         tests = pinned_by(project, graph, pattern)
         rules = rules_for(project, pattern)
         unsure.append('only the functions on the code path were read; deeper calls were not followed')
@@ -271,6 +305,8 @@ def main() -> int:
     parser.add_argument('--ref', help='read this commit (e.g. origin/V5.0) instead of the working tree')
     parser.add_argument('--model', default=explorer.DEFAULT_MODEL)
     parser.add_argument('--no-llm', action='store_true', help='code-found fields only')
+    parser.add_argument('--with', dest='others', nargs='*', default=[], metavar='REPO',
+                        help='other services (paths, or names next to REPO) to look for callers in; read at the same --ref')
     args = parser.parse_args()
     repo = args.repo.expanduser().resolve()
     if args.ref:
@@ -282,7 +318,18 @@ def main() -> int:
             label = f'{repo.name} (working tree, {git(repo, "rev-parse", "--abbrev-ref", "HEAD")} @ {git(repo, "rev-parse", "--short=12", "HEAD")})'
         except (OSError, subprocess.CalledProcessError):
             label = f'{repo.name} (working tree)'
-    print(scout(project, label, args.question, None if args.no_llm else args.model))
+    siblings = []
+    for item in args.others:
+        other = Path(item).expanduser()
+        other = (other if other.exists() else repo.parent / item).resolve()
+        if args.ref:
+            try:
+                siblings.append((other.name, snapshot(other, args.ref)[0]))
+            except (OSError, subprocess.CalledProcessError):
+                print(f'note: {other.name} has no {args.ref}; not searched for callers', file=sys.stderr)
+        else:
+            siblings.append((other.name, other))
+    print(scout(project, label, args.question, None if args.no_llm else args.model, siblings))
     return 0
 
 

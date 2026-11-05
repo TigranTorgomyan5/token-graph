@@ -102,6 +102,28 @@ class LocalScoutTests(unittest.TestCase):
         self.assertLess(behaviour.index('none read by the handler'), exclusion)     # under its own handler
         self.assertLess(exclusion, behaviour.index('`durationDays` int'))
 
+    def test_callers_in_other_services_by_config_key_and_forwarded_prefix(self):
+        # Live: nh-gateway-go-sync reaches nh-player-service through NH_PLAYER_SERVICE_URI and forwards /v1/user/* to it.
+        parent = Path(self.directory.name) / 'services'
+        service = make_project(parent / 'nh-player-service') if (parent / 'nh-player-service').mkdir(parents=True) is None else None
+        gateway, unrelated = parent / 'nh-gateway', parent / 'nh-billing'
+        gateway.mkdir()
+        (gateway / '.env.example').write_text('NH_PLAYER_SERVICE_URI=http://player:9008\n')
+        (gateway / 'docker-compose.yml').write_text('services:\n  gateway:\n    environment:\n      NH_PLAYER_SERVICE_URI: http://host.docker.internal:9008\n')
+        unrelated.mkdir()
+        (unrelated / 'README.md').write_text('nothing here\n')
+        real_hints = scout.explorer.endpoint_route_hints
+        hints = lambda path: ('POST /v1/user (and /v1/user/* via catchAll) — internal/forwarding/routes.go:39\n' if Path(path) == gateway
+                              else real_hints(path))
+        with patch.object(scout.explorer, 'endpoint_route_hints', side_effect=hints):
+            block = scout.scout(service, 'repo', 'How does self exclusion work?', None, [('nh-gateway', gateway), ('nh-billing', unrelated)])
+        self.assertIn('nh-gateway calls this service (http, NH_PLAYER_SERVICE_URI: ', block)       # the key, not the host name
+        self.assertIn('nh-gateway forwards /v1/user/* here via `catchAll` (internal/forwarding/routes.go:39)', block)
+        self.assertNotIn('nh-billing', block)
+        self.assertIn('other services: found by a config key or route match', block)
+        # Without the option, nothing about other services is claimed.
+        self.assertNotIn('other services', scout.scout(service, 'repo', 'How does self exclusion work?', None))
+
     def test_callers_are_the_handlers_own_not_a_neighbours(self):
         graph = {'nodes': [{'id': 'h', 'label': '.selfExclude()', 'source_file': 'internal/security/security.go', 'source_location': 'L5'},
                            {'id': 'n', 'label': '.neighbour()', 'source_file': 'internal/security/security.go', 'source_location': 'L7'},
