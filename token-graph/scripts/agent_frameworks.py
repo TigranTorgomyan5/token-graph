@@ -652,24 +652,149 @@ def struct_field_types(filename: str, lines: list[str], number: int) -> dict[str
     Embedded fields map their type name to itself."""
     if language(filename) != 'go' or not 0 < number <= len(lines):
         return {}
-    fields, depth = {}, 0
-    for index in range(number - 1, min(len(lines), number + 120)):
-        text = lines[index]
-        depth += text.count('{') - text.count('}')
-        if index > number - 1 and depth <= 0:
-            break
-        stripped = text.split('//')[0].strip()
-        if index == number - 1 or not stripped:
-            continue
+    fields: dict[str, str] = {}
+
+    def add(stripped: str) -> None:
         embedded = re.match(r'\*?(?:\w+\.)?([A-Za-z_]\w*)\s*(?:`[^`]*`)?$', stripped)
         if embedded:
-            fields[embedded.group(1)] = stripped.split('`')[0].strip()
-            continue
+            fields.setdefault(embedded.group(1), stripped.split('`')[0].strip())
+            return
         match = re.match(r'(\w+(?:\s*,\s*\w+)*)\s+([^`]+?)\s*(?:`[^`]*`)?$', stripped)
         if match:
             for name in match.group(1).split(','):
-                fields[name.strip()] = match.group(2).strip()
+                fields.setdefault(name.strip(), match.group(2).strip())
+
+    head = lines[number - 1].split('//')[0]
+    inner = head.split('{', 1)[1] if '{' in head else ''
+    if '}' in inner:                       # one line: type API struct{ svc *S; log *slog.Logger }
+        for part in inner.rsplit('}', 1)[0].split(';'):
+            if part.strip():
+                add(part.strip())
+        return fields
+    depth = head.count('{') - head.count('}')
+    for index in range(number, min(len(lines), number + 120)):
+        stripped = lines[index].split('//')[0].strip()
+        before, depth = depth, depth + stripped.count('{') - stripped.count('}')
+        if depth <= 0:
+            break
+        # Only the struct's own fields: a nested struct's (opts struct { svc *mock.Svc }) are not the outer's.
+        if before == 1 and stripped:
+            add(stripped)
     return fields
+
+
+def imports(filename: str, lines: list[str]) -> dict[str, str]:
+    """{qualifier: import path} of a Go file: `configsvc "x/internal/config"` -> configsvc, a plain
+    "x/internal/configsvc" -> its last segment (the one before a /vN major version)."""
+    if language(filename) != 'go':
+        return {}
+    found, block = {}, False
+    for text in lines:
+        stripped = text.split('//')[0].strip()
+        if stripped.startswith('import ('):
+            block = True
+            continue
+        if block and stripped == ')':
+            break
+        spec = stripped[len('import'):].strip() if stripped.startswith('import ') else (stripped if block else '')
+        match = re.fullmatch(r'(?:([A-Za-z_]\w*|\.)\s+)?"([^"]+)"', spec)
+        if match and match.group(1) not in {'_', '.'}:
+            segments = match.group(2).split('/')
+            name = segments[-2] if len(segments) > 1 and re.fullmatch(r'v\d+', segments[-1]) else segments[-1]
+            found[match.group(1) or name.replace('-', '_')] = match.group(2)
+        if not block and stripped.startswith(('func ', 'type ', 'var ', 'const ')):
+            break
+    return found
+
+
+def field_type_target(filename: str, field_type: str) -> tuple[str | None, str] | None:
+    """(package qualifier or None for the same package, type name) of a field's type: *configsvc.Service ->
+    ('configsvc', 'Service'); *Repository -> (None, 'Repository'). Maps, funcs and channels give None."""
+    if language(filename) != 'go':
+        return None
+    match = re.fullmatch(r'(?:(\w+)\.)?([A-Za-z_]\w*)', re.sub(r'^[\s*&\[\]]+', '', field_type))
+    return (match.group(1), match.group(2)) if match else None
+
+
+STATUS_PARAMETER = re.compile(r'^(?:status|code|statuscode|status_code|httpstatus|httpcode)$', re.I)
+
+
+def call_arguments(call: str, name: str) -> list[str]:
+    """The top-level arguments of the call of name in call: WriteJSONStrict(w, resp.Status, games) ->
+    ['w', 'resp.Status', 'games']."""
+    start = re.search(r'\b' + re.escape(name) + r'\s*\(', call)
+    if not start:
+        return []
+    args, depth, current = [], 0, ''
+    for char in call[start.end():]:
+        if char in '([{':
+            depth += 1
+        elif char in ')]}':
+            if depth == 0:
+                break
+            depth -= 1
+        if char == ',' and depth == 0:
+            args.append(current.strip())
+            current = ''
+        else:
+            current += char
+    return args + ([current.strip()] if current.strip() else [])
+
+
+def status_parameter(filename: str, signature: str) -> int | None:
+    """Index of the parameter that carries the HTTP status in a writer's declaration, so the status is the
+    caller's argument, not one the writer picks: func WriteJSON(w http.ResponseWriter, status int, body any) -> 1."""
+    lang = language(filename)
+    text = re.sub(r'^\s*func\s*\([^)]*\)\s*', 'func ', signature) if lang == 'go' else signature
+    name = re.search(r'(\w+)\s*(?:<[^>]*>|\[[^\]]*\])?\s*\(', text)
+    if not name:
+        return None
+    for index, part in enumerate(call_arguments(text, name.group(1))):
+        # The parameter's own name: first word in Go/Python/Rust/TS (status int, status: int), last in C#/Java.
+        words = re.findall(r'[A-Za-z_]\w*', part.split('=')[0].split(':')[0])
+        candidates = words[:1] if lang in {'go', 'python', 'rust', 'js', 'php', 'ruby'} else words[-1:]
+        if candidates and STATUS_PARAMETER.match(candidates[0].lstrip('$')):
+            return index
+    return None
+
+
+# ── Tests that name a route (repo-scout "Pinned by") ──────────────────────────
+
+_TEST_FUNCTION = {
+    'go': re.compile(r'^\s*func\s+(?:\(\s*\w+\s+\*?\w+\s*\)\s*)?(Test\w+)\s*\('),      # TestX, and testify suite methods
+    'python': re.compile(r'^\s*(?:async\s+)?def\s+(test_\w+)'),
+    'js': re.compile(r'^\s*(?:it|test|describe)(?:\.\w+)?\(\s*[\'"`]([^\'"`]+)'),
+    'csharp': re.compile(r'^\s*(?:public\s+)?(?:async\s+)?(?:void|Task)\s+(\w+)\s*\('),
+    'jvm': re.compile(r'^\s*(?:public\s+)?(?:void|fun)\s+(\w+)\s*\('),
+    'rust': re.compile(r'^\s*(?:async\s+)?fn\s+(\w+)\s*\('),
+}
+_HELPER_FUNCTION = {
+    'go': re.compile(r'^\s*func\s+(?:\([^)]*\)\s*)?(\w+)\s*[\[(]'),
+    'python': re.compile(r'^\s*(?:async\s+)?def\s+(\w+)'),
+    'js': re.compile(r'^\s*(?:export\s+)?(?:async\s+)?function\s+(\w+)|^\s*(?:export\s+)?(?:const|let)\s+(\w+)\s*=\s*(?:async\s*)?\('),
+}
+_TABLE_ROW = {'go': re.compile(r'^\s*\{\s*"([^"]+)"\s*,')}       # table-driven test row: {"CaseName", "/path", ...}
+
+
+def test_function(filename: str, line: str) -> tuple[str, str] | None:
+    """('test', name) when line declares a test, ('helper', name) for any other function, else None.
+    Go's TestMain is shared setup: ('helper', 'TestMain')."""
+    lang = language(filename)
+    test = _TEST_FUNCTION.get(lang or '')
+    match = test.match(line) if test else None
+    if match:
+        name = next(group for group in match.groups() if group)
+        return ('helper', name) if lang == 'go' and name == 'TestMain' else ('test', name)
+    helper = _HELPER_FUNCTION.get(lang or '')
+    match = helper.match(line) if helper else None
+    return ('helper', next(group for group in match.groups() if group)) if match else None
+
+
+def table_case(filename: str, line: str) -> str | None:
+    """The case name of a table-driven test row on line, if it is one."""
+    pattern = _TABLE_ROW.get(language(filename) or '')
+    match = pattern.match(line) if pattern else None
+    return match.group(1) if match else None
 
 
 def field_calls(filename: str, body: list[str], variable: str) -> list[tuple[str, str]]:
@@ -718,7 +843,8 @@ def status_code(text: str) -> int | None:
     upper = re.search(r'\b(?:HttpStatus|StatusCode|HttpStatusCode)(?:\.|::)([A-Z][A-Za-z_]+)\b', text)
     if upper and upper.group(1).replace('_', '').casefold() in _STATUS_BY_NAME:
         return _STATUS_BY_NAME[upper.group(1).replace('_', '').casefold()]
-    helper = re.search(r'(?:\bResults\.|\bResponseEntity\.|\breturn\s+(?:new\s+)?|\bthrow\s+new\s+)(\w+?)(?:Result|Exception|ObjectResult)?\s*\(', text)
+    # return NotFound(), Results.Ok(...), and a package's helpers too: Go's return mvc.BadRequest(...), mvc.Ok(...)
+    helper = re.search(r'(?:\bResults\.|\bResponseEntity\.|\breturn\s+(?:new\s+)?(?:[a-z]\w*\.)?|\bthrow\s+new\s+)(\w+?)(?:Result|Exception|ObjectResult)?\s*\(', text)
     if helper and helper.group(1).casefold() in _STATUS_HELPERS:
         return _STATUS_HELPERS[helper.group(1).casefold()]
     return None
@@ -831,7 +957,13 @@ def request_body(filename: str, body: list[tuple[int, str]]) -> dict | None:
     lang = language(filename)
     text = '\n'.join(line for _, line in body)
     if lang == 'go':
+        signature = body[0][1] if body else ''
         for number, line in body:
+            # The framework decoded the body and passes it in: issuePlayerToken(r *http.Request, b mvc.Body) asserts
+            # req := b.(*issueRequest). Only an assertion on a parameter typed as a body or any.
+            asserted = re.search(r'\b\w+\s*:?=\s*(\w+)\.\(\*?([A-Za-z_][\w.]*)\)', line)
+            if asserted and re.search(r'\b' + re.escape(asserted.group(1)) + r'\s+(?:[\w.]*Body|any|interface\{\})\s*[,)]', signature):
+                return {'type': asserted.group(2).split('.')[-1], 'decoder': line.strip()[:110], 'line': number}
             generic = re.search(r'\b[\w.]*Read\[(\w+)\]\(', line)
             if generic:
                 return {'type': generic.group(1), 'decoder': line.strip()[:110], 'line': number}
@@ -856,6 +988,8 @@ def request_body(filename: str, body: list[tuple[int, str]]) -> dict | None:
                 return {'type': None, 'via': binder.group(1), 'decoder': line.strip()[:110], 'line': number}
         # A handler that receives the decoded body as a parameter: balance(w, r, req *balanceRequest) error
         signature = ' '.join(line for _, line in body[:3]).split('{', 1)[0]
+        if re.search(r'\b\w+\s+[\w.]*Body\s*[,)]', signature):
+            return None       # a generic body interface (mvc.Body) with no assertion names no type
         params = re.search(r'\w+\s*\(([^()]*(?:\([^()]*\)[^()]*)*)\)\s*[^()]*$', signature.split(')', 1)[-1] if signature.lstrip().startswith('func (') else signature)
         for name, kind in re.findall(r'(\w+)\s+\*?([A-Za-z_][\w.]*)', params.group(1) if params else ''):
             if kind not in {'http.ResponseWriter', 'http.Request', 'context.Context', 'string', 'int', 'bool', 'any'} and not kind.startswith('func'):
@@ -919,11 +1053,14 @@ def response_writes(filename: str, body: list[tuple[int, str]], limit: int = 12)
         return []
     out = []
     for index, (number, line) in enumerate(body[1:], 1):
-        if is_comment(lang, line) or not pattern.search(line):
+        # Go handlers that return a framework result write it through the framework: return mvc.Ok(body, t), nil.
+        # Only one whose status is named, so return s.store.Get(ctx) is not a response.
+        returned = lang == 'go' and re.match(r'\s*return\s+[a-z]\w*\.[A-Z]\w*\(', line) and status_code(line)
+        if is_comment(lang, line) or not (pattern.search(line) or returned):
             continue
         if lang in {'python', 'js', 'jvm', 'php'} and re.match(r'\s*return\b', line) and _BARE_EXIT.match(line):
             continue
-        writer = pattern.search(line).group(1) if lang == 'go' else None
+        writer = pattern.search(line).group(1) if lang == 'go' and pattern.search(line) else None
         if writer and HTTP_NON_WRITERS.search(writer):
             continue
         status = status_code(line)
@@ -937,12 +1074,15 @@ def response_writes(filename: str, body: list[tuple[int, str]], limit: int = 12)
         # an earlier, already closed if (if req.ReasonCode != nil { ... }) is not it. A multi-line condition
         # (if err := m.store.Insert(ctx,\n ...); err != nil {) is quoted by its first line and marked as cut.
         for _, previous in reversed(body[1:index]):
-            if not previous.strip() or len(previous) - len(previous.lstrip()) >= indent:
+            # A brace on its own line (C#, Allman-style Java/PHP) opens the block of the line above it.
+            if not previous.strip() or previous.strip() == '{' or len(previous) - len(previous.lstrip()) >= indent:
                 continue
             opener = re.match(r'\s*(?:\}\s*else\s+)?(?:if|elif|else\s+if)\b\s*(.+?)\s*$|\s*case\s+(.+?):\s*$', previous)
             if opener:
                 when = (opener.group(1) or opener.group(2)).strip()
-                complete = when.endswith(('{', ':'))
+                # Whole when it opens its block on the line, or its parentheses close (C# `if (x)`, Ruby `if x`
+                # has none to close); cut when they stay open (Go's if err := m.store.Insert(ctx,).
+                complete = when.endswith(('{', ':')) or (when.count('(') == when.count(')') and not re.search(r'(?:,|&&|\|\||\band|\bor)$', when))
                 when = when.rstrip('{:').strip()
                 if when.startswith('(') and when.endswith(')'):     # C-like if (cond) { ... }
                     when = when[1:-1].strip()

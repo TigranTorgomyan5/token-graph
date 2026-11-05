@@ -243,6 +243,78 @@ class ReceiverFieldCallTests(unittest.TestCase):
         self.assertTrue(frameworks.method_declares('service.go', 'func (s *Service) Update(ctx context.Context, value *jsonx.Node) (*Entity, error) {', 'Service', 'Update'))
         self.assertFalse(frameworks.method_declares('service.go', 'func (r *Repo) Update(ctx context.Context) error {', 'Service', 'Update'))
 
+    def test_nested_and_one_line_structs(self):
+        nested = ['type API struct {', '\tsvc *configsvc.Service', '\topts struct {', '\t\tsvc *mock.Svc', '\t\tdebug bool', '\t}', '}']
+        self.assertEqual({'svc': '*configsvc.Service', 'opts': 'struct {'}, frameworks.struct_field_types('api.go', nested, 1))
+        self.assertEqual({'svc': '*S', 'log': '*slog.Logger'}, frameworks.struct_field_types('api.go', ['type API struct{ svc *S; log *slog.Logger }'], 1))
+
+    def test_imports_name_the_package_a_qualifier_means(self):
+        lines = ['package api', 'import (', '\t"context"', '\tconfigsvc "x/internal/config"', '\t"x/internal/store/v2"',
+                 '\t_ "x/internal/drivers"', ')', 'type API struct{}']
+        self.assertEqual({'context': 'context', 'configsvc': 'x/internal/config', 'store': 'x/internal/store/v2'},
+                         frameworks.imports('api.go', lines))
+        self.assertEqual({'paybridge': 'x/paybridge'}, frameworks.imports('api.go', ['package api', 'import "x/paybridge"']))
+        self.assertEqual(('configsvc', 'Service'), frameworks.field_type_target('api.go', '*configsvc.Service'))
+        self.assertEqual((None, 'Repository'), frameworks.field_type_target('api.go', '*Repository'))
+        self.assertIsNone(frameworks.field_type_target('api.go', 'map[string]int'))
+
+
+class StatusParameterTests(unittest.TestCase):
+    """A writer that takes the status as a parameter writes the caller's status, not its own fallback."""
+
+    def test_status_parameter_index_per_language(self):
+        self.assertEqual(1, frameworks.status_parameter('a.go', 'func WriteJSONStrict(w http.ResponseWriter, status int, body any) {'))
+        self.assertEqual(2, frameworks.status_parameter('a.go', 'func (a *API) write(w http.ResponseWriter, r *http.Request, code int, v any) {'))
+        self.assertIsNone(frameworks.status_parameter('a.go', 'func WriteErr(w http.ResponseWriter, r *http.Request, err error) {'))
+        self.assertEqual(1, frameworks.status_parameter('a.cs', 'private IActionResult Write(object body, int statusCode)'))
+        self.assertEqual(1, frameworks.status_parameter('a.py', 'def respond(body, status: int = 200):'))
+
+    def test_call_arguments_split_at_top_level(self):
+        self.assertEqual(['w', 'resp.Status', 'games'], frameworks.call_arguments('apierror.WriteJSONStrict(w, resp.Status, games)', 'WriteJSONStrict'))
+        self.assertEqual(['w', 'f(a, b)', 'map[string]any{"a": 1, "b": 2}'],
+                         frameworks.call_arguments('write(w, f(a, b), map[string]any{"a": 1, "b": 2})', 'write'))
+
+    def test_conditions_with_braces_on_their_own_line(self):
+        # C#: the brace under the if is not the condition; the old rule reported the 404 as unconditional.
+        body = list(enumerate(['public IActionResult Get(int id)', '{', '    var user = _repo.Find(id);', '    if (user == null)',
+                               '    {', '        return NotFound();', '    }', '    return Ok(user);', '}'], 1))
+        writes = frameworks.response_writes('C.cs', body)
+        self.assertEqual([(404, 'user == null'), (200, None)], [(w['status'], w['when']) for w in writes])
+        go = list(enumerate(['func (m *M) x(w http.ResponseWriter, r *http.Request) {', '\tif err := m.store.Insert(ctx,',
+                             '\t\tid); err != nil {', '\t\tw.WriteHeader(http.StatusInternalServerError)', '\t}', '}'], 1))
+        self.assertEqual('err := m.store.Insert(ctx, …', frameworks.response_writes('x.go', go)[0]['when'])   # cut, so marked
+
+
+class FrameworkResultTests(unittest.TestCase):
+    def test_a_body_the_framework_passes_in_and_returned_results(self):
+        # Live nh-sport-go: issuePlayerToken(r *http.Request, b mvc.Body) asserts b.(*issueRequest) and returns results.
+        body = list(enumerate(['func (c *Controller) issuePlayerToken(r *http.Request, b mvc.Body) (mvc.Result, error) {',
+                               '\treq := b.(*issueRequest)', '\tif config.Blank(*req.ExtID) {',
+                               '\t\treturn mvc.BadRequest(errorBody{"extId is required"}, errorBodyType), nil', '\t}',
+                               '\tres, err := c.client.IssuePlayerToken(r.Context(), *req.ExtID, req.ID)', '\tif err != nil {',
+                               '\t\treturn nil, err', '\t}', '\treturn mvc.Ok(tokenBody(res), tokenResponse), nil', '}'], 77))
+        self.assertEqual('issueRequest', frameworks.request_body('controller.go', body)['type'])
+        self.assertEqual([(400, 'config.Blank(*req.ExtID)'), (200, None)],
+                         [(w['status'], w['when']) for w in frameworks.response_writes('controller.go', body)])
+        # An assertion on anything but the body parameter names no body; nor does a bare mvc.Body.
+        other = [(1, 'func (c *C) x(r *http.Request, b mvc.Body) (mvc.Result, error) {'), (2, '\tv := ctx.Value(k).(*user)'), (3, '}')]
+        self.assertIsNone(frameworks.request_body('c.go', other))
+        self.assertIsNone(frameworks.status_code('return s.store.Get(ctx)'))
+
+
+class TestDeclarationTests(unittest.TestCase):
+    def test_tests_helpers_and_table_rows(self):
+        self.assertEqual(('test', 'TestLogin'), frameworks.test_function('a_test.go', 'func TestLogin(t *testing.T) {'))
+        self.assertEqual(('test', 'TestLogin'), frameworks.test_function('a_test.go', 'func (s *AuthSuite) TestLogin() {'))   # testify
+        self.assertEqual(('helper', 'TestMain'), frameworks.test_function('a_test.go', 'func TestMain(m *testing.M) {'))
+        self.assertEqual(('helper', 'newGateway'), frameworks.test_function('a_test.go', 'func newGateway(t *testing.T) *Gateway {'))
+        self.assertEqual(('test', 'test_login'), frameworks.test_function('test_a.py', 'def test_login(client):'))
+        self.assertEqual(('helper', 'make_user'), frameworks.test_function('test_a.py', 'def make_user():'))
+        self.assertEqual(('test', 'logs in'), frameworks.test_function('a.test.ts', "  it('logs in', async () => {"))
+        self.assertIsNone(frameworks.test_function('a_test.go', '\treturn nil'))
+        self.assertEqual('SelfExclude_NoToken', frameworks.table_case('a_test.go', '\t\t{"SelfExclude_NoToken", "/v1/x", "", nil},'))
+        self.assertIsNone(frameworks.table_case('a.py', '{"a", 1}'))
+
 
 class FrameworkHandlerTests(unittest.TestCase):
     def test_route_handlers_are_named_in_each_framework(self):

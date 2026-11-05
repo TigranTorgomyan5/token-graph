@@ -273,8 +273,12 @@ def question_route_sources(project: Path, question: str, hints: str | None = Non
     has it, its handler's definition. These are reading locations only; nothing here is evidence by itself.
     """
     order = {}
-    # Three-letter words count too ("top winners" -> GetTopWinners, two parts), minus the common ones.
-    for raw in re.findall(r'[A-Za-z]{3,}', question):
+    # A path written in the question ("/v1/user") names routes more precisely than any word.
+    path_pattern = r'(?<![\w/])(/[A-Za-z0-9_{}./*-]+)'
+    literal_paths = [path.rstrip('/?.,').casefold() for path in re.findall(path_pattern, question)]
+    # Three-letter words count too ("top winners" -> GetTopWinners, two parts), minus the common ones. The words
+    # of a written path are not asked about again: "user" in /v1/user would match every /v1/user/... route.
+    for raw in re.findall(r'[A-Za-z]{3,}', re.sub(path_pattern, ' ', question)):
         word = raw.casefold()
         if word not in QUESTION_STOPWORDS:
             order.setdefault(word, len(order))
@@ -286,8 +290,6 @@ def question_route_sources(project: Path, question: str, hints: str | None = Non
             for suffix in ('s', 'es', 'ed', 'd', 'ing'):
                 if word.endswith(suffix) and len(word) - len(suffix) >= 3:
                     order.setdefault(word[:-len(suffix)], order[word])
-    # A path written in the question ("/v1/user") names routes more precisely than any word.
-    literal_paths = [path.rstrip('/?.,').casefold() for path in re.findall(r'(?<![\w/])(/[A-Za-z0-9_{}./*-]+)', question)]
     if not order and not literal_paths:
         return []
     routes = []
@@ -304,6 +306,9 @@ def question_route_sources(project: Path, question: str, hints: str | None = Non
         # Endings are irregular (exclusion/exclude, registration/register): long words sharing 5 letters match.
         return word == part or (len(word) >= 6 and len(part) >= 5 and word[:5] == part[:5])
 
+    # A written path that is itself a route ("/v1/user") names that route; routes under it (/v1/user/GetRecentPlayed)
+    # get the prefix bonus only when the path is no route of its own (a group like "/v1/user/security").
+    exact_literals = {literal for literal in literal_paths if any(route[5] == literal for route in routes)}
     method_counts = {route[6]: sum(other[6] == route[6] for other in routes) for route in routes}
     rare_methods = {method: count <= max(1, len(routes) // 4) for method, count in method_counts.items()}
     for route in routes:
@@ -320,9 +325,14 @@ def question_route_sources(project: Path, question: str, hints: str | None = Non
             whole_words = {order[word] for word in whole}
             # +1: the method is the route's own statement of what it does (PUT /config over internal/updateConfig).
             score = 2 * len(whole_words) + len({order[word] for word in inner} - whole_words) + 1
-        named = [literal for literal in literal_paths if path == literal or path.startswith(literal.rstrip('*').rstrip('/') + '/')]
+        named = [literal for literal in literal_paths if path == literal
+                 or (literal not in exact_literals and path.startswith(literal.rstrip('*').rstrip('/') + '/'))]
         if named:
             score += 10 if any(path == literal for literal in named) else 6
+        # A question that writes a route's exact path asks about that route: the other words ("forwarded to the
+        # player service") describe it, they do not name more routes (/v1/playerBonus/accept).
+        if exact_literals and not named:
+            continue
         if score >= 2:     # one whole segment or two parts, so "password" alone does not pull in forgotPassword
             if named:
                 order.setdefault('path:' + named[0], -1)   # the written path counts as the first thing asked about
@@ -399,12 +409,15 @@ def question_route_sources(project: Path, question: str, hints: str | None = Non
         source = source_lines(file)
         return max(1, len(frameworks.function_body(source, line, cap))) if source else cap
 
-    production_files = sorted({file for file, _ in (item for items in definitions.values() for item in items)})
+    # Every production file of the graph, not only those with functions: a struct can sit in a types-only file.
+    production_files = sorted({str(node.get('source_file')) for node in graph.get('nodes', [])
+                               if node.get('source_file') and classify_source(str(node['source_file'])) == 'production'})
 
     def field_call_targets(handler_file: str, handler_line: int) -> list[str]:
         """Calls through the receiver's fields that a short name alone cannot place: a.svc.Update(...) in
         func (a *API) is configsvc.Service.Update when API's field svc is *configsvc.Service. The adapter reads
-        the receiver, the struct's field types and the method declarations; languages it does not know give none."""
+        the receiver, the struct's field types, the imports and the method declarations; languages it does
+        not know give none."""
         source = source_lines(handler_file)
         if not 0 < handler_line <= len(source):
             return []
@@ -415,26 +428,33 @@ def question_route_sources(project: Path, question: str, hints: str | None = Non
         language = frameworks.language(handler_file)
         declaration = frameworks.type_declaration(language, type_name)
         directory = Path(handler_file).parent
-        fields = {}
+        fields, struct_file = {}, handler_file
         for file in (f for f in production_files if Path(f).parent == directory):
             lines = source_lines(file)
             number = next((n for n, text in enumerate(lines, 1) if declaration and declaration.match(text)), None)
             if number:
-                fields = frameworks.struct_field_types(file, lines, number)
+                fields, struct_file = frameworks.struct_field_types(file, lines, number), file
                 break
+        # The qualifier names an import (an alias, or the path's last segment), not necessarily a folder name.
+        imported = frameworks.imports(struct_file, source_lines(struct_file))
+
+        def in_package(file: str, qualifier: str | None) -> bool:
+            if not qualifier:
+                return Path(file).parent == directory
+            if qualifier in imported:                 # x/internal/config ends with the folder internal/config
+                return ('/' + imported[qualifier]).endswith('/' + Path(file).parent.as_posix())
+            return Path(file).parent.name == qualifier
+
         body = frameworks.function_body(source, handler_line, HANDLER_LINES)
         found = []
         for field, method in frameworks.field_calls(handler_file, body, variable):
-            field_type = re.sub(r'^[\s*&\[\]]+', '', fields.get(field, ''))
-            match = re.fullmatch(r'(?:(\w+)\.)?([A-Za-z_]\w*)', field_type)
-            if not match:
+            target = frameworks.field_type_target(handler_file, fields.get(field, ''))
+            if not target:
                 continue
-            package, target_type = match.groups()
+            package, target_type = target
             matches = []
             for file, line in definitions.get(method, []):
-                if frameworks.language(file) != language:
-                    continue
-                if (Path(file).parent.name != package) if package else (Path(file).parent != directory):
+                if frameworks.language(file) != language or not in_package(file, package):
                     continue
                 real = declared_at(file, line, method)
                 lines = source_lines(file)
@@ -649,6 +669,19 @@ def endpoint_contracts(project: Path, sources: list[tuple[str, int, int, str]]) 
                 fields.append((name, kind, number))
         return fields, f'{file}:{line}'
 
+    def passed_status(write: dict, near: str) -> tuple[int | None, str] | None:
+        """When the writer takes the status as a parameter (WriteJSONStrict(w, resp.Status, games)), the status is
+        the caller's argument, not whatever its own body falls back to: (the code if a literal, the argument)."""
+        simple = write['writer'].split('.')[-1]
+        located = find(simple, near)
+        if not located:
+            return None
+        index = frameworks.status_parameter(located[0], lines_of(located[0])[located[1] - 1])
+        args = frameworks.call_arguments(write.get('call', write['text']), simple) if index is not None else []
+        if index is None or index >= len(args):
+            return None
+        return frameworks.status_code(args[index]), args[index]
+
     def writer_status(name: str, near: str, depth: int = 0) -> list[int]:
         """Statuses a writer function sets in its own body, or through the writers it calls (two levels)."""
         simple = name.split('.')[-1]
@@ -663,7 +696,11 @@ def endpoint_contracts(project: Path, sources: list[tuple[str, int, int, str]]) 
         # Plus what the writers it calls set (dynamicValidate: 503 itself, then WriteFieldErrors' status).
         for write in frameworks.response_writes(located[0], body):
             if write['status'] is None and write['writer'] and write['writer'].split('.')[-1] != simple:
-                statuses |= set(writer_status(write['writer'], located[0], depth + 1))
+                passed = passed_status(write, located[0])
+                if passed:            # writeJSON(w, 200, v): the 200 passed in, not writeJSON's encode-failure 500
+                    statuses |= {passed[0]} if passed[0] else set()
+                else:
+                    statuses |= set(writer_status(write['writer'], located[0], depth + 1))
         return sorted(statuses)
 
     def contract(file: str, line: int) -> dict:
@@ -697,7 +734,13 @@ def endpoint_contracts(project: Path, sources: list[tuple[str, int, int, str]]) 
         writes = frameworks.response_writes(file, body)
         for write in writes:
             if write['status'] is None and write['writer']:
-                write['resolved'] = writer_status(write['writer'], file)
+                passed = passed_status(write, file)
+                if passed and passed[0]:
+                    write['status'] = passed[0]
+                elif passed:
+                    write['passed'] = passed[1]
+                else:
+                    write['resolved'] = writer_status(write['writer'], file)
         keys = frameworks.response_keys(file, writes, body)
         for write in writes:          # a struct literal in a success response names its type: loginResponse{...}
             literal = re.search(r'\b([A-Za-z_]\w*)\{', write.get('call', write['text'])) if write['status'] in (200, 201) else None
@@ -731,7 +774,8 @@ def endpoint_contracts(project: Path, sources: list[tuple[str, int, int, str]]) 
             out.append('- Responses:')
             for write in info['writes']:
                 status = str(write['status']) if write['status'] else (
-                    f'{"/".join(map(str, write["resolved"]))} (set in `{write["writer"]}`)' if write.get('resolved')
+                    f'status `{write["passed"]}` (passed to `{write["writer"]}`)' if write.get('passed')
+                    else f'{"/".join(map(str, write["resolved"]))} (set in `{write["writer"]}`)' if write.get('resolved')
                     else f'status set in `{write["writer"]}`' if write['writer'] else 'status not shown')
                 when = f' when `{write["when"]}`' if write['when'] else ''
                 out.append(f'  - {status}{when} — `{write["text"]}` — {file}:{write["line"]}')

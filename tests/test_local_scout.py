@@ -27,6 +27,14 @@ FILES = {
     'e2e/guard_test.go': ('package e2e\nfunc TestUnrelated(t *testing.T) {\n\tt.Log("x")\n}\n'
                           'func refuseWrite(path string) error {\n\tif has("/v1/user/security/selfExclude") {\n\t\treturn errNo\n\t}\n\treturn nil\n}\n'),
     'docs/rules/contracts.md': '# Contracts\n\n## Gateway-facing routes\n\n- POST /v1/user/security/selfExclude (caller: nh-gateway)\n',
+    # Near misses: a longer path and a longer word are not the route, and a helper in a file whose tests name
+    # the route is not listed.
+    'e2e/other_test.go': ('package e2e\nfunc TestSelfExcludeAll(t *testing.T) {\n\tpost(t, "/v1/user/security/selfExcludeAll")\n}\n'
+                          'func TestSelfExcludedFlag(t *testing.T) {\n\tcheck(t, selfExcluded)\n}\n'),
+    'internal/security/const_test.go': ('package security\nvar selfExcludePath = "/v1/user/security/selfExclude"\n'
+                                        'func TestThroughTheConstant(t *testing.T) {\n\tpostJSON(selfExcludePath, `{}`)\n}\n'),
+    'e2e/suite_test.go': ('package e2e\nfunc newSuiteGateway() *G {\n\treturn start("/v1/user/security/selfExclude")\n}\n'
+                          'func (s *SecuritySuite) TestSelfExcludeIs200() {\n\ts.post("/v1/user/security/selfExclude")\n}\n'),
 }
 
 
@@ -58,7 +66,13 @@ class LocalScoutTests(unittest.TestCase):
         self.assertIn('POST /v1/user/security/selfExclude is handled by `selfExclude` (internal/security/security.go:5)', block)
         self.assertIn('`durationDays` int', block)                                   # request body
         self.assertIn('409 when `overlap`', block)                                   # response with its condition
-        self.assertIn('Callers:   POST /v1/user/security/selfExclude route, registered at internal/security/security.go:', block)
+        # The registration line itself, not the first line of the window read around it.
+        self.assertIn('Callers:   POST /v1/user/security/selfExclude route, registered at internal/security/security.go:3\n', block)
+        self.assertNotIn('TestSelfExcludeAll', block)                              # /…/selfExcludeAll is another route
+        self.assertNotIn('TestSelfExcludedFlag', block)                            # selfExcluded is another word
+        self.assertIn('TestSelfExcludeIs200 (e2e/suite_test.go:3-6)', block)        # a testify suite method is a test
+        self.assertNotIn('newSuiteGateway', block)                                 # its file has a test naming the route
+        self.assertIn('TestThroughTheConstant (internal/security/const_test.go:2-4)', block)   # via selfExcludePath
         self.assertIn('SelfExclude_InvalidDuration (table in todaysRows), SelfExclude_NoToken (table in todaysRows) (e2e/rail_test.go:4-5)', block)
         self.assertIn('TestSelfExclude_OverlapReturns409', block)
         self.assertNotIn('TestMain', block)                                          # shared setup is not a test of the route
@@ -66,6 +80,38 @@ class LocalScoutTests(unittest.TestCase):
         self.assertNotIn('TestUnrelated', block)                                     # the test above the helper is not credited
         self.assertIn('docs/rules/contracts.md § Gateway-facing routes (docs/rules/contracts.md:5)', block)
         self.assertIn('run without a model', block)
+
+    def test_registration_line_and_contracts_per_handler(self):
+        # Live nh-sport-go registers "/"+TokenRoute: the path is not in the source, the route list has the line.
+        hints = ('POST /api/v1/auth/player/token — internal/sport/controller.go:59\n'
+                 'POST /v1/user/security/selfExclude — internal/security/security.go:3\n')
+        sources = [('internal/sport/controller.go', 57, 8, 'registration of POST /api/v1/auth/player/token'),
+                   ('internal/sport/controller.go', 77, 10, 'handler issuePlayerToken of POST /api/v1/auth/player/token'),
+                   ('internal/security/security.go', 1, 8, 'registration of POST /v1/user/security/selfExclude'),
+                   ('internal/security/security.go', 5, 12, 'handler selfExclude of POST /v1/user/security/selfExclude')]
+        contracts = ['**Request and responses: POST /api/v1/auth/player/token** (found by code)', '- Request body: none read by the handler',
+                     '**Request and responses: POST /v1/user/security/selfExclude** (found by code)', '- Request body (`req`): `durationDays` int']
+        with patch.object(scout.explorer, 'endpoint_route_hints', return_value=hints), \
+                patch.object(scout.explorer, 'question_route_sources', return_value=sources), \
+                patch.object(scout.explorer, 'endpoint_contracts', return_value=contracts):
+            block = scout.scout(self.root, 'repo', 'How is a player token issued and self exclusion applied?', None)
+        self.assertIn('registered at internal/sport/controller.go:59', block)
+        behaviour = block.split('Callers:')[0]
+        token, exclusion = behaviour.index('handled by `issuePlayerToken`'), behaviour.index('handled by `selfExclude`')
+        self.assertLess(token, behaviour.index('none read by the handler'))
+        self.assertLess(behaviour.index('none read by the handler'), exclusion)     # under its own handler
+        self.assertLess(exclusion, behaviour.index('`durationDays` int'))
+
+    def test_callers_are_the_handlers_own_not_a_neighbours(self):
+        graph = {'nodes': [{'id': 'h', 'label': '.selfExclude()', 'source_file': 'internal/security/security.go', 'source_location': 'L5'},
+                           {'id': 'n', 'label': '.neighbour()', 'source_file': 'internal/security/security.go', 'source_location': 'L7'},
+                           {'id': 'a', 'label': 'Wire()', 'source_file': 'cmd/main.go', 'source_location': 'L10'},
+                           {'id': 'b', 'label': 'Other()', 'source_file': 'cmd/main.go', 'source_location': 'L20'}],
+                 'links': [{'source': 'a', 'target': 'h', 'relation': 'calls'}, {'source': 'b', 'target': 'n', 'relation': 'calls'}]}
+        self.assertEqual(['Wire() (cmd/main.go:10)'], scout.callers(self.root, graph, 'internal/security/security.go', 5, 'selfExclude'))
+        # A stale graph line far from the file's: still the handler's node, found by its name.
+        graph['nodes'][0]['source_location'] = 'L14'
+        self.assertEqual(['Wire() (cmd/main.go:10)'], scout.callers(self.root, graph, 'internal/security/security.go', 5, 'selfExclude'))
 
     def test_no_route_and_no_graph_say_so(self):
         block = scout.scout(self.root, 'repo', 'Where is the cache warmed?', None)

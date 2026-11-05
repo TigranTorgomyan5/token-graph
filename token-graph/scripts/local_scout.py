@@ -40,7 +40,7 @@ CACHE = Path.home() / '.token-graph' / 'scout'
 INDENT = ' ' * 11
 MAX_TESTS = 5
 MAX_RULES = 4
-MAX_STEPS = 6
+MAX_STEPS = 10           # steps per handler; selfExclude's insert and session revoke come after six others
 
 
 def git(repo: Path, *args: str) -> str:
@@ -77,11 +77,26 @@ def read(project: Path, file: str) -> list[str]:
         return []
 
 
-def callers(project: Path, graph: dict, file: str, line: int) -> list[str]:
-    """Production functions the graph says call the function declared at file:line (its node, by location)."""
+def handler_node(graph: dict, file: str, line: int, name: str) -> str | None:
+    """The graph node of the function name declared at file:line: the node of that name in the file nearest the
+    line (graph lines can be stale by several lines), else the only node within 3 lines of it."""
+    located = []
+    for node in graph.get('nodes', []):
+        location = re.fullmatch(r'L(\d+)', str(node.get('source_location', ''))) if isinstance(node, dict) else None
+        if location and node.get('source_file') == file:
+            label = re.fullmatch(r'\.?(\w+)\(\)', str(node.get('label', '')))
+            located.append((abs(int(location.group(1)) - line), bool(label and label.group(1) == name), str(node.get('id'))))
+    named = sorted(item for item in located if item[1])
+    if named:
+        return named[0][2]
+    near = [item for item in located if item[0] <= 3]
+    return near[0][2] if len(near) == 1 else None
+
+
+def callers(project: Path, graph: dict, file: str, line: int, name: str) -> list[str]:
+    """Production functions the graph says call the function name declared at file:line."""
     nodes = {str(node.get('id')): node for node in graph.get('nodes', []) if isinstance(node, dict)}
-    targets = {node_id for node_id, node in nodes.items() if node.get('source_file') == file
-               and re.fullmatch(r'L(\d+)', str(node.get('source_location', ''))) and abs(int(str(node['source_location'])[1:]) - line) <= 3}
+    targets = {handler_node(graph, file, line, name)} - {None}
     found = []
     for edge in graph.get('links', graph.get('edges', [])):
         if isinstance(edge, dict) and edge.get('relation') in {'calls', 'indirect_call'} and str(edge.get('target')) in targets:
@@ -92,47 +107,55 @@ def callers(project: Path, graph: dict, file: str, line: int) -> list[str]:
     return list(dict.fromkeys(found))
 
 
-ENCLOSING_TEST = re.compile(r'^\s*(?:func\s+(Test\w+)|def\s+(test_\w+)|(?:it|test|describe)\(\s*[\'"`]([^\'"`]+)|'
-                            r'(?:public\s+)?(?:async\s+)?(?:void|Task)\s+(\w+)\s*\(|fn\s+(\w+)\s*\()')
+def mentions(route_paths: list[str], handler_names: list[str]) -> re.Pattern | None:
+    """What counts as naming the route: its path as a whole path (/v1/user, /v1/user/x; not /v1/users or
+    /v1/user-settings), or the handler's name as a whole word when it is distinctive (selfExclude, not create
+    or Handler, which unrelated code is full of)."""
+    parts = [re.escape(path.rstrip('/')) + r'(?![\w-])' for path in route_paths if len(path.strip('/')) >= 2]
+    for name in handler_names:
+        words = re.findall(r'[A-Z]?[a-z]+|[A-Z]+(?![a-z])|\d+', name)
+        if len(name) >= 8 and len(words) >= 2 or len(name) >= 10:
+            parts.append(r'\b' + re.escape(name) + r'\b')
+    return re.compile('|'.join(parts)) if parts else None
 
 
-TABLE_ROW = re.compile(r'^\s*\{\s*"([^"]+)"\s*,')          # Go table-driven test row: {"CaseName", "/path", ...}
-ENCLOSING_FUNC = re.compile(r'^\s*func\s+(?:\([^)]*\)\s*)?(\w+)\s*\(')
-
-
-def pinned_by(project: Path, graph: dict, needles: list[str]) -> list[str]:
+def pinned_by(project: Path, graph: dict, pattern: re.Pattern | None) -> list[str]:
     """Tests that name the route path or the handler, one line per test file: the test functions, or the
-    table rows (case names) when the mention is a row of a table-driven test."""
+    table rows (case names) when the mention is a row of a table-driven test. A test helper is listed only
+    in a file where no test names the route itself. The adapter knows each language's test declarations."""
     files = sorted({str(node.get('source_file', '')) for node in graph.get('nodes', []) if isinstance(node, dict)
                     and classify_source(str(node.get('source_file', ''))) == 'test'})
     found = []
-    for file in files:
+    for file in files if pattern else []:
         lines = read(project, file)
-        names, numbers = [], []
+        # A name the file gives the path counts as the path: selfExcludePath = "/v1/user/security/selfExclude",
+        # then e.postJSON(selfExcludePath, ...) in each test.
+        aliases = {match.group(1) for text in lines if pattern.search(text)
+                   for match in [re.search(r'\b([A-Za-z_]\w*)\s*:?=\s*["\'`][^"\'`]*["\'`]\s*[;,]?\s*$', text)] if match}
+        named = re.compile(pattern.pattern + ''.join(r'|\b' + re.escape(alias) + r'\b' for alias in sorted(aliases))) if aliases else pattern
+        names, helpers, numbers = [], [], []
         for number, text in enumerate(lines, 1):
-            if not any(needle in text for needle in needles):
+            if not named.search(text):
                 continue
             numbers.append(number)
-            row = TABLE_ROW.match(text)
-            if row:
-                owner = next((m.group(1) for n in range(number, max(0, number - 400), -1) if (m := ENCLOSING_FUNC.match(lines[n - 1]))), None)
-                names.append(f'{row.group(1)}' + (f' (table in {owner})' if owner else ''))
+            case = frameworks.table_case(file, text)
+            if case:
+                owner = next((declared[1] for n in range(number, max(0, number - 400), -1)
+                              if (declared := frameworks.test_function(file, lines[n - 1]))), None)
+                names.append(case + (f' (table in {owner})' if owner else ''))
                 continue
             # The nearest enclosing function of any kind: a mention inside a helper is the helper's, never the
             # test declared above it (nh-player-service's write-route guard sits below unrelated tests).
             for previous in range(number, max(0, number - 200), -1):
-                match = ENCLOSING_TEST.match(lines[previous - 1])
-                if match:
-                    name = next(group for group in match.groups() if group)
-                    if name != 'TestMain':          # shared setup, not a test of this route
-                        names.append(name)
-                    break
-                helper = ENCLOSING_FUNC.match(lines[previous - 1])
-                if helper:
-                    names.append(f'helper `{helper.group(1)}` (not a test)')
+                declared = frameworks.test_function(file, lines[previous - 1])
+                if declared:
+                    if declared[0] == 'test':
+                        names.append(declared[1])
+                    elif declared[1] != 'TestMain':          # shared setup, not a test of this route
+                        helpers.append(f'helper `{declared[1]}` (not a test)')
                     break
         if numbers:
-            unique = list(dict.fromkeys(names)) or ['a mention outside any test function']
+            unique = list(dict.fromkeys(names)) or list(dict.fromkeys(helpers)) or ['a mention outside any test function']
             span = f'{numbers[0]}' + (f'-{numbers[-1]}' if numbers[-1] != numbers[0] else '')
             found.append(', '.join(unique[:6]) + (f' and {len(unique) - 6} more' if len(unique) > 6 else '') + f' ({file}:{span})')
         if len(found) >= MAX_TESTS:
@@ -140,13 +163,13 @@ def pinned_by(project: Path, graph: dict, needles: list[str]) -> list[str]:
     return found
 
 
-def rules_for(project: Path, needles: list[str]) -> list[str]:
+def rules_for(project: Path, pattern: re.Pattern | None) -> list[str]:
     """Sections of docs/rules/*.md that mention the route path or the handler: file and nearest heading."""
     found = []
-    for path in sorted((project / 'docs' / 'rules').glob('*.md')):
+    for path in sorted((project / 'docs' / 'rules').glob('*.md')) if pattern else []:
         lines = read(project, str(path.relative_to(project)))
         for number, text in enumerate(lines, 1):
-            if any(needle in text for needle in needles):
+            if pattern.search(text):
                 heading = next((lines[n - 1].lstrip('# ').strip() for n in range(number, 0, -1) if lines[n - 1].startswith('#')), '')
                 found.append(f'{path.relative_to(project)}' + (f' § {heading}' if heading else '') + f' ({path.relative_to(project)}:{number})')
                 break
@@ -177,6 +200,14 @@ def scout(project: Path, repo_label: str, question: str, model: str | None) -> s
     if handlers:
         graph_used.append('call edges followed from ' + ', '.join(f'`{why.split()[1]}`' for why, _, _ in handlers[:3]))
         contracts = explorer.endpoint_contracts(project, sources)
+        # One block per route ("**Request and responses: POST /x** ..."), shown under that route's own handler.
+        blocks: dict[str, list[str]] = {}
+        current = None
+        for text in contracts:
+            header = re.match(r'\*\*Request and responses: (.+?)\*\*', text)
+            if header:
+                current = header.group(1)
+            blocks.setdefault(current, []).append(text)
         for why, file, line in handlers[:3]:
             name, route = why.split()[1], why.split(' of ', 1)[1]
             behaviour.append(f'{route} is handled by `{name}` ({file}:{line})')
@@ -188,19 +219,30 @@ def scout(project: Path, repo_label: str, question: str, model: str | None) -> s
                 if cite and not step.startswith('- Outcomes'):
                     path, first, last = cite[-1]
                     behaviour.append(f'- {text} ({path}:{first}' + (f'-{last}' if last else '') + ')')
-        for text in contracts:
-            if text.startswith(('- Request body', '  - ', '- POST', '- GET', '- PUT', '- DELETE', '- PATCH')) and len(behaviour) < 40:
-                behaviour.append(text.strip() if not text.startswith('  - ') else '  ' + text.strip())
-            elif text.startswith('**Related endpoints'):
-                behaviour.append('Related endpoints (same module; their request takes a field an earlier step returns):')
+            for text in blocks.get(' '.join(route.split()[:2]), []):      # its header names method and path only
+                if text.startswith(('- Request body', '  - ', '- POST', '- GET', '- PUT', '- DELETE', '- PATCH', '- HANDLE')):
+                    behaviour.append(text.strip() if not text.startswith('  - ') else '  ' + text.strip())
+                elif text.startswith('**Related endpoints'):
+                    behaviour.append('Related endpoints (same module; their request takes a field an earlier step returns):')
         route_paths = [why.split(' of ', 1)[1].split()[1] for why, _, _ in handlers]
-        needles = route_paths + [why.split()[1] for why, _, _ in handlers]
-        caller_lines = [f'{why.split(" of ", 1)[1]} route, registered at {file}:{line}'
-                        for file, line, _, why in sources if why.startswith('registration of ')]
+        pattern = mentions(route_paths, [why.split()[1] for why, _, _ in handlers])
+        caller_lines = []
+        # The route list gives each registration's own line (the source is a window starting before it, and a
+        # path built from a constant, "/"+TokenRoute, cannot be searched for).
+        registered = {}
+        for hint in explorer.endpoint_route_hints(project).splitlines():
+            match = re.match(r'(.+?) — (.+):(\d+)$', hint)
+            if match:
+                registered.setdefault((match.group(1), match.group(2)), int(match.group(3)))
+        for file, start, count, why in sources:
+            if why.startswith('registration of '):
+                route = why.split(' of ', 1)[1]
+                line = registered.get((route, file), start)
+                caller_lines.append(f'{route} route, registered at {file}:{line}')
         for why, file, line in handlers[:3]:
-            caller_lines += callers(project, graph, file, line)
-        tests = pinned_by(project, graph, needles)
-        rules = rules_for(project, route_paths + [why.split()[1] for why, _, _ in handlers])
+            caller_lines += callers(project, graph, file, line, why.split()[1])
+        tests = pinned_by(project, graph, pattern)
+        rules = rules_for(project, pattern)
         unsure.append('only the functions on the code path were read; deeper calls were not followed')
         if any('status set in' in text for text in contracts):
             unsure.append('some response statuses are chosen at runtime by an error-mapping writer (shown as "status set in")')

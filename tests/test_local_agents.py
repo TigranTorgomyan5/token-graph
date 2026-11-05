@@ -1006,6 +1006,61 @@ class ExplorerGroundingTests(unittest.TestCase):
         self.assertNotIn('internal/other/thing.go', [file for file, *_ in sources])
         self.assertEqual(1, sum(why.startswith('Update,') for *_, why in sources))   # not History.Update too
 
+    def test_field_calls_through_an_import_alias_and_a_types_only_file(self):
+        # The struct sits in types.go (no functions, so no function nodes), and configsvc is an alias of the
+        # internal/config folder: the folder name alone would not match it.
+        files = {
+            'internal/api/types.go': 'package api\nimport (\n\tconfigsvc "x/internal/config"\n)\ntype API struct {\n\tsvc *configsvc.Service\n}\n',
+            'internal/api/api.go': ('package api\nfunc (a *API) Mount(r chi.Router) {\n\tr.Put("/config/api/v1/config", a.updateConfig)\n}\n'
+                                    'func (a *API) updateConfig(w http.ResponseWriter, r *http.Request) {\n\ta.svc.Update(r.Context())\n}\n'),
+            'internal/config/service.go': ('package config\nfunc (s *Service) Update(ctx context.Context) error {\n'
+                                           '\ts.store.Save(ctx)\n\ts.cache.Reset()\n\treturn s.publish(ctx)\n}\n'),
+            'internal/configsvc/service.go': 'package configsvc\nfunc (s *Service) Update(ctx context.Context) error {\n\ts.a()\n\ts.b()\n\treturn nil\n}\n',
+        }
+        root = self.make_project(files)
+        nodes = [{'source_file': name} for name in files] + [
+            {'id': 'h', 'label': '.updateConfig()', 'source_file': 'internal/api/api.go', 'source_location': 'L5'},
+            {'id': 's', 'label': '.Update()', 'source_file': 'internal/config/service.go', 'source_location': 'L2'},
+            {'id': 'd', 'label': '.Update()', 'source_file': 'internal/configsvc/service.go', 'source_location': 'L2'}]
+        (root / 'graphify-out/graph.json').write_text(json.dumps({'nodes': nodes, 'edges': []}))
+        read = [file for file, *_ in explorer.question_route_sources(root, 'How is the config updated?')]
+        self.assertIn('internal/config/service.go', read)
+        self.assertNotIn('internal/configsvc/service.go', read)      # the folder named like the alias is another package
+
+    def test_a_status_passed_to_the_writer_is_the_callers(self):
+        # Live nh-gateway-go-sync: WriteJSONStrict(w, resp.Status, games) relays the upstream status; the 500 in its
+        # body is only the encode-failure fallback.
+        files = {
+            'internal/gaming/gaming.go': ('package gaming\nfunc (m *Module) Mount(r chi.Router) {\n\tr.Post("/v1/user/GetRecentPlayed", m.recentPlayed)\n}\n'
+                                          'func (m *Module) recentPlayed(w http.ResponseWriter, r *http.Request) {\n\tresp := m.reads.post(r)\n'
+                                          '\tapierror.WriteJSONStrict(w, resp.Status, resp.Games)\n\tapierror.WriteJSONStrict(w, http.StatusAccepted, nil)\n}\n'),
+            'internal/apierror/apierror.go': ('package apierror\nfunc WriteJSONStrict(w http.ResponseWriter, status int, body any) {\n'
+                                              '\tb, err := json.Marshal(body)\n\tif err != nil {\n\t\tw.WriteHeader(http.StatusInternalServerError)\n\t\treturn\n\t}\n'
+                                              '\tw.WriteHeader(status)\n\tw.Write(b)\n}\n'),
+        }
+        root = self.make_project(files)
+        nodes = [{'source_file': name} for name in files] + [
+            {'id': 'h', 'label': '.recentPlayed()', 'source_file': 'internal/gaming/gaming.go', 'source_location': 'L5'},
+            {'id': 'w', 'label': 'WriteJSONStrict()', 'source_file': 'internal/apierror/apierror.go', 'source_location': 'L2'}]
+        (root / 'graphify-out/graph.json').write_text(json.dumps({'nodes': nodes, 'edges': []}))
+        text = '\n'.join(explorer.endpoint_contracts(root, explorer.question_route_sources(root, 'How is recent played fetched?')))
+        self.assertIn('status `resp.Status` (passed to `apierror.WriteJSONStrict`)', text)
+        self.assertIn('  - 202 — `apierror.WriteJSONStrict(w, http.StatusAccepted, nil)`', text)
+        self.assertNotIn('500', text)
+
+    def test_a_written_route_path_does_not_pull_in_the_routes_under_it(self):
+        hints = ('POST /v1/user (and /v1/user/* via catchAll) — internal/forwarding/routes.go:39\n'
+                 'POST /v1/user/GetRecentPlayed — internal/gaming/gaming.go:97\n'
+                 'POST /v1/wallet/balance — internal/wallet/wallet.go:10\n'
+                 'POST /v1/playerBonus/accept — internal/playerbonus/bonus.go:95\n'
+                 'POST /v1/user/security/selfExclude — internal/security/security.go:5\n')
+        root = self.make_project({'internal/forwarding/routes.go': 'package forwarding\n'})
+        whys = [why for *_, why in explorer.question_route_sources(root, 'How are /v1/user requests forwarded to the player service?', hints)]
+        self.assertEqual(['registration of POST /v1/user (and /v1/user/* via catchAll)'], whys)
+        # A path that is no route of its own still names the routes under it.
+        whys = [why for *_, why in explorer.question_route_sources(root, 'What does /v1/user/security do?', hints)]
+        self.assertEqual(['registration of POST /v1/user/security/selfExclude'], whys)
+
     def test_deeper_level_reads_the_best_callee_not_the_first_called(self):
         # Live nh-data-adapter-go: Service.Banners wraps s.repo.Banners in s.cache.GetOrSet, which is called first.
         files = {

@@ -163,9 +163,17 @@ CASES = [
 ]
 
 
-def run(cmd: list[str]) -> tuple[str, float]:
+TIMEOUT = 1500
+
+
+def run(cmd: list[str]) -> tuple[str | None, float]:
+    """The command's output and seconds taken; None as output when it timed out (one slow answer must not
+    end the whole eval and lose the remaining cases)."""
     started = time.monotonic()
-    done = subprocess.run(cmd, capture_output=True, text=True, timeout=1500)
+    try:
+        done = subprocess.run(cmd, capture_output=True, text=True, timeout=TIMEOUT)
+    except subprocess.TimeoutExpired:
+        return None, time.monotonic() - started
     return done.stdout, time.monotonic() - started
 
 
@@ -214,9 +222,15 @@ def main() -> int:
         rows = []
         for name, project, question, facts, code, wrong in cases:
             if not (root / project / 'graphify-out' / 'graph.json').exists():
-                print(f'  {name}: skipped, no graph at {root / project}')
+                # A failure, not a skip: a wrong --root must not report success while checking nothing.
+                print(f'  {name}: FAILED, no graph at {root / project}')
+                failures += 1
                 continue
             out, secs = run([sys.executable, str(SCRIPTS / 'explore_agent.py'), str(root / project), question, '--model', model])
+            if out is None:
+                print(f'  {name}: FAILED, no answer within {TIMEOUT}s', flush=True)
+                failures += 1
+                continue
             result = score(out, facts, code, wrong)
             rows.append((name, result, secs))
             bad = result['code_missing'] or result['wrong']
@@ -231,11 +245,14 @@ def main() -> int:
             print(f'| {name} | {r["model"]}/{r["of"]} | {r["answer"]}/{r["of"]} | {len(r["code_ok"])}/{len(r["code_ok"]) + len(r["code_missing"])} | {len(r["wrong"])} | {secs:.0f} |')
         if args.logs:
             out, secs = run([sys.executable, str(SCRIPTS / 'log_analyzer.py'), str(LOG), 'Why is this service failing and what should I check?', '--model', model])
-            logs = score_logs(out)
+            logs = score_logs(out or '')
             print(f'\n  logs: {logs["findings"]} findings, observation={logs["observation"]}, names target={logs["names_target"]}, '
                   f'rate in report={logs["rate_in_report"]}, {secs:.0f}s')
     # Code checks and known-wrong phrases are hard failures; fact counts depend on the model and are reported only.
-    print(f'\n{failures} case(s) with a missing code check or a known-wrong statement.')
+    if not cases:
+        print(f'\nno case matched --only {" ".join(args.only)}')
+        return 1
+    print(f'\n{failures} case(s) failed: no graph, no answer in time, a missing code check or a known-wrong statement.')
     return 1 if failures else 0
 
 
