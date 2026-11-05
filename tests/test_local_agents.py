@@ -860,6 +860,62 @@ class ExplorerGroundingTests(unittest.TestCase):
         self.assertIn('1 candidate claim(s) were dropped', answer)
         self.assertIn(explorer.CITATION_CAVEAT, answer)
 
+    def flow_answer(self, files, nodes, question, facts_for, edges=()):
+        root = self.make_project(files)
+        (root / 'graphify-out/graph.json').write_text(json.dumps({'nodes': nodes, 'edges': list(edges)}))
+        sent = []
+
+        def fake_json(messages, model, schema=None):
+            sent.append(messages)
+            return json.dumps({'facts': [{'claim': c, 'start': s, 'end': e, 'identifiers': i} for c, s, e, i in facts_for(messages[-1]['content'])]})
+        with patch.object(explorer, 'graph_query', return_value=json.dumps({'results': []})), \
+             patch.object(explorer, 'chat_json', side_effect=fake_json), \
+             patch.object(explorer, 'chat', side_effect=AssertionError('free-form answer not expected')):
+            return explorer.explore(root, question, 'm'), sent
+
+    def test_a_step_cited_a_line_or_two_off_is_cited_where_its_names_are(self):
+        # Live nh-config-service-go: "returns early" cited the `if` line, the `return` is the next one; the step
+        # was dropped. Moved to the nearest lines that show the names, and only for names in code, not comments.
+        files = {'internal/auth/auth.go': ('package auth\nfunc (m *Module) Mount(r chi.Router) {\n\tr.Post("/v1/authentication/login", m.login)\n}\n'
+                                           'func (m *Module) login(w http.ResponseWriter, r *http.Request) {\n\tok := m.validateCredentials(w, r)\n'
+                                           '\tif !ok {\n\t\treturn\n\t}\n\t// refreshToken is issued below\n\tm.issueTokens(w, r)\n}\n')}
+        nodes = [{'source_file': 'internal/auth/auth.go'}, {'label': '.login()', 'source_file': 'internal/auth/auth.go', 'source_location': 'L5'}]
+        answer, _ = self.flow_answer(files, nodes, 'How does the login endpoint work?', lambda excerpt: [
+            ('If the credentials are invalid the handler stops', 7, 7, ['return']),          # the return is on line 8
+            ('Tokens are issued', 10, 10, ['issueTokens']),                                # the call is on line 11
+            ('It issues a refreshToken', 12, 12, ['refreshToken']),                         # only in a comment, 2 lines up
+            ('It writes the audit log', 6, 6, ['writeAuditLog'])] if 'handler login' in excerpt else [])  # nowhere near
+        self.assertIn('the handler stops. `return` internal/auth/auth.go:7-8', answer)
+        self.assertIn('Tokens are issued. `issueTokens` internal/auth/auth.go:10-11', answer)
+        self.assertNotIn('refreshToken', answer.split('UNCERTAINTIES')[0].replace('// refreshToken', ''))
+        self.assertNotIn('audit log', answer)
+        self.assertIn('2 candidate claim(s) were dropped', answer)
+
+    def test_short_helpers_are_read_with_the_handler_not_guessed_from_their_name(self):
+        # Live nh-player-service: m.invalidate(id) clears cache entries; the model said it "invalidates the user's session".
+        def big(name, first):
+            calls = ''.join(f'\tm.step{first}{i}(ctx)\n' for i in range(5))
+            return f'func (m *Module) {name}(ctx context.Context) error {{\n{calls}\treturn nil\n}}\n'
+        body = ('package security\nfunc (m *Module) Mount(r chi.Router) {\n\tr.Post("/v1/user/security/selfExclude", m.selfExclude)\n}\n'
+                'func (m *Module) selfExclude(w http.ResponseWriter, r *http.Request) {\n\tm.checkOverlapping(ctx)\n\tm.insertExclusion(ctx)\n'
+                '\tm.revokeEverySession(ctx)\n\tm.invalidate(id)\n}\n'
+                'func (m *Module) invalidate(userID string) {\n\tif m.cache != nil {\n\t\t_ = m.cache.RemoveByTag(cache.UserTag(userID))\n\t}\n}\n'
+                + big('checkOverlapping', 'a') + big('insertExclusion', 'b') + big('revokeEverySession', 'c'))
+        files = {'internal/security/security.go': body}
+        lines = body.split('\n')
+        at = lambda name: next(i for i, text in enumerate(lines, 1) if text.startswith(f'func (m *Module) {name}('))
+        nodes = [{'source_file': 'internal/security/security.go'}] + [
+            {'id': name, 'label': f'.{name}()', 'source_file': 'internal/security/security.go', 'source_location': f'L{at(name)}'}
+            for name in ('selfExclude', 'invalidate', 'checkOverlapping', 'insertExclusion', 'revokeEverySession')]
+        edges = [{'source': 'selfExclude', 'target': name, 'relation': 'calls'} for name in ('checkOverlapping', 'insertExclusion', 'revokeEverySession', 'invalidate')]
+        answer, sent = self.flow_answer(files, nodes, 'How does self exclusion work?', lambda excerpt: [], edges)
+        handler_call = next(messages for messages in sent if 'handler selfExclude' in messages[-1]['content'])
+        self.assertIn('RemoveByTag', handler_call[-1]['content'])                    # the helper's body travels with the handler
+        self.assertIn('helper invalidate, called by handler selfExclude', handler_call[-1]['content'])
+        self.assertIn('helper', handler_call[0]['content'])                          # and the model is told what it is for
+        self.assertFalse(any('helper invalidate' in messages[-1]['content'] and 'handler selfExclude' not in messages[-1]['content'] for messages in sent))
+        self.assertIn('helper invalidate, called by handler selfExclude (short function, read with the handler)', answer)
+
     def test_stale_graph_lines_snap_to_the_real_declaration_and_follow_two_levels(self):
         # Live nh_identity: the graph put otp verify at L150 (file: 159) and login at L138 (file: 139), so the
         # excerpts started on a blank line and a comment. Live nh-wallet-adapter-go: balanceDto (a mapper)

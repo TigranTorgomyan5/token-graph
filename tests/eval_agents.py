@@ -166,7 +166,10 @@ CASES = [
 TIMEOUT = 1500
 
 
-def run(cmd: list[str]) -> tuple[str | None, float]:
+STDERR_DIR: Path | None = None      # --stderr-dir: where each case's stderr (EXPLORE_DEBUG_DROPS notes) is saved
+
+
+def run(cmd: list[str], label: str = '') -> tuple[str | None, float]:
     """The command's output and seconds taken; None as output when it timed out (one slow answer must not
     end the whole eval and lose the remaining cases)."""
     started = time.monotonic()
@@ -174,6 +177,9 @@ def run(cmd: list[str]) -> tuple[str | None, float]:
         done = subprocess.run(cmd, capture_output=True, text=True, timeout=TIMEOUT)
     except subprocess.TimeoutExpired:
         return None, time.monotonic() - started
+    if STDERR_DIR and label:
+        STDERR_DIR.mkdir(parents=True, exist_ok=True)
+        (STDERR_DIR / (re.sub(r'\W+', '-', label).strip('-') + '.txt')).write_text(done.stderr, encoding='utf-8')
     return done.stdout, time.monotonic() - started
 
 
@@ -213,7 +219,10 @@ def main() -> int:
     parser.add_argument('--root', type=Path, default=Path('~/Documents/Projects'), help='folder holding the service checkouts')
     parser.add_argument('--only', nargs='*', default=[], help='run cases whose name contains one of these words')
     parser.add_argument('--logs', action='store_true', help='also run the log analyzer check')
+    parser.add_argument('--stderr-dir', type=Path, help='save each case\'s stderr here (with EXPLORE_DEBUG_DROPS=1: why claims were dropped or moved)')
     args = parser.parse_args()
+    global STDERR_DIR
+    STDERR_DIR = args.stderr_dir
     root = args.root.expanduser()
     cases = [case for case in CASES if not args.only or any(word.casefold() in case[0].casefold() for word in args.only)]
     failures = 0
@@ -226,7 +235,7 @@ def main() -> int:
                 print(f'  {name}: FAILED, no graph at {root / project}')
                 failures += 1
                 continue
-            out, secs = run([sys.executable, str(SCRIPTS / 'explore_agent.py'), str(root / project), question, '--model', model])
+            out, secs = run([sys.executable, str(SCRIPTS / 'explore_agent.py'), str(root / project), question, '--model', model], name)
             if out is None:
                 print(f'  {name}: FAILED, no answer within {TIMEOUT}s', flush=True)
                 failures += 1
