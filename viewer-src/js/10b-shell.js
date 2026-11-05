@@ -24,6 +24,26 @@
     $('#ask-a').value = text;
     if (text.trim()) runAsk(); else $('#ask-a').focus();
   }
+  let claudeAgentsRequest = 0;
+  async function loadClaudeAgents() {
+    const seq = ++claudeAgentsRequest, project = state.projectPath;
+    const status = $('#claude-agents-status'), list = $('#claude-agents-list');
+    if (!serverToken) {
+      status.textContent = 'Open Token Graph through its local server to see Claude Code agents.';
+      list.innerHTML = ''; return;
+    }
+    status.textContent = 'Loading Claude Code agents…';
+    try {
+      const result = await api(`/api/claude-agents${project ? `?project=${encodeURIComponent(project)}` : ''}`);
+      if (seq !== claudeAgentsRequest) return;
+      const agents = Array.isArray(result.agents) ? result.agents : [];
+      status.textContent = agents.length ? `${agents.length} Claude Code agent${agents.length === 1 ? '' : 's'} found. These run in Claude Code.` : 'No Claude Code agent definitions found.';
+      list.innerHTML = agents.map(agent => `<article class="dash-card w-6 agent-card"><header><h2>${escapeHtml(agent.name)}</h2><span class="agent-badge">Claude Code · ${escapeHtml(agent.scope)}</span></header><div class="dash-body"><p>${escapeHtml(agent.description || 'No description provided.')}</p><dl>${agent.model ? `<dt>Model</dt><dd>${escapeHtml(agent.model)}</dd>` : ''}${agent.effort ? `<dt>Effort</dt><dd>${escapeHtml(agent.effort)}</dd>` : ''}${agent.tools ? `<dt>Tools</dt><dd>${escapeHtml(agent.tools)}</dd>` : ''}</dl></div></article>`).join('');
+    } catch (error) {
+      if (seq !== claudeAgentsRequest) return;
+      list.innerHTML = ''; status.textContent = `Could not load Claude Code agents: ${error.message}`;
+    }
+  }
   function onNav(target) {
     const nav = target.dataset.nav;
     if (nav === 'overview') showPage('dashboard');
@@ -109,8 +129,9 @@
 
   function renderModuleMap() {
     // Project modules only; symbols with no source file (frameworks, unresolved types) are counted separately.
-    const outside = state.modules.filter(m => m.id.startsWith('(')).reduce((n, m) => n + m.nodes.filter(passesFilters).length, 0);
-    const mods = state.modules.filter(m => !m.id.startsWith('(') && m.nodes.some(passesFilters)).slice(0, 14);
+    const outside = state.modules.filter(m => m.id === '(external / unresolved)').reduce((n, m) => n + m.nodes.filter(passesFilters).length, 0);
+    const allMods = state.modules.filter(m => m.id !== '(external / unresolved)' && m.nodes.some(passesFilters));
+    const mods = allMods.slice(0, 14);
     if (!mods.length) { setCard('architecture', '<div class="dash-empty"><p>No source files to group into modules.</p></div>'); return; }
     const ids = new Set(mods.map(m => m.id)), links = moduleLinks().filter(l => ids.has(l.from) && ids.has(l.to));
     const W = 480, H = 250, R = mods.length === 1 ? 0 : 88, max = Math.max(1, ...mods.map(m => m.nodes.length));
@@ -124,13 +145,13 @@
     const dots = mods.map(m => {
       const p = pos.get(m.id), right = Math.cos(p.a) >= -0.01, below = Math.sin(p.a) > .6, above = Math.sin(p.a) < -.6;
       const tx = above || below ? p.x : p.x + (right ? p.r + 5 : -p.r - 5), ty = above ? p.y - p.r - 6 : below ? p.y + p.r + 13 : p.y + 4;
-      return `<g class="dash-mod" data-dash="module" data-id="${escapeHtml(m.id)}" tabindex="0" role="button" aria-label="${escapeHtml(`${m.id}: ${m.nodes.length} nodes`)}"><circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${p.r.toFixed(1)}" fill="${colorFor(state.moduleIndex.get(m.id))}"><title>${escapeHtml(`${m.id} · ${m.nodes.length} nodes`)}</title></circle><text x="${tx.toFixed(1)}" y="${ty.toFixed(1)}" text-anchor="${above || below ? 'middle' : right ? 'start' : 'end'}">${escapeHtml(shortModule(m.id).slice(0, 26))}</text></g>`;
+      return `<g class="dash-mod" data-dash="module" data-id="${escapeHtml(m.id)}" tabindex="0" role="button" aria-label="${escapeHtml(`${m.id}: ${m.nodes.length} nodes`)}"><circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${p.r.toFixed(1)}" fill="${colorFor(state.moduleIndex.get(m.id))}"><title>${escapeHtml(`${m.id} · ${m.nodes.length} nodes`)}</title></circle><text x="${tx.toFixed(1)}" y="${ty.toFixed(1)}" text-anchor="${above || below ? 'middle' : right ? 'start' : 'end'}">${escapeHtml(m.id.slice(0, 26))}</text></g>`;
     }).join('');
     const svg = `<svg class="dash-modmap" viewBox="0 0 ${W} ${H}" role="img" aria-label="Modules and their dependencies"><defs><marker id="dash-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z"></path></marker></defs><g class="dash-modlinks">${lines}</g>${dots}</svg>`;
     const strongest = links.length
-      ? `<div class="dash-rows">${links.slice(0, 5).map(l => row(`${shortModule(l.from)} →`, escapeHtml(shortModule(l.to)), count(l.count, 'link'))).join('')}</div>`
+      ? `<div class="dash-rows">${links.slice(0, 5).map(l => row(`${l.from} →`, escapeHtml(l.to), count(l.count, 'link'))).join('')}</div>`
       : '<p class="dash-note">No dependencies between these modules.</p>';
-    setCard('architecture', `<p class="dash-note">${count(mods.length, 'module')} (top source folders)${outside ? `, plus ${format(outside)} external or unresolved symbols` : ''}. Arrows point from a module to what it depends on. Click a module to open it.</p>${svg}<p class="dash-sub">Strongest dependencies</p>${strongest}<div class="dash-footer"><button type="button" class="dash-link" data-dash="open-architecture">Open architecture view</button></div>`, pill('info', count(mods.length, 'module')));
+    setCard('architecture', `<p class="dash-note">${allMods.length > mods.length ? `Showing ${mods.length} of ${allMods.length} folder groups` : `${count(mods.length, 'folder group')}`}${outside ? `, plus ${format(outside)} external or unresolved symbols` : ''}. Arrows summarize detected calls, imports and references between folders; verify important links in the source. Click a group to open it.</p>${svg}<p class="dash-sub">Most detected links</p>${strongest}<div class="dash-footer"><button type="button" class="dash-link" data-dash="open-architecture">Open architecture view</button></div>`, pill('info', count(allMods.length, 'group')));
   }
 
   function renderComponents() {

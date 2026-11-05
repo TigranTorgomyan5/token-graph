@@ -140,6 +140,11 @@ for (const name of ['index.html', 'token-graph/assets/project-explorer.html', 't
       api.setLens('flow'); api.enterFocus(api.state.nodeById.get('A'),3);
       assert.deepEqual([...api.state.focus.ids].sort(),['A','B']); api.draw();
       api.setLens('full'); assert(api.visible(api.state.nodeById.get('D')));
+      api.normalizeGraph({nodes:[{id:'cmd',label:'main',source_file:'cmd/server/main.go',community:0},{id:'auth',label:'auth',source_file:'internal/auth/auth.go',community:0},{id:'store',label:'store',source_file:'internal/store/store.go',community:0},{id:'parity',label:'compare',source_file:'parity/check.go',community:0}],edges:[{source:'cmd',target:'auth',relation:'calls'},{source:'auth',target:'store',relation:'imports_from'}]});
+      api.setLens('architecture');
+      assert.deepEqual([...api.state.modules.map(x=>x.id)].sort(),['cmd/server','internal/auth','internal/store','parity']);
+      m=api.clusterModel();
+      assert.deepEqual([...m.edges.map(e=>e.a+'>'+e.b)].sort(),['cluster:cmd/server>cluster:internal/auth','cluster:internal/auth>cluster:internal/store']);
     }
     api.normalizeGraph(big); assert.equal(api.state.expanded.size,0);
   }

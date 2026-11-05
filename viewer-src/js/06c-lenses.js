@@ -24,7 +24,11 @@
   // Modules: the shallowest folder depth that splits the project into at least 3 parts (at most 40).
   // Path-based only, so it does not depend on a language's namespace or package rules.
   function buildModules() {
-    const dirs = state.nodes.map(node => String(node.source_file || '').replace(/\\/g, '/').replace(/^\.\//, '').split('/').slice(0, -1));
+    const paths = state.nodes.map(node => String(node.source_file || '').replace(/\\/g, '/').replace(/^\.\//, ''));
+    const dirs = paths.map(path => path.split('/').slice(0, -1));
+    const codeFiles = new Set(paths.filter(path => /\.(go|cs|fs|java|kt|py|js|jsx|ts|tsx|rs|rb|php|cpp|c|h|swift)$/i.test(path)));
+    const goFiles = [...codeFiles].filter(path => /\.go$/i.test(path));
+    const goPackages = goFiles.length > 0 && goFiles.length * 2 >= codeFiles.size;
     let depth = 1;
     for (let d = 1; d <= 6; d++) {
       const count = new Set(dirs.filter(parts => parts.length).map(parts => parts.slice(0, d).join('/'))).size;
@@ -34,7 +38,9 @@
     }
     const modules = new Map();
     state.nodes.forEach((node, i) => {
-      const id = !node.source_file ? '(external / unresolved)' : dirs[i].slice(0, depth).join('/') || '(project root)';
+      const parts = dirs[i];
+      const goDepth = goPackages && ['internal', 'cmd', 'pkg'].includes(parts[0]) && parts.length > 1 ? 2 : 1;
+      const id = !node.source_file ? '(external / unresolved)' : parts.slice(0, goPackages ? goDepth : depth).join('/') || '(project root)';
       node._module = id;
       if (!modules.has(id)) modules.set(id, { id, name: id, nodes: [] });
       modules.get(id).nodes.push(node);

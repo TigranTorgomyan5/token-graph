@@ -250,9 +250,11 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       .agent-card p{margin:0;color:#cfd6e6;line-height:1.55}
       .agent-card dl{display:grid;grid-template-columns:90px minmax(0,1fr);gap:8px 12px;margin:0;font-size:12px;line-height:1.5}
       .agent-card dt{color:#8f9bb3;font-weight:600}.agent-card dd{margin:0;color:#cfd6e6}
+      .agent-examples{font-size:12px;color:#cfd6e6;line-height:1.5}.agent-examples strong{color:#aebbd2}.agent-examples ul{margin:6px 0 0;padding-left:20px}
       .agent-card .dash-link{align-self:flex-start}.agent-card details{color:#aebbd2;font-size:12px}.agent-card summary{cursor:pointer;color:#b8aaff}
       .agent-card pre{white-space:pre-wrap;overflow-wrap:anywhere;padding:10px;background:#0b1221;border:1px solid #26334c;border-radius:7px}
       .agent-badge{border:1px solid #5649a5;border-radius:999px;padding:3px 8px;color:#bdb3ff;font-size:11px;white-space:nowrap}
+      .claude-agents-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:24px 0 12px}.claude-agents-heading h2{margin:0 0 5px;color:#e4e8f4;font-size:17px}.claude-agents-heading p{margin:0}
       .sys-project-search{width:min(340px,100%);min-width:220px;border:1px solid #2c3953;border-radius:7px;background:#111a2d;color:#e4e8f4;font:12px var(--sans);padding:7px 9px}
       .sys-project-search:focus{outline:2px solid #665bd0;outline-offset:1px}
       .dash-link.primary{border-color:#8877ff;color:#fff;background:#2a2560}
@@ -386,20 +388,33 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
           <div class="dash-grid">
             <article class="dash-card w-6 agent-card" aria-labelledby="agent-explorer-title">
               <header><h2 id="agent-explorer-title">Code Explorer</h2><span class="agent-badge">Local model</span></header>
-              <div class="dash-body"><p>Answers questions about a project using its graph and source files, with file and line references.</p>
-                <dl><dt>Useful for</dt><dd>Architecture, code paths and endpoint investigation.</dd><dt>Needs</dt><dd>A project graph, the local Token Graph server and an installed Ollama model.</dd><dt>Access</dt><dd>Read-only. It does not build or modify the graph.</dd></dl>
+              <div class="dash-body"><p>Explores the selected project's graph and source, then answers questions with file and line references.</p>
+                <dl><dt>Useful for</dt><dd>Understanding architecture, following code paths, finding integrations, and investigating API routes and their request and response types.</dd><dt>How it works</dt><dd>Searches graph evidence, reads relevant source excerpts and asks a local Ollama model to explain them. It checks that citations refer to source it read.</dd><dt>Needs</dt><dd>A project graph and an installed Ollama model. The viewer also needs the local Token Graph server.</dd><dt>Access</dt><dd>Read-only: it does not edit files or build the graph.</dd><dt>Limits</dt><dd>Graph links are hints, and citations do not guarantee a claim is correct. Routes can be missed; verify important answers in the source.</dd></dl>
+                <div class="agent-examples"><strong>Try asking</strong><ul><li>How is this project structured?</li><li>Where is authentication enforced?</li><li>Which endpoints are defined, and what do they accept and return?</li></ul></div>
                 <button type="button" class="dash-link primary agent-open-explorer">Open in Ask AI</button>
                 <details><summary>Run in a terminal</summary><pre><code>python3 /path/to/token-graph/scripts/explore_agent.py /path/to/project 'How does authentication work?'</code></pre></details>
               </div>
             </article>
             <article class="dash-card w-6 agent-card" aria-labelledby="agent-logs-title">
               <header><h2 id="agent-logs-title">Log Analyzer</h2><span class="agent-badge">Terminal</span></header>
-              <div class="dash-body"><p>Groups log errors, reports counts and timelines, and can ask a local model to interpret the results.</p>
-                <dl><dt>Useful for</dt><dd>Investigating failures, repeated errors and related log events.</dd><dt>Needs</dt><dd>A local log file. Ollama is optional when using <code>--no-llm</code>.</dd><dt>Access</dt><dd>Reads the log; redaction is best effort, so review results before sharing.</dd></dl>
-                <details open><summary>Run in a terminal</summary><pre><code>python3 /path/to/token-graph/scripts/log_analyzer.py /path/to/application.log 'What failures occurred?'</code></pre><p class="dash-note">Add <code>--no-llm</code> for statistics without a model.</p></details>
+              <div class="dash-body"><p>Groups errors and repeated events, summarizes their frequency and timing, and can ask a local model to explain the evidence.</p>
+                <dl><dt>Useful for</dt><dd>Investigating failures, repeated errors, affected services and related traces.</dd><dt>Sources</dt><dd>Local log files and saved Argo CD or Loki responses. A separate terminal tool can retrieve logs through configured Grafana or Argo CD MCP servers.</dd><dt>Output</dt><dd>Counts, grouped errors, timestamps and trace groups; optional model findings distinguish observations from hypotheses.</dd><dt>Needs</dt><dd>A log file or configured log source. Ollama is needed for model interpretation; <code>--no-llm</code> runs the local analysis alone.</dd><dt>Limits</dt><dd>Results cover the supplied sample, and timing does not prove cause. Redaction is best effort; review results before sharing.</dd></dl>
+                <div class="agent-examples"><strong>Try asking</strong><ul><li>What errors happened most often?</li><li>When did failures begin, and which services were affected?</li><li>What should I investigate next?</li></ul></div>
+                <details><summary>Run in a terminal</summary><pre><code>python3 /path/to/token-graph/scripts/log_analyzer.py /path/to/application.log 'What failures occurred?'</code></pre><p class="dash-note">Add <code>--no-llm</code> for statistics without a model. Use <code>--source argocd</code> or <code>--source loki</code> for saved responses.</p></details>
+              </div>
+            </article>
+            <article class="dash-card w-6 agent-card" aria-labelledby="agent-scout-title">
+              <header><h2 id="agent-scout-title">Repo Scout</h2><span class="agent-badge">Terminal</span></header>
+              <div class="dash-body"><p>Investigates a focused question about a repository and returns a structured report with source references.</p>
+                <dl><dt>Useful for</dt><dd>Tracing behavior and callers, finding related tests and rules, and identifying what remains uncertain.</dd><dt>Output</dt><dd>Repository and question, behavior, callers, tests, rules, uncertainty and graph queries.</dd><dt>Needs</dt><dd>A repository and its project graph. An installed local Ollama model adds behavior explanations; <code>--no-llm</code> reports code-found fields without one.</dd><dt>Git refs</dt><dd>Use <code>--ref</code> to inspect a committed revision. The scout builds and caches a separate snapshot and graph.</dd><dt>Limits</dt><dd>Source references and model checks help review an answer; they do not prove every claim. Verify important findings in the source.</dd></dl>
+                <div class="agent-examples"><strong>Try asking</strong><ul><li>How is a player token issued?</li><li>Who calls the payment handler?</li><li>Which tests cover this endpoint?</li></ul></div>
+                <details><summary>Run in a terminal</summary><pre><code>python3 /path/to/token-graph/scripts/local_scout.py /path/to/project 'How does authentication work?'</code></pre><p class="dash-note">Add <code>--ref origin/main</code> to inspect a committed revision, or <code>--no-llm</code> to skip model interpretation.</p></details>
               </div>
             </article>
           </div>
+          <div class="claude-agents-heading"><div><h2>Claude Code agents</h2><p class="dash-note">Agent definitions available to Claude Code on this computer and in the selected project.</p></div><button type="button" class="dash-link" id="claude-agents-refresh">Refresh</button></div>
+          <p class="dash-note" id="claude-agents-status" role="status">Loading Claude Code agents…</p>
+          <div class="dash-grid" id="claude-agents-list"></div>
         </section>
 
         <section class="settings hidden" id="settings" aria-label="Settings">
@@ -1467,7 +1482,11 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
   // Modules: the shallowest folder depth that splits the project into at least 3 parts (at most 40).
   // Path-based only, so it does not depend on a language's namespace or package rules.
   function buildModules() {
-    const dirs = state.nodes.map(node => String(node.source_file || '').replace(/\\/g, '/').replace(/^\.\//, '').split('/').slice(0, -1));
+    const paths = state.nodes.map(node => String(node.source_file || '').replace(/\\/g, '/').replace(/^\.\//, ''));
+    const dirs = paths.map(path => path.split('/').slice(0, -1));
+    const codeFiles = new Set(paths.filter(path => /\.(go|cs|fs|java|kt|py|js|jsx|ts|tsx|rs|rb|php|cpp|c|h|swift)$/i.test(path)));
+    const goFiles = [...codeFiles].filter(path => /\.go$/i.test(path));
+    const goPackages = goFiles.length > 0 && goFiles.length * 2 >= codeFiles.size;
     let depth = 1;
     for (let d = 1; d <= 6; d++) {
       const count = new Set(dirs.filter(parts => parts.length).map(parts => parts.slice(0, d).join('/'))).size;
@@ -1477,7 +1496,9 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     }
     const modules = new Map();
     state.nodes.forEach((node, i) => {
-      const id = !node.source_file ? '(external / unresolved)' : dirs[i].slice(0, depth).join('/') || '(project root)';
+      const parts = dirs[i];
+      const goDepth = goPackages && ['internal', 'cmd', 'pkg'].includes(parts[0]) && parts.length > 1 ? 2 : 1;
+      const id = !node.source_file ? '(external / unresolved)' : parts.slice(0, goPackages ? goDepth : depth).join('/') || '(project root)';
       node._module = id;
       if (!modules.has(id)) modules.set(id, { id, name: id, nodes: [] });
       modules.get(id).nodes.push(node);
@@ -1564,6 +1585,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       }
     }
     state.projectPath = entry.path || null;
+    if (state.page === 'agents') loadClaudeAgents();
     state.editorRootKey = `tokenGraph.vscodeRoot.${hashString(`${entry.name}|${entry.sourceRoot || ''}`)}`;
     state.localSource = entry.folderFiles ? {files: entry.folderFiles, root: entry.sourceRoot} : null;
     state.activeCommunity = null; state.selected = null; state.hovered = null;
@@ -2253,6 +2275,26 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     $('#ask-a').value = text;
     if (text.trim()) runAsk(); else $('#ask-a').focus();
   }
+  let claudeAgentsRequest = 0;
+  async function loadClaudeAgents() {
+    const seq = ++claudeAgentsRequest, project = state.projectPath;
+    const status = $('#claude-agents-status'), list = $('#claude-agents-list');
+    if (!serverToken) {
+      status.textContent = 'Open Token Graph through its local server to see Claude Code agents.';
+      list.innerHTML = ''; return;
+    }
+    status.textContent = 'Loading Claude Code agents…';
+    try {
+      const result = await api(`/api/claude-agents${project ? `?project=${encodeURIComponent(project)}` : ''}`);
+      if (seq !== claudeAgentsRequest) return;
+      const agents = Array.isArray(result.agents) ? result.agents : [];
+      status.textContent = agents.length ? `${agents.length} Claude Code agent${agents.length === 1 ? '' : 's'} found. These run in Claude Code.` : 'No Claude Code agent definitions found.';
+      list.innerHTML = agents.map(agent => `<article class="dash-card w-6 agent-card"><header><h2>${escapeHtml(agent.name)}</h2><span class="agent-badge">Claude Code · ${escapeHtml(agent.scope)}</span></header><div class="dash-body"><p>${escapeHtml(agent.description || 'No description provided.')}</p><dl>${agent.model ? `<dt>Model</dt><dd>${escapeHtml(agent.model)}</dd>` : ''}${agent.effort ? `<dt>Effort</dt><dd>${escapeHtml(agent.effort)}</dd>` : ''}${agent.tools ? `<dt>Tools</dt><dd>${escapeHtml(agent.tools)}</dd>` : ''}</dl></div></article>`).join('');
+    } catch (error) {
+      if (seq !== claudeAgentsRequest) return;
+      list.innerHTML = ''; status.textContent = `Could not load Claude Code agents: ${error.message}`;
+    }
+  }
   function onNav(target) {
     const nav = target.dataset.nav;
     if (nav === 'overview') showPage('dashboard');
@@ -2338,8 +2380,9 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
 
   function renderModuleMap() {
     // Project modules only; symbols with no source file (frameworks, unresolved types) are counted separately.
-    const outside = state.modules.filter(m => m.id.startsWith('(')).reduce((n, m) => n + m.nodes.filter(passesFilters).length, 0);
-    const mods = state.modules.filter(m => !m.id.startsWith('(') && m.nodes.some(passesFilters)).slice(0, 14);
+    const outside = state.modules.filter(m => m.id === '(external / unresolved)').reduce((n, m) => n + m.nodes.filter(passesFilters).length, 0);
+    const allMods = state.modules.filter(m => m.id !== '(external / unresolved)' && m.nodes.some(passesFilters));
+    const mods = allMods.slice(0, 14);
     if (!mods.length) { setCard('architecture', '<div class="dash-empty"><p>No source files to group into modules.</p></div>'); return; }
     const ids = new Set(mods.map(m => m.id)), links = moduleLinks().filter(l => ids.has(l.from) && ids.has(l.to));
     const W = 480, H = 250, R = mods.length === 1 ? 0 : 88, max = Math.max(1, ...mods.map(m => m.nodes.length));
@@ -2353,13 +2396,13 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     const dots = mods.map(m => {
       const p = pos.get(m.id), right = Math.cos(p.a) >= -0.01, below = Math.sin(p.a) > .6, above = Math.sin(p.a) < -.6;
       const tx = above || below ? p.x : p.x + (right ? p.r + 5 : -p.r - 5), ty = above ? p.y - p.r - 6 : below ? p.y + p.r + 13 : p.y + 4;
-      return `<g class="dash-mod" data-dash="module" data-id="${escapeHtml(m.id)}" tabindex="0" role="button" aria-label="${escapeHtml(`${m.id}: ${m.nodes.length} nodes`)}"><circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${p.r.toFixed(1)}" fill="${colorFor(state.moduleIndex.get(m.id))}"><title>${escapeHtml(`${m.id} · ${m.nodes.length} nodes`)}</title></circle><text x="${tx.toFixed(1)}" y="${ty.toFixed(1)}" text-anchor="${above || below ? 'middle' : right ? 'start' : 'end'}">${escapeHtml(shortModule(m.id).slice(0, 26))}</text></g>`;
+      return `<g class="dash-mod" data-dash="module" data-id="${escapeHtml(m.id)}" tabindex="0" role="button" aria-label="${escapeHtml(`${m.id}: ${m.nodes.length} nodes`)}"><circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${p.r.toFixed(1)}" fill="${colorFor(state.moduleIndex.get(m.id))}"><title>${escapeHtml(`${m.id} · ${m.nodes.length} nodes`)}</title></circle><text x="${tx.toFixed(1)}" y="${ty.toFixed(1)}" text-anchor="${above || below ? 'middle' : right ? 'start' : 'end'}">${escapeHtml(m.id.slice(0, 26))}</text></g>`;
     }).join('');
     const svg = `<svg class="dash-modmap" viewBox="0 0 ${W} ${H}" role="img" aria-label="Modules and their dependencies"><defs><marker id="dash-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z"></path></marker></defs><g class="dash-modlinks">${lines}</g>${dots}</svg>`;
     const strongest = links.length
-      ? `<div class="dash-rows">${links.slice(0, 5).map(l => row(`${shortModule(l.from)} →`, escapeHtml(shortModule(l.to)), count(l.count, 'link'))).join('')}</div>`
+      ? `<div class="dash-rows">${links.slice(0, 5).map(l => row(`${l.from} →`, escapeHtml(l.to), count(l.count, 'link'))).join('')}</div>`
       : '<p class="dash-note">No dependencies between these modules.</p>';
-    setCard('architecture', `<p class="dash-note">${count(mods.length, 'module')} (top source folders)${outside ? `, plus ${format(outside)} external or unresolved symbols` : ''}. Arrows point from a module to what it depends on. Click a module to open it.</p>${svg}<p class="dash-sub">Strongest dependencies</p>${strongest}<div class="dash-footer"><button type="button" class="dash-link" data-dash="open-architecture">Open architecture view</button></div>`, pill('info', count(mods.length, 'module')));
+    setCard('architecture', `<p class="dash-note">${allMods.length > mods.length ? `Showing ${mods.length} of ${allMods.length} folder groups` : `${count(mods.length, 'folder group')}`}${outside ? `, plus ${format(outside)} external or unresolved symbols` : ''}. Arrows summarize detected calls, imports and references between folders; verify important links in the source. Click a group to open it.</p>${svg}<p class="dash-sub">Most detected links</p>${strongest}<div class="dash-footer"><button type="button" class="dash-link" data-dash="open-architecture">Open architecture view</button></div>`, pill('info', count(allMods.length, 'group')));
   }
 
   function renderComponents() {
@@ -2843,6 +2886,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     updateNav();
     try { localStorage.setItem('tokenGraph.page', state.page); } catch (_) { /* per-viewer convenience only */ }
     if (state.page === 'system') loadSystems();
+    else if (state.page === 'agents') loadClaudeAgents();
     else if (info.plain) refreshDashboard();
     else if (state.page === 'graph') { resize(); fitGraph(); }
   }
@@ -3115,6 +3159,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
 
   function initDashboard() {
     $('.agent-open-explorer').addEventListener('click', () => { showPage('ask'); setAskMode('llm'); $('#ask-a').focus(); });
+    $('#claude-agents-refresh').addEventListener('click', loadClaudeAgents);
     $('#dashboard').addEventListener('click', onDashboardClick);
     $('#settings').addEventListener('click', onDashboardClick);
     $('#health-page').addEventListener('click', onDashboardClick);

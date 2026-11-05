@@ -57,6 +57,7 @@
     updateNav();
     try { localStorage.setItem('tokenGraph.page', state.page); } catch (_) { /* per-viewer convenience only */ }
     if (state.page === 'system') loadSystems();
+    else if (state.page === 'agents') loadClaudeAgents();
     else if (info.plain) refreshDashboard();
     else if (state.page === 'graph') { resize(); fitGraph(); }
   }
@@ -329,6 +330,7 @@
 
   function initDashboard() {
     $('.agent-open-explorer').addEventListener('click', () => { showPage('ask'); setAskMode('llm'); $('#ask-a').focus(); });
+    $('#claude-agents-refresh').addEventListener('click', loadClaudeAgents);
     $('#dashboard').addEventListener('click', onDashboardClick);
     $('#settings').addEventListener('click', onDashboardClick);
     $('#health-page').addEventListener('click', onDashboardClick);

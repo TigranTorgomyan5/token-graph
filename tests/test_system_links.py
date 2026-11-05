@@ -28,6 +28,15 @@ def edges(result):
 
 
 class ScannerTests(unittest.TestCase):
+    def test_service_setting_does_not_link_sibling_implementation(self):
+        files = [('config.go', '.go', 'package config\nfunc Load() { base := req("SPORT_SERVICE_URI"); _ = base }')]
+        endpoints = system_links.extract(files, system_links.collect_consts(files))
+        services = [{'name': 'nh-sport', 'scan': {'endpoints': endpoints}},
+                    {'name': 'nh-sport-go', 'scan': {'endpoints': []}}]
+        self.assertEqual(system_links.link(services), [])
+        services[0]['scan']['endpoints'], services[1]['scan']['endpoints'] = [], endpoints
+        self.assertEqual(system_links.link(services), [])
+
     def test_go_config_service_setting_links_only_when_target_is_unambiguous(self):
         files = [('config.go', '.go', 'package config\nfunc Load() { base := req("CONFIG_SERVICE_URI"); _ = base }')]
         gateway = {'name': 'nh-gateway-go', 'scan': {'endpoints': system_links.extract(files, system_links.collect_consts(files))}}

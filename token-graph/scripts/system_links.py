@@ -757,10 +757,15 @@ def link(services: list[dict]) -> list[dict]:
                 match_routes(a, route_segments(out_e["channel"]), out_e)
             elif kind in ("url", "host", "env_url", "config_ref"):
                 host_toks = out_e.get("host_tokens") if kind == "env_url" else core_tokens(out_e["host"]) if kind != 'config_ref' else []
-                b = service_for_tokens(host_toks, cores, a)
+                # Include the caller while resolving a name: excluding it makes a
+                # similarly named sibling look like the only possible target.
+                host_match = service_for_tokens(host_toks, cores, -1)
+                b = host_match if host_match != a else None
                 via = "url"
-                if b is None and out_e.get("key"):
-                    b = service_for_tokens(service_key_tokens(out_e["key"]), key_cores, a)
+                if host_match is None and out_e.get("key"):
+                    b = service_for_tokens(service_key_tokens(out_e["key"]), key_cores, -1)
+                    if b == a:
+                        b = None
                     via = "config key"
                 segs = route_segments(out_e.get("path") or "")
                 if b is not None:

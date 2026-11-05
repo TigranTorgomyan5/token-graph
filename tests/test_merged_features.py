@@ -27,6 +27,21 @@ def load(name):
 
 
 class MergeRegressionTests(unittest.TestCase):
+    def test_claude_agent_metadata_from_user_and_project(self):
+        server = load('explorer_server')
+        with tempfile.TemporaryDirectory() as directory:
+            home, project = Path(directory) / 'home', Path(directory) / 'project'
+            for root in (home, project):
+                (root / '.claude/agents').mkdir(parents=True)
+            (home / '.claude/agents/user.md').write_text('---\nname: user-agent\ndescription: Reviews code\nmodel: sonnet\nhooks:\n  command: secret-hook\n---\nprivate instructions\n')
+            (project / '.claude/agents/project.md').write_text('---\nname: project-agent\ndescription: Maps this project\ntools: Read, Grep\n---\nprivate instructions\n')
+            result = server.claude_agents(project, home)
+            self.assertEqual([(a['name'], a['scope']) for a in result], [('user-agent', 'User'), ('project-agent', 'Project')])
+            self.assertEqual(result[0]['model'], 'sonnet')
+            self.assertEqual(result[1]['tools'], 'Read, Grep')
+            self.assertNotIn('private instructions', json.dumps(result))
+            self.assertNotIn('secret-hook', json.dumps(result))
+
     def test_explorer_selects_installed_local_model(self):
         agent = load('explore_agent')
         with tempfile.TemporaryDirectory() as directory:

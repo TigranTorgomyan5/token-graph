@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import secrets
@@ -49,6 +50,40 @@ PROJECTS = SKILL / ".explorer-projects.json"  # projects built or opened here, n
 RUNTIME = SKILL / ".runtime" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 MAX_PROJECTS = 50
+
+
+def claude_agents(project: Path | None = None, user_home: Path | None = None) -> list[dict]:
+    """List agent metadata only; never read or execute agent instructions or hooks."""
+    roots = [(user_home or Path.home(), 'User')]
+    if project:
+        roots.append((project, 'Project'))
+    agents = []
+    for root, scope in roots:
+        directory = root / '.claude' / 'agents'
+        try:
+            directory.resolve().relative_to(root.resolve())
+            if not directory.is_dir():
+                continue
+            for path in sorted(directory.glob('*.md'))[:200]:
+                if path.is_symlink() or path.stat().st_size > 128_000:
+                    continue
+                with path.open(encoding='utf-8') as source:
+                    if source.readline().strip() != '---':
+                        continue
+                    fields = {}
+                    for _ in range(100):
+                        line = source.readline()
+                        if not line or line.strip() == '---':
+                            break
+                        match = re.match(r'^(name|description|model|effort|tools):\s*(.*?)\s*$', line)
+                        if match:
+                            fields[match.group(1)] = match.group(2).strip('"\'')[:1200]
+                agents.append({'name': fields.get('name') or path.stem, 'description': fields.get('description', ''),
+                               'model': fields.get('model', ''), 'effort': fields.get('effort', ''),
+                               'tools': fields.get('tools', ''), 'scope': scope})
+        except (OSError, UnicodeError, ValueError):
+            continue
+    return agents
 
 PICK_FOLDER = r"""
 import sys, tkinter
@@ -762,6 +797,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(200, {"vscode": has_vscode(), "rider": find_rider() is not None})
             if url.path == "/api/agent/status":
                 return self._json(200, {"models": ollama_models()})
+            if url.path == "/api/claude-agents":
+                project = self._known_project(query['project']) if query.get('project') else None
+                return self._json(200, {"agents": claude_agents(project)})
             if url.path == "/api/dashboard":
                 return self._json(200, dashboard(self._known_project(query.get("project"))))
             if url.path == "/api/ai/status":

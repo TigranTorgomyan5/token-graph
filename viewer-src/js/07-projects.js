@@ -38,6 +38,7 @@
       }
     }
     state.projectPath = entry.path || null;
+    if (state.page === 'agents') loadClaudeAgents();
     state.editorRootKey = `tokenGraph.vscodeRoot.${hashString(`${entry.name}|${entry.sourceRoot || ''}`)}`;
     state.localSource = entry.folderFiles ? {files: entry.folderFiles, root: entry.sourceRoot} : null;
     state.activeCommunity = null; state.selected = null; state.hovered = null;
