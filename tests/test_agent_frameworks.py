@@ -368,5 +368,20 @@ class StatusCodeTests(unittest.TestCase):
                                ('limit = 100 * 2', None)):
             self.assertEqual(expected, frameworks.status_code(text), text)
 
+class GoParameterBodyTests(unittest.TestCase):
+    def test_only_a_named_request_type_is_the_body(self):
+        def body_of(signature):
+            return frameworks.request_body('h.go', list(enumerate([signature, '}'], 1)))
+        for signature in ('func (m *M) get(w http.ResponseWriter, r *http.Request, id int64) {',
+                          'func (m *M) get(w http.ResponseWriter, r *http.Request, id uuid.UUID) {',
+                          'func (m *M) get(w http.ResponseWriter, r *http.Request, at time.Time, log *slog.Logger) {',
+                          'func (m *M) get(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {',
+                          'func (m *M) get(w http.ResponseWriter, r *http.Request, rate float64, err error) {'):
+            self.assertIsNone(body_of(signature), signature)
+        found = body_of('func (m *M) create(w http.ResponseWriter, r *http.Request, req *createRequest) {')
+        self.assertEqual('createRequest', (found or {}).get('type'))
+        found = body_of('func (m *M) create(w http.ResponseWriter, r *http.Request, req dto.CreateRequest) {')
+        self.assertEqual('CreateRequest', (found or {}).get('type'))
+
 if __name__ == '__main__':
     unittest.main()

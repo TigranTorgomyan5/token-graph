@@ -952,6 +952,15 @@ def type_declaration(lang: str | None, name: str) -> re.Pattern | None:
     }.get(lang or '')
 
 
+# Go handler parameters that are not a decoded request body: built-in types, the request/response pair, and
+# types from packages that carry routing or infrastructure values (a path id, a clock, a logger).
+GO_NON_BODY_TYPES = {'http.ResponseWriter', 'http.Request', 'context.Context', 'string', 'int', 'int8', 'int16', 'int32', 'int64',
+                     'uint', 'uint8', 'uint16', 'uint32', 'uint64', 'float32', 'float64', 'bool', 'byte', 'rune', 'error', 'any',
+                     'interface', 'struct', 'chan'}
+GO_NON_BODY_PACKAGES = {'http', 'context', 'time', 'uuid', 'slog', 'log', 'zap', 'logrus', 'httprouter', 'chi', 'mux', 'gin', 'echo',
+                        'fiber', 'sql', 'sqlx', 'pgx', 'redis', 'big', 'decimal', 'url', 'net', 'sync', 'atomic', 'otel', 'trace'}
+
+
 def request_body(filename: str, body: list[tuple[int, str]]) -> dict | None:
     """How the handler reads its JSON body, from its own lines: {'type': name or None, 'inline': (start line,
     field lines) or None, 'decoder': the reading call, 'line': where, 'via': a binder function to resolve}.
@@ -997,7 +1006,7 @@ def request_body(filename: str, body: list[tuple[int, str]]) -> dict | None:
             return None       # a generic body interface (mvc.Body) with no assertion names no type
         params = re.search(r'\w+\s*\(([^()]*(?:\([^()]*\)[^()]*)*)\)\s*[^()]*$', signature.split(')', 1)[-1] if signature.lstrip().startswith('func (') else signature)
         for name, kind in re.findall(r'(\w+)\s+\*?([A-Za-z_][\w.]*)', params.group(1) if params else ''):
-            if kind not in {'http.ResponseWriter', 'http.Request', 'context.Context', 'string', 'int', 'bool', 'any'} and not kind.startswith('func'):
+            if kind not in GO_NON_BODY_TYPES and kind.split('.')[0] not in GO_NON_BODY_PACKAGES and not kind.startswith('func'):
                 return {'type': kind.split('.')[-1], 'decoder': f'parameter {name}', 'line': body[0][0]}
     elif lang == 'python':
         signature = body[0][1] if body else ''
