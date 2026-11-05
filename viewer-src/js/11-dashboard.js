@@ -1,7 +1,7 @@
   // ---- Dashboard page: an overview of the open project. Figures come from the loaded graph
   // and the local server (/api/dashboard, /api/ai/status); anything that cannot be measured
   // is shown as unavailable with the reason, never estimated. Detail stays on the Graph page.
-  const dash = { seq: 0, data: null, dataProject: null, error: '', loading: false, ai: null, aiAt: 0, aiError: '', aiLoading: false, job: null, docs: null, pending: null, pendingError: '' };
+  const dash = { seq: 0, data: null, dataProject: null, error: '', loading: false, ai: null, aiAt: 0, aiError: '', aiLoading: false, job: null, docs: null, pending: null, pendingError: '', savings: null, savingsProject: null, savingsError: '' };
   const STATUS_ICON = { good: '✓', warning: '!', critical: '✕', busy: '⟳', info: 'i', off: '–' };
   const ACTIVITY_ICON = { build: '◉', update: '↻', ai: '✦', question: '?', ai_question: '✦', analysis: '▦', docs: '≡' };
   const pill = (status, text, title = '') => `<span class="dash-pill ${status}"${title ? ` title="${escapeHtml(title)}"` : ''}><span aria-hidden="true">${STATUS_ICON[status]}</span>${escapeHtml(text)}</span>`;
@@ -77,9 +77,10 @@
     const aiFresh = dash.ai && Date.now() - dash.aiAt < 15000;
     dash.aiLoading = !aiFresh;
     renderDashboard();
-    const [summary, ai] = await Promise.allSettled([
+    const [summary, ai, savings] = await Promise.allSettled([
       api(`/api/dashboard?project=${encodeURIComponent(project)}`),
       aiFresh ? Promise.resolve(dash.ai) : api('/api/ai/status'),
+      api(`/api/savings?project=${encodeURIComponent(project)}`),
     ]);
     if (seq !== dash.seq || project !== state.projectPath) return;  // a newer refresh or another project won
     dash.loading = false; dash.aiLoading = false;
@@ -87,6 +88,8 @@
     else { dash.error = summary.reason?.message || 'The dashboard could not be loaded.'; }
     if (ai.status === 'fulfilled') { dash.ai = ai.value; dash.aiAt = Date.now(); dash.aiError = ''; }
     else { dash.aiError = ai.reason?.message || 'Could not check the local AI provider.'; }
+    if (savings.status === 'fulfilled') { dash.savings = savings.value.sessions || []; dash.savingsProject = project; dash.savingsError = ''; }
+    else { dash.savingsError = savings.reason?.message || 'Could not read the Claude Code sessions.'; }
     renderDashboard();
   }
 
@@ -118,7 +121,7 @@
     const want = id => !only || only.includes(id);
     const hasGraph = state.nodes.length > 0;
     const data = dash.dataProject === state.projectPath ? dash.data : null;
-    for (const id of ['ask', 'health', 'ai', 'index', 'intel', 'architecture', 'components', 'activity']) showCard(id, hasGraph);
+    for (const id of ['ask', 'health', 'ai', 'index', 'intel', 'architecture', 'components', 'activity', 'savings']) showCard(id, hasGraph);
     updateAiChip(); updateNav();
     $('#dash-docs').disabled = Boolean(serverToken) && !state.projectPath;  // without the server it explains how to start it
     if (!hasGraph && dash.pending) { setCard('overview', loadingHtml(`Loading the ${dash.pending} graph…`), '', true); return; }
@@ -136,6 +139,44 @@
     if (want('intel')) renderIntel(data);
     if (want('architecture')) renderArchitecture();
     if (want('activity')) renderActivity(data);
+    if (want('savings')) renderSavings();
+  }
+
+  // Tokens Claude Code saved by asking this project's graph instead of reading whole files,
+  // per recent session (session_savings.py over the local transcripts; an estimate).
+  const tokensText = n => Math.abs(n) >= 1000 ? `${(n / 1000).toFixed(1)}K` : format(n);
+  const percentText = p => p === null || p === undefined ? '—' : `${p}%`;
+  function renderSavings() {
+    if (!serverToken) { setCard('savings', serverOnlyHtml('Counting saved tokens'), pill('off', 'Server off')); return; }
+    const sessions = dash.savingsProject === state.projectPath ? dash.savings : null;
+    if (!sessions) { setCard('savings', dash.savingsError ? errorHtml(dash.savingsError) : loadingHtml('Reading Claude Code sessions…'), '', true); return; }
+    const refresh = '<div class="dash-footer"><button type="button" class="dash-link" data-dash="savings-refresh">Refresh</button></div>';
+    if (!sessions.length) {
+      setCard('savings', `<div class="dash-empty"><p>No recent Claude Code session asked this project's graph yet. Ask Claude about the code with the token-graph skill, then refresh.</p></div>${refresh}`, pill('off', 'No sessions'));
+      return;
+    }
+    const latest = sessions[0];
+    const without = sessions.reduce((sum, s) => sum + s.without_graph_tokens, 0);
+    const saved = sessions.reduce((sum, s) => sum + s.saved_tokens, 0);
+    const overall = without ? Math.round(1000 * saved / without) / 10 : null;
+    const status = latest.saved_percent === null ? 'off' : latest.saved_percent >= 50 ? 'good' : latest.saved_percent > 0 ? 'info' : 'warning';
+    const tiles = [
+      tile('Saved, latest session', tokensText(latest.saved_tokens), `${percentText(latest.saved_percent)} · ${count(latest.graph_answers, 'graph answer')}`),
+      tile('Without graph', tokensText(latest.without_graph_tokens), `${count(latest.files, 'file')} read in full`),
+      tile('With graph', tokensText(latest.with_graph_tokens), `answers ${tokensText(latest.graph_tokens)} + reads ${tokensText(latest.read_tokens)}`),
+      tile(`Saved, ${count(sessions.length, 'session')}`, tokensText(saved), `${percentText(overall)} of ${tokensText(without)}`),
+    ].join('');
+    const started = s => s.started ? new Date(s.started).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'unknown time';
+    const sessionName = s => s.title || `Session ${s.session.slice(0, 8)}`;
+    const where = s => `<p class="dash-note"><strong>${escapeHtml(sessionName(s))}</strong> · started ${escapeHtml(started(s))} · last active ${ago(s.updated)}<br>Folder: <code>${escapeHtml(s.folder || 'unknown')}</code> · session <code>${escapeHtml(s.session.slice(0, 8))}</code>${s.last_prompt ? `<br>Last request: “${escapeHtml(s.last_prompt.slice(0, 140))}”` : ''}</p>`;
+    const rows = bars(sessions.map(s => ({
+      name: `${sessionName(s)} · ${ago(s.updated)}`,
+      value: Math.max(0, s.saved_tokens),
+      text: `${tokensText(s.saved_tokens)} · ${percentText(s.saved_percent)}`,
+      title: `${sessionName(s)} — folder ${s.folder || 'unknown'}, started ${started(s)}, session ${s.session}: without graph ${format(s.without_graph_tokens)}, with graph ${format(s.with_graph_tokens)}, saved ${format(s.saved_tokens)} tokens (${percentText(s.saved_percent)}) in ${count(s.graph_answers, 'graph answer')}`,
+    })));
+    setCard('savings', `<p class="dash-sub">Latest session</p>${where(latest)}<div class="dash-tiles">${tiles}</div><p class="dash-sub">Saved per session (hover for folder and time)</p>${rows}<p class="dash-note">Estimate from the Claude Code transcripts on this computer (4 characters ≈ 1 token, no model used). Without graph: the files a graph answer pointed to and Claude then opened, read in full. With graph: the answers plus what Claude read from those files.</p>${refresh}`,
+      pill(status, `${percentText(latest.saved_percent)} saved`, 'Latest session'));
   }
 
   function renderOverview(data) {
@@ -313,6 +354,7 @@
     if (action === 'search') { showPage('graph'); $('#search').focus(); return; }
     if (action === 'docs') { generateDocs(); return; }
     if (action === 'retry') { dash.aiAt = 0; refreshDashboard(); return; }
+    if (action === 'savings-refresh') { refreshDashboard(); return; }
     if (action === 'server-help') { showServerInstructions(); return; }
     if (action === 'build-first') { if (serverToken) buildProject(); else showServerInstructions(); return; }
     if (action === 'update') { if (state.projectPath) buildProject(state.projectPath); return; }

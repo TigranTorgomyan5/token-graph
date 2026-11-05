@@ -89,6 +89,12 @@ class FrameworkRouteTests(unittest.TestCase):
                     found.update(frameworks.file_routes(filename, lines, frameworks.string_constants('\n'.join(lines))))
                 self.assertEqual(expected, found)
 
+    def test_routes_cite_files_with_forward_slashes_on_every_os(self):
+        lines = (SERVICES / 'laravel/routes/api.php').read_text().splitlines()
+        windows = frameworks.file_routes('routes\\api.php', lines)
+        self.assertEqual(windows, frameworks.file_routes('routes/api.php', lines))
+        self.assertTrue(windows and all('routes/api.php:' in route for route in windows))
+
     def test_route_hints_run_each_language_only_on_its_own_files(self):
         # The whole sample set as one project: Python patterns must not fire on Go-like or JS files and so on.
         with tempfile.TemporaryDirectory() as directory:
