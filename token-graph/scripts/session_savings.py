@@ -27,6 +27,7 @@ from pathlib import Path
 PROJECTS = Path.home() / ".claude" / "projects"
 CHARS_PER_TOKEN = 4
 ANSWER_ACTIONS = ("query", "explain", "affected", "path", "hubs")
+GRAPHIFY_CALL = re.compile(r'''(?:^|[;&|]\s*)(?:command\s+)?["']?(?:[^\s"']*/)?graphify["']?\s+(query|explain|affected|path|hubs)\b''')
 SHELL_TOOLS = ("Bash", "PowerShell")
 READ_VERB = re.compile(r"\b(cat|sed|head|tail|less|more|Get-Content|gc|type|awk)\b")
 FILE_PATTERNS = (
@@ -77,10 +78,11 @@ def load_calls(transcript: Path, info: dict | None = None) -> list[dict]:
                 if not isinstance(item, dict):
                     continue
                 if item.get("type") == "tool_use" and item.get("id") not in calls:
-                    calls[item["id"]] = {"name": item.get("name", ""), "input": item.get("input") or {}, "output": ""}
+                    calls[item["id"]] = {"name": item.get("name", ""), "input": item.get("input") or {}, "output": "", "cwd": entry.get("cwd"), "error": False}
                     order.append(item["id"])
                 elif item.get("type") == "tool_result" and item.get("tool_use_id") in calls:
                     calls[item["tool_use_id"]]["output"] = result_text(item.get("content"))
+                    calls[item["tool_use_id"]]["error"] = bool(item.get("is_error"))
     return [calls[i] for i in order]
 
 
@@ -93,11 +95,30 @@ def _windows_path(raw: str) -> str:
 CHANGE_DIR = re.compile(r"(?:^|[;&|]|\s)(?:cd|Set-Location|pushd)\s+(?:-Path\s+)?(\"[^\"]+\"|'[^']+'|[^\s;&|]+)")
 
 
+def absolute_path(path: Path) -> bool:
+    return path.is_absolute() or bool(re.match(r'^[A-Za-z]:[/\\]', str(path)))
+
+
 def project_root(command: str, cwd: str | None = None) -> Path | None:
     """The project a `token_graph.py launch <project>` command ran on ($var paths included).
 
     A relative project (`launch .`) is relative to a `cd`/`Set-Location` earlier in the same
     command, else to the folder the session was started in (`cwd`)."""
+    graphify = GRAPHIFY_CALL.search(command)
+    if graphify:
+        base = Path(cwd) if cwd else None
+        for moved in CHANGE_DIR.finditer(command[:graphify.start(1)]):
+            target = Path(_windows_path(moved.group(1).strip("\"'"))).expanduser()
+            base = target if absolute_path(target) else (base / target if base else None)
+        # An explicit graph may point at another project's index.
+        explicit = re.search(r'''--graph(?:=|\s+)("[^"]+"|'[^']+'|[^\s;&|]+)''', command[graphify.end():])
+        if explicit:
+            graph = Path(_windows_path(explicit.group(1).strip("\"'"))).expanduser()
+            if not absolute_path(graph):
+                if base is None: return None
+                graph = base / graph
+            return graph.parent.parent if graph.name == 'graph.json' and graph.parent.name == 'graphify-out' else None
+        return base
     match = re.search(r"\blaunch\s+(\"[^\"]+\"|'[^']+'|\S+)", command)
     if not match:
         return None
@@ -112,16 +133,19 @@ def project_root(command: str, cwd: str | None = None) -> Path | None:
     if not raw:
         return None
     path = Path(raw)
-    if path.is_absolute():
+    if absolute_path(path):
         return path
     base = Path(cwd) if cwd else None
     for moved in CHANGE_DIR.finditer(command[:match.start()]):
         target = Path(_windows_path(moved.group(1).strip("\"'")))
-        base = target if target.is_absolute() else (base or Path(".")) / target
+        base = target if absolute_path(target) else (base or Path(".")) / target
     return (base / path) if base else path
 
 
 def graph_action(command: str) -> str | None:
+    match = GRAPHIFY_CALL.search(command)
+    if match:
+        return match.group(1)
     if "token_graph.py" not in command or not re.search(r"\blaunch\s", command):
         return None
     action = re.search(r"--action\s+(\w+)", command)
@@ -137,8 +161,13 @@ def cited_files(output: str, root: Path) -> Counter:
         for raw in pattern.findall(output):
             path = Path(raw.replace("\\", "/"))
             full = path if path.is_absolute() else root / path
-            if full.is_file():
-                found[full.resolve()] += 1
+            try:
+                resolved = full.resolve()
+                resolved.relative_to(root.resolve())
+                if resolved.is_file():
+                    found[resolved] += 1
+            except (OSError, ValueError):
+                continue
     return found
 
 
@@ -179,8 +208,8 @@ def analyze(transcript: Path, project: Path | None = None) -> dict:
     for index, call in enumerate(calls):
         command = str(call["input"].get("command", "")) if call["name"] in SHELL_TOOLS else ""
         action = graph_action(command)
-        root = project_root(command, info.get("folder")) if action else None
-        if not action or not root or (project is not None and not same_path(root, project)):
+        root = project_root(command, call.get("cwd") or info.get("folder")) if action else None
+        if not action or not root or call.get('error') or not call['output'] or (project is not None and not same_path(root, project)):
             continue
         answers.append({"index": index, "action": action, "root": root,
                         "graph_tokens": tokens(call["output"]), "cited": cited_files(call["output"], root)})
@@ -221,7 +250,7 @@ def analyze(transcript: Path, project: Path | None = None) -> dict:
                      "files": len(new), "full_tokens": full, "read_tokens": read})
     saved = without - with_graph
     return {
-        "session": transcript.stem, "transcript": str(transcript), "updated": transcript.stat().st_mtime,
+        "session": transcript.stem, "scope": "subagent" if transcript.parent.name == 'subagents' else 'session', "transcript": str(transcript), "updated": transcript.stat().st_mtime,
         "title": info.get("title", ""), "folder": info.get("folder", ""), "started": info.get("started", ""),
         "last_prompt": info.get("last_prompt", ""),
         "graph_answers": len(answers),
@@ -248,13 +277,18 @@ def find_transcript(session: str | None) -> Path:
 
 
 def recent(count: int) -> list[Path]:
-    return sorted(PROJECTS.glob("*/*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)[:count]
+    paths = []
+    for pattern in ("*/*.jsonl", "*/*/subagents/*.jsonl"):
+        for path in PROJECTS.glob(pattern):
+            try: paths.append((path.stat().st_mtime, path))
+            except OSError: continue
+    return [p for _, p in sorted(paths, key=lambda item: item[0], reverse=True)[:count]]
 
 
 _CACHE: dict[tuple, dict] = {}
 
 
-def recent_savings(project: Path | None = None, *, scan: int = 30, limit: int = 10) -> list[dict]:
+def recent_savings(project: Path | None = None, *, scan: int = 300, limit: int = 10) -> list[dict]:
     """Sessions among the `scan` most recent that used the graph (for `project`), newest first.
     Results are cached per transcript version, so a page refresh re-reads only changed sessions."""
     results = []
@@ -263,7 +297,7 @@ def recent_savings(project: Path | None = None, *, scan: int = 30, limit: int = 
             key = (str(path), path.stat().st_mtime, str(project or ""))
             if key not in _CACHE:
                 with path.open(encoding="utf-8", errors="replace") as stream:
-                    used = any("token_graph.py" in line for line in stream)
+                    used = any("token_graph.py" in line or "graphify" in line for line in stream)
                 _CACHE[key] = analyze(path, project) if used else {"graph_answers": 0}
         except OSError:
             continue

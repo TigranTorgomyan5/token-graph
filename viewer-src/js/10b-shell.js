@@ -4,7 +4,7 @@
   function currentNav() {
     if (state.page === 'dashboard') return 'overview';
     if (state.page === 'settings') return 'settings';
-    if (state.page === 'ask' || state.page === 'health' || state.page === 'system' || state.page === 'agents') return state.page;
+    if (state.page === 'ask' || state.page === 'health' || state.page === 'system' || state.page === 'agents' || state.page === 'documentation') return state.page;
     return state.lens === 'architecture' ? 'architecture' : state.lens === 'flow' ? 'flow' : 'graph';
   }
   function updateNav() {
@@ -47,7 +47,8 @@
   function onNav(target) {
     const nav = target.dataset.nav;
     if (nav === 'overview') showPage('dashboard');
-    else if (nav === 'graph') openGraph('full');
+    else if (nav === 'graph') { openGraph('full'); setView('all'); }
+    else if (nav === 'documentation') showPage('documentation');
     else if (nav === 'architecture') openGraph('architecture');
     else if (nav === 'flow') openGraph('flow');
     else if (nav === 'ask') askFromOverview('');

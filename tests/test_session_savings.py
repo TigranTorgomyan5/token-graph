@@ -17,6 +17,36 @@ import explorer_server  # noqa: E402
 
 
 class SessionSavingsTest(unittest.TestCase):
+    def test_graphify_query_with_cd_and_project_filter(self):
+        self.call('Bash', {'command': f'cd "{self.project}" && ~/.local/bin/graphify query "where is run" --budget 1500'}, 'NODE run() [src=src/big.py loc=L10]')
+        result = self.analyze()
+        self.assertEqual(result['graph_answers'], 1)
+        self.assertEqual(result['without_graph_tokens'], 1000)
+        self.assertEqual(session_savings.analyze(self.transcript, self.project)['graph_answers'], 1)
+        self.assertEqual(session_savings.analyze(self.transcript, self.project / 'other')['graph_answers'], 0)
+
+    def test_graphify_uses_cwd_and_explicit_graph(self):
+        self.call('Bash', {'command': 'graphify explain run'}, 'Source: src/big.py L1')
+        self.entries[0]['cwd'] = str(self.project)
+        self.assertEqual(self.analyze()['graph_answers'], 1)
+        root = session_savings.project_root('graphify query x --graph "graphify-out/graph.json"', str(self.project))
+        self.assertEqual(root, self.project)
+
+    def test_subagent_sessions_are_included_beyond_latest_30(self):
+        transcripts = Path(self.temp.name) / 'sessions'
+        nested = transcripts / 'workspace' / 'parent' / 'subagents'
+        nested.mkdir(parents=True)
+        self.transcript = nested / 'agent-one.jsonl'
+        self.call('Bash', {'command': f'cd "{self.project}" && graphify query x'}, 'NODE run() [src=src/big.py loc=L1]')
+        self.analyze()
+        for i in range(35):
+            (transcripts / 'workspace' / f'newer-{i}.jsonl').write_text('{}\n')
+        with mock.patch.object(session_savings, 'PROJECTS', transcripts):
+            session_savings._CACHE.clear()
+            sessions = session_savings.recent_savings(self.project)
+        self.assertEqual(len(sessions), 1)
+        self.assertEqual(sessions[0]['scope'], 'subagent')
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.project = Path(self.temp.name) / 'proj'

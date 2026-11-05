@@ -34,6 +34,43 @@
   }
   function showCard(id, on) { $(`#dash-${id}`).classList.toggle('hidden', !on); }
 
+  const documentation = { items: [], selected: '', project: null, request: 0, detail: 0 };
+  function renderDocumentationList() {
+    const query = $('#docs-search').value.trim().toLowerCase();
+    const matches = documentation.items.map((item, index) => ({item, index})).filter(({item}) => item.path.toLowerCase().includes(query));
+    $('#docs-list').innerHTML = matches.length ? matches.map(({item, index}) => `<button type="button" class="dash-link" data-doc-index="${index}" aria-current="${item.path === documentation.selected}">${escapeHtml(item.path)}<small>${escapeHtml(item.kind)}</small></button>`).join('') : '<p class="dash-note">No documents match.</p>';
+  }
+  async function loadDocumentation() {
+    const seq = ++documentation.request, project = state.projectPath;
+    documentation.project = project; documentation.items = []; documentation.selected = ''; documentation.detail++;
+    $('#docs-title').textContent = 'Choose a document'; $('#docs-content').textContent = 'Select a file to read it here.'; $('#docs-list').innerHTML = '';
+    if (!serverToken || !project) {
+      $('#docs-status').textContent = !serverToken ? 'Open the local Token Graph server to browse project files.' : 'Choose a project to browse its documents.';
+      return;
+    }
+    $('#docs-status').textContent = 'Finding documents…';
+    try {
+      const result = await api(`/api/documentation?project=${encodeURIComponent(project)}`);
+      if (seq !== documentation.request || state.projectPath !== project) return;
+      documentation.items = Array.isArray(result.documents) ? result.documents : [];
+      $('#docs-status').textContent = documentation.items.length ? `${format(documentation.items.length)} documents found. Content is shown as plain text.` : 'No project documents or generated wiki articles found.';
+      renderDocumentationList();
+    } catch (error) {
+      if (seq === documentation.request) $('#docs-status').textContent = `Could not load documents: ${error.message}`;
+    }
+  }
+  async function openDocumentation(index) {
+    const item = documentation.items[index], project = documentation.project, seq = ++documentation.detail;
+    if (!item || !project) return;
+    documentation.selected = item.path; renderDocumentationList(); $('#docs-title').textContent = item.path; $('#docs-content').textContent = 'Loading…';
+    try {
+      const result = await api(`/api/documentation/file?project=${encodeURIComponent(project)}&file=${encodeURIComponent(item.path)}`);
+      if (seq === documentation.detail && state.projectPath === project) $('#docs-content').textContent = result.content;
+    } catch (error) {
+      if (seq === documentation.detail) $('#docs-content').textContent = `Could not open document: ${error.message}`;
+    }
+  }
+
   function showPage(page) {
     // One task per page. "plain" pages hide the graph workspace and the inspector.
     const pages = {
@@ -43,6 +80,7 @@
       health: { title: 'Health', crumb: 'HEALTH', hint: 'Issues, graph freshness, changes and recent activity.', section: '#health-page', plain: true },
       system: { title: 'System', crumb: 'SYSTEM', hint: 'Several services and how they talk to each other: NATS, Kafka, RabbitMQ, MassTransit, gRPC, HTTP.', section: '#system-page', plain: true },
       agents: { title: 'Agents', crumb: 'AGENTS', hint: 'Explore code and investigate logs with local tools.', section: '#agents-page', plain: true },
+      documentation: { title: 'Documentation', crumb: 'DOCUMENTATION', hint: 'Browse project documents and generated wiki articles.', section: '#documentation-page', plain: true },
       settings: { title: 'Settings', crumb: 'SETTINGS', hint: 'Projects, local AI and the index.', section: '#settings', plain: true },
     };
     state.page = pages[page] ? page : 'dashboard';
@@ -58,6 +96,7 @@
     try { localStorage.setItem('tokenGraph.page', state.page); } catch (_) { /* per-viewer convenience only */ }
     if (state.page === 'system') loadSystems();
     else if (state.page === 'agents') loadClaudeAgents();
+    else if (state.page === 'documentation') loadDocumentation();
     else if (info.plain) refreshDashboard();
     else if (state.page === 'graph') { resize(); fitGraph(); }
   }
@@ -152,7 +191,7 @@
     if (!sessions) { setCard('savings', dash.savingsError ? errorHtml(dash.savingsError) : loadingHtml('Reading Claude Code sessions…'), '', true); return; }
     const refresh = '<div class="dash-footer"><button type="button" class="dash-link" data-dash="savings-refresh">Refresh</button></div>';
     if (!sessions.length) {
-      setCard('savings', `<div class="dash-empty"><p>No recent Claude Code session asked this project's graph yet. Ask Claude about the code with the token-graph skill, then refresh.</p></div>${refresh}`, pill('off', 'No sessions'));
+      setCard('savings', `<div class="dash-empty"><p>No recognized graph queries for this project were found in the 300 most recent Claude Code session and subagent transcripts on this computer.</p></div>${refresh}`, pill('off', 'No sessions'));
       return;
     }
     const latest = sessions[0];
@@ -162,12 +201,12 @@
     const status = latest.saved_percent === null ? 'off' : latest.saved_percent >= 50 ? 'good' : latest.saved_percent > 0 ? 'info' : 'warning';
     const tiles = [
       tile('Saved, latest session', tokensText(latest.saved_tokens), `${percentText(latest.saved_percent)} · ${count(latest.graph_answers, 'graph answer')}`),
-      tile('Without graph', tokensText(latest.without_graph_tokens), `${count(latest.files, 'file')} read in full`),
+      tile('Without graph', tokensText(latest.without_graph_tokens), `Estimated full-file baseline · ${count(latest.files, 'file')}`),
       tile('With graph', tokensText(latest.with_graph_tokens), `answers ${tokensText(latest.graph_tokens)} + reads ${tokensText(latest.read_tokens)}`),
       tile(`Saved, ${count(sessions.length, 'session')}`, tokensText(saved), `${percentText(overall)} of ${tokensText(without)}`),
     ].join('');
     const started = s => s.started ? new Date(s.started).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'unknown time';
-    const sessionName = s => s.title || `Session ${s.session.slice(0, 8)}`;
+    const sessionName = s => s.title || `${s.scope === 'subagent' ? 'Subagent' : 'Session'} ${s.session.slice(0, 8)}`;
     const where = s => `<p class="dash-note"><strong>${escapeHtml(sessionName(s))}</strong> · started ${escapeHtml(started(s))} · last active ${ago(s.updated)}<br>Folder: <code>${escapeHtml(s.folder || 'unknown')}</code> · session <code>${escapeHtml(s.session.slice(0, 8))}</code>${s.last_prompt ? `<br>Last request: “${escapeHtml(s.last_prompt.slice(0, 140))}”` : ''}</p>`;
     const rows = bars(sessions.map(s => ({
       name: `${sessionName(s)} · ${ago(s.updated)}`,
@@ -371,6 +410,9 @@
   }
 
   function initDashboard() {
+    $('#docs-search').addEventListener('input', renderDocumentationList);
+    $('#docs-list').addEventListener('click', event => { const item = event.target.closest('[data-doc-index]'); if (item) openDocumentation(Number(item.dataset.docIndex)); });
+    $('#docs-graph').addEventListener('click', () => { showPage('graph'); setView('docs'); updateNav(); });
     $('.agent-open-explorer').addEventListener('click', () => { showPage('ask'); setAskMode('llm'); $('#ask-a').focus(); });
     $('#claude-agents-refresh').addEventListener('click', loadClaudeAgents);
     $('#dashboard').addEventListener('click', onDashboardClick);

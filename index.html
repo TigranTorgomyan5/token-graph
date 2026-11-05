@@ -255,6 +255,8 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       .agent-card pre{white-space:pre-wrap;overflow-wrap:anywhere;padding:10px;background:#0b1221;border:1px solid #26334c;border-radius:7px}
       .agent-badge{border:1px solid #5649a5;border-radius:999px;padding:3px 8px;color:#bdb3ff;font-size:11px;white-space:nowrap}
       .claude-agents-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:24px 0 12px}.claude-agents-heading h2{margin:0 0 5px;color:#e4e8f4;font-size:17px}.claude-agents-heading p{margin:0}
+      .docs-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.docs-actions input{flex:1;min-width:200px}.docs-layout{display:grid;grid-template-columns:minmax(180px,300px) minmax(0,1fr);gap:14px}.docs-list{display:flex;flex-direction:column;gap:5px;max-height:70vh;overflow:auto}.docs-list button{width:100%;text-align:left;overflow-wrap:anywhere}.docs-list small{display:block;color:#7f8ba3;margin-top:3px}.docs-list button[aria-current="true"]{border-color:#8877ff;color:#fff}.docs-reader{min-height:250px;max-height:70vh;overflow:auto}.docs-reader pre{white-space:pre-wrap;overflow-wrap:anywhere;color:#cfd6e6;line-height:1.6;margin:0;font:13px var(--mono)}
+      @media(max-width:800px){.docs-layout{grid-template-columns:1fr}.docs-list{max-height:240px}}
       .sys-project-search{width:min(340px,100%);min-width:220px;border:1px solid #2c3953;border-radius:7px;background:#111a2d;color:#e4e8f4;font:12px var(--sans);padding:7px 9px}
       .sys-project-search:focus{outline:2px solid #665bd0;outline-offset:1px}
       .dash-link.primary{border-color:#8877ff;color:#fff;background:#2a2560}
@@ -327,6 +329,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
         <nav class="side-nav" aria-label="Explorer pages">
           <button type="button" class="nav-item" data-nav="overview"><span class="nav-icon" aria-hidden="true">▣</span>Overview</button>
           <button type="button" class="nav-item" data-nav="graph"><span class="nav-icon" aria-hidden="true">◎</span>Graph</button>
+          <button type="button" class="nav-item" data-nav="documentation"><span class="nav-icon" aria-hidden="true">▤</span>Documentation</button>
           <button type="button" class="nav-item" data-nav="architecture"><span class="nav-icon" aria-hidden="true">▦</span>Architecture</button>
           <button type="button" class="nav-item" data-nav="flow"><span class="nav-icon" aria-hidden="true">↯</span>Execution flow</button>
           <button type="button" class="nav-item" data-nav="ask"><span class="nav-icon" aria-hidden="true">✦</span>Ask AI</button>
@@ -394,6 +397,12 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
             <span class="benchmark-detail" id="benchmark-detail">Scanning this project locally…</span>
             <span class="benchmark-source" id="benchmark-source">Estimated savings/query</span>
           </section>
+        </section>
+
+        <section class="documentation-page hidden" id="documentation-page" aria-label="Project documentation">
+          <div class="docs-actions"><input class="ask-input" id="docs-search" type="search" placeholder="Search document names…" aria-label="Search document names"><button type="button" class="dash-link" id="docs-graph">Documentation graph</button><button type="button" class="dash-link" data-nav="docs">Generate wiki</button></div>
+          <p class="dash-note" id="docs-status" role="status">Choose a project to browse its documents.</p>
+          <div class="docs-layout"><div class="docs-list" id="docs-list" aria-label="Documents"></div><article class="dash-card docs-reader"><header><h2 id="docs-title">Choose a document</h2></header><pre id="docs-content">Select a file to read it here.</pre></article></div>
         </section>
 
         <section class="agents-page hidden" id="agents-page" aria-label="Local agents">
@@ -1598,6 +1607,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     }
     state.projectPath = entry.path || null;
     if (state.page === 'agents') loadClaudeAgents();
+    if (state.page === 'documentation') loadDocumentation();
     state.editorRootKey = `tokenGraph.vscodeRoot.${hashString(`${entry.name}|${entry.sourceRoot || ''}`)}`;
     state.localSource = entry.folderFiles ? {files: entry.folderFiles, root: entry.sourceRoot} : null;
     state.activeCommunity = null; state.selected = null; state.hovered = null;
@@ -2267,7 +2277,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
   function currentNav() {
     if (state.page === 'dashboard') return 'overview';
     if (state.page === 'settings') return 'settings';
-    if (state.page === 'ask' || state.page === 'health' || state.page === 'system' || state.page === 'agents') return state.page;
+    if (state.page === 'ask' || state.page === 'health' || state.page === 'system' || state.page === 'agents' || state.page === 'documentation') return state.page;
     return state.lens === 'architecture' ? 'architecture' : state.lens === 'flow' ? 'flow' : 'graph';
   }
   function updateNav() {
@@ -2310,7 +2320,8 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
   function onNav(target) {
     const nav = target.dataset.nav;
     if (nav === 'overview') showPage('dashboard');
-    else if (nav === 'graph') openGraph('full');
+    else if (nav === 'graph') { openGraph('full'); setView('all'); }
+    else if (nav === 'documentation') showPage('documentation');
     else if (nav === 'architecture') openGraph('architecture');
     else if (nav === 'flow') openGraph('flow');
     else if (nav === 'ask') askFromOverview('');
@@ -2941,6 +2952,43 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
   }
   function showCard(id, on) { $(`#dash-${id}`).classList.toggle('hidden', !on); }
 
+  const documentation = { items: [], selected: '', project: null, request: 0, detail: 0 };
+  function renderDocumentationList() {
+    const query = $('#docs-search').value.trim().toLowerCase();
+    const matches = documentation.items.map((item, index) => ({item, index})).filter(({item}) => item.path.toLowerCase().includes(query));
+    $('#docs-list').innerHTML = matches.length ? matches.map(({item, index}) => `<button type="button" class="dash-link" data-doc-index="${index}" aria-current="${item.path === documentation.selected}">${escapeHtml(item.path)}<small>${escapeHtml(item.kind)}</small></button>`).join('') : '<p class="dash-note">No documents match.</p>';
+  }
+  async function loadDocumentation() {
+    const seq = ++documentation.request, project = state.projectPath;
+    documentation.project = project; documentation.items = []; documentation.selected = ''; documentation.detail++;
+    $('#docs-title').textContent = 'Choose a document'; $('#docs-content').textContent = 'Select a file to read it here.'; $('#docs-list').innerHTML = '';
+    if (!serverToken || !project) {
+      $('#docs-status').textContent = !serverToken ? 'Open the local Token Graph server to browse project files.' : 'Choose a project to browse its documents.';
+      return;
+    }
+    $('#docs-status').textContent = 'Finding documents…';
+    try {
+      const result = await api(`/api/documentation?project=${encodeURIComponent(project)}`);
+      if (seq !== documentation.request || state.projectPath !== project) return;
+      documentation.items = Array.isArray(result.documents) ? result.documents : [];
+      $('#docs-status').textContent = documentation.items.length ? `${format(documentation.items.length)} documents found. Content is shown as plain text.` : 'No project documents or generated wiki articles found.';
+      renderDocumentationList();
+    } catch (error) {
+      if (seq === documentation.request) $('#docs-status').textContent = `Could not load documents: ${error.message}`;
+    }
+  }
+  async function openDocumentation(index) {
+    const item = documentation.items[index], project = documentation.project, seq = ++documentation.detail;
+    if (!item || !project) return;
+    documentation.selected = item.path; renderDocumentationList(); $('#docs-title').textContent = item.path; $('#docs-content').textContent = 'Loading…';
+    try {
+      const result = await api(`/api/documentation/file?project=${encodeURIComponent(project)}&file=${encodeURIComponent(item.path)}`);
+      if (seq === documentation.detail && state.projectPath === project) $('#docs-content').textContent = result.content;
+    } catch (error) {
+      if (seq === documentation.detail) $('#docs-content').textContent = `Could not open document: ${error.message}`;
+    }
+  }
+
   function showPage(page) {
     // One task per page. "plain" pages hide the graph workspace and the inspector.
     const pages = {
@@ -2950,6 +2998,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       health: { title: 'Health', crumb: 'HEALTH', hint: 'Issues, graph freshness, changes and recent activity.', section: '#health-page', plain: true },
       system: { title: 'System', crumb: 'SYSTEM', hint: 'Several services and how they talk to each other: NATS, Kafka, RabbitMQ, MassTransit, gRPC, HTTP.', section: '#system-page', plain: true },
       agents: { title: 'Agents', crumb: 'AGENTS', hint: 'Explore code and investigate logs with local tools.', section: '#agents-page', plain: true },
+      documentation: { title: 'Documentation', crumb: 'DOCUMENTATION', hint: 'Browse project documents and generated wiki articles.', section: '#documentation-page', plain: true },
       settings: { title: 'Settings', crumb: 'SETTINGS', hint: 'Projects, local AI and the index.', section: '#settings', plain: true },
     };
     state.page = pages[page] ? page : 'dashboard';
@@ -2965,6 +3014,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     try { localStorage.setItem('tokenGraph.page', state.page); } catch (_) { /* per-viewer convenience only */ }
     if (state.page === 'system') loadSystems();
     else if (state.page === 'agents') loadClaudeAgents();
+    else if (state.page === 'documentation') loadDocumentation();
     else if (info.plain) refreshDashboard();
     else if (state.page === 'graph') { resize(); fitGraph(); }
   }
@@ -3059,7 +3109,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     if (!sessions) { setCard('savings', dash.savingsError ? errorHtml(dash.savingsError) : loadingHtml('Reading Claude Code sessions…'), '', true); return; }
     const refresh = '<div class="dash-footer"><button type="button" class="dash-link" data-dash="savings-refresh">Refresh</button></div>';
     if (!sessions.length) {
-      setCard('savings', `<div class="dash-empty"><p>No recent Claude Code session asked this project's graph yet. Ask Claude about the code with the token-graph skill, then refresh.</p></div>${refresh}`, pill('off', 'No sessions'));
+      setCard('savings', `<div class="dash-empty"><p>No recognized graph queries for this project were found in the 300 most recent Claude Code session and subagent transcripts on this computer.</p></div>${refresh}`, pill('off', 'No sessions'));
       return;
     }
     const latest = sessions[0];
@@ -3069,12 +3119,12 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     const status = latest.saved_percent === null ? 'off' : latest.saved_percent >= 50 ? 'good' : latest.saved_percent > 0 ? 'info' : 'warning';
     const tiles = [
       tile('Saved, latest session', tokensText(latest.saved_tokens), `${percentText(latest.saved_percent)} · ${count(latest.graph_answers, 'graph answer')}`),
-      tile('Without graph', tokensText(latest.without_graph_tokens), `${count(latest.files, 'file')} read in full`),
+      tile('Without graph', tokensText(latest.without_graph_tokens), `Estimated full-file baseline · ${count(latest.files, 'file')}`),
       tile('With graph', tokensText(latest.with_graph_tokens), `answers ${tokensText(latest.graph_tokens)} + reads ${tokensText(latest.read_tokens)}`),
       tile(`Saved, ${count(sessions.length, 'session')}`, tokensText(saved), `${percentText(overall)} of ${tokensText(without)}`),
     ].join('');
     const started = s => s.started ? new Date(s.started).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'unknown time';
-    const sessionName = s => s.title || `Session ${s.session.slice(0, 8)}`;
+    const sessionName = s => s.title || `${s.scope === 'subagent' ? 'Subagent' : 'Session'} ${s.session.slice(0, 8)}`;
     const where = s => `<p class="dash-note"><strong>${escapeHtml(sessionName(s))}</strong> · started ${escapeHtml(started(s))} · last active ${ago(s.updated)}<br>Folder: <code>${escapeHtml(s.folder || 'unknown')}</code> · session <code>${escapeHtml(s.session.slice(0, 8))}</code>${s.last_prompt ? `<br>Last request: “${escapeHtml(s.last_prompt.slice(0, 140))}”` : ''}</p>`;
     const rows = bars(sessions.map(s => ({
       name: `${sessionName(s)} · ${ago(s.updated)}`,
@@ -3278,6 +3328,9 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
   }
 
   function initDashboard() {
+    $('#docs-search').addEventListener('input', renderDocumentationList);
+    $('#docs-list').addEventListener('click', event => { const item = event.target.closest('[data-doc-index]'); if (item) openDocumentation(Number(item.dataset.docIndex)); });
+    $('#docs-graph').addEventListener('click', () => { showPage('graph'); setView('docs'); updateNav(); });
     $('.agent-open-explorer').addEventListener('click', () => { showPage('ask'); setAskMode('llm'); $('#ask-a').focus(); });
     $('#claude-agents-refresh').addEventListener('click', loadClaudeAgents);
     $('#dashboard').addEventListener('click', onDashboardClick);

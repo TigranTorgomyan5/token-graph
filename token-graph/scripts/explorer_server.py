@@ -30,6 +30,7 @@ if str(SCRIPTS) not in sys.path:
 os.environ.setdefault("PYTHONIOENCODING", "utf-8")
 from local_inference import local_models
 import explore_agent
+import explorer_evidence
 import system_links
 from token_graph import runtime_problems
 PAGE = SKILL / "assets" / "project-explorer.html"
@@ -50,6 +51,38 @@ PROJECTS = SKILL / ".explorer-projects.json"  # projects built or opened here, n
 RUNTIME = SKILL / ".runtime" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 MAX_PROJECTS = 50
+
+
+def documentation_files(project: Path) -> list[dict]:
+    """Find bounded, non-ignored documentation and generated wiki articles."""
+    items = []
+    for directory, dirnames, filenames in os.walk(project, followlinks=False):
+        dirnames[:] = sorted(d for d in dirnames if not d.startswith('.') and d.casefold() not in explorer_evidence.SKIP_DIRS and not (Path(directory) / d).is_symlink())
+        for filename in sorted(filenames):
+            candidate = Path(directory) / filename
+            if filename.startswith('.') or candidate.is_symlink() or candidate.suffix.lower() not in explorer_evidence.DOC_SUFFIXES:
+                continue
+            rel = candidate.relative_to(project).as_posix()
+            if explorer_evidence._source_path(project, rel) is None or explorer_evidence._is_ignored(project, rel):
+                continue
+            try:
+                if candidate.stat().st_size <= explorer_evidence.MAX_SOURCE_BYTES:
+                    items.append({'path': rel, 'kind': 'Project document'})
+            except OSError:
+                continue
+            if len(items) >= 2000:
+                break
+        if len(items) >= 2000:
+            break
+    wiki = project / 'graphify-out' / 'wiki'
+    if wiki.is_dir() and not wiki.is_symlink():
+        for candidate in sorted(wiki.glob('*.md'))[:500]:
+            try:
+                if not candidate.is_symlink() and candidate.resolve().is_relative_to(project.resolve()) and candidate.stat().st_size <= explorer_evidence.MAX_SOURCE_BYTES:
+                    items.append({'path': candidate.relative_to(project).as_posix(), 'kind': 'Generated wiki'})
+            except OSError:
+                continue
+    return items
 
 
 def claude_agents(project: Path | None = None, user_home: Path | None = None) -> list[dict]:
@@ -873,6 +906,18 @@ class Handler(BaseHTTPRequestHandler):
             if url.path == "/api/claude-agents":
                 project = self._known_project(query['project']) if query.get('project') else None
                 return self._json(200, {"agents": claude_agents(project)})
+            if url.path == "/api/documentation":
+                return self._json(200, {"documents": documentation_files(self._known_project(query.get('project')))})
+            if url.path == "/api/documentation/file":
+                project = self._known_project(query.get('project'))
+                relative = query.get('file', '')
+                if relative not in {item['path'] for item in documentation_files(project)}:
+                    return self._json(404, {"error": "Document not found."})
+                file = (project / relative).resolve()
+                file.relative_to(project.resolve())
+                if file.stat().st_size > explorer_evidence.MAX_SOURCE_BYTES:
+                    return self._json(400, {"error": "Document is too large."})
+                return self._json(200, {"path": relative, "content": file.read_text(encoding='utf-8')})
             if url.path == "/api/dashboard":
                 return self._json(200, dashboard(self._known_project(query.get("project"))))
             if url.path == "/api/folders":
@@ -881,7 +926,7 @@ class Handler(BaseHTTPRequestHandler):
                 # Tokens saved by graph answers about this project in recent Claude Code sessions,
                 # estimated from the transcripts on this computer (no model involved).
                 from session_savings import recent_savings
-                keep = ("session", "updated", "title", "folder", "started", "last_prompt", "graph_answers", "files", "graph_tokens", "read_tokens",
+                keep = ("session", "scope", "updated", "title", "folder", "started", "last_prompt", "graph_answers", "files", "graph_tokens", "read_tokens",
                         "without_graph_tokens", "with_graph_tokens", "saved_tokens", "saved_percent")
                 sessions = recent_savings(self._known_project(query.get("project")))
                 return self._json(200, {"sessions": [{k: s[k] for k in keep} for s in sessions]})

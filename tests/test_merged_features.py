@@ -27,6 +27,20 @@ def load(name):
 
 
 class MergeRegressionTests(unittest.TestCase):
+    def test_documentation_listing_respects_ignores_and_lists_generated_wiki(self):
+        server = load('explorer_server')
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            (project / 'docs').mkdir()
+            (project / 'docs/guide.md').write_text('# Guide')
+            (project / 'docs/secret.md').write_text('private')
+            (project / '.gitignore').write_text('docs/secret.md\n')
+            (project / '.env').write_text('secret')
+            (project / 'graphify-out/wiki').mkdir(parents=True)
+            (project / 'graphify-out/wiki/index.md').write_text('# Wiki')
+            files = server.documentation_files(project)
+            self.assertEqual({(item['path'], item['kind']) for item in files}, {('docs/guide.md', 'Project document'), ('graphify-out/wiki/index.md', 'Generated wiki')})
+
     def test_claude_agent_metadata_from_user_and_project(self):
         server = load('explorer_server')
         with tempfile.TemporaryDirectory() as directory:
