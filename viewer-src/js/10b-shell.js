@@ -25,6 +25,58 @@
     if (text.trim()) runAsk(); else $('#ask-a').focus();
   }
   let claudeAgentsRequest = 0;
+  const benchmarkRows = new Map();
+  let benchmarkProject = null;
+  async function loadBenchModels() {
+    const select = $('#bench-model');
+    if (!serverToken) { select.replaceChildren(new Option('Local server required', '')); return; }
+    try {
+      const result = await api('/api/agent/status');
+      const models = Array.isArray(result.models) ? result.models : [];
+      const previous = select.value;
+      select.replaceChildren(...(models.length ? models : ['']).map(name => new Option(name || 'No local model installed', name)));
+      if (models.includes(previous)) select.value = previous;
+      else if (models.includes('qwen3:14b-q4_K_M')) select.value = 'qwen3:14b-q4_K_M';
+    } catch (_) { select.replaceChildren(new Option('Local model unavailable', '')); }
+  }
+  function updateBenchFields() {
+    const agent = $('#bench-agent').value, bridge = agent === 'bridge';
+    document.querySelectorAll('.bench-log').forEach(el => el.classList.toggle('hidden', agent !== 'log'));
+    document.querySelectorAll('.bench-bridge').forEach(el => el.classList.toggle('hidden', !bridge));
+    document.querySelectorAll('.bench-argo').forEach(el => el.classList.toggle('hidden', !bridge || $('#bench-bridge-source').value !== 'argocd'));
+    const noLlm = $('#bench-no-llm');
+    noLlm.disabled = agent === 'graph' || agent === 'explorer' || bridge;
+    if (noLlm.disabled) noLlm.checked = agent === 'graph';
+    $('#bench-model').disabled = agent === 'graph' || noLlm.checked;
+  }
+  function renderBenchResults() {
+    const rows = [...benchmarkRows.values()];
+    $('#bench-results').innerHTML = rows.length ? `<table class="agent-bench-table"><thead><tr><th>Agent</th><th>Mode</th><th>Median</th><th>Range</th><th>Runs</th></tr></thead><tbody>${rows.map(row => `<tr><td>${escapeHtml(row.name)}</td><td>${escapeHtml(row.mode)}</td><td>${row.median === null ? '—' : `${row.median.toFixed(3)} s`}</td><td>${row.min === null ? '—' : `${row.min.toFixed(3)}–${row.max.toFixed(3)} s`}</td><td>${row.success} passed${row.failed ? `, ${row.failed} failed` : ''}</td></tr>`).join('')}</tbody></table>` : '';
+  }
+  async function runAgentBenchmark(event) {
+    event.preventDefault();
+    const project = state.projectPath, agent = $('#bench-agent').value, button = $('#bench-run'), status = $('#bench-status');
+    if (!serverToken || !project) { status.textContent = 'Open a project using the local server first.'; return; }
+    if (benchmarkProject !== project) { benchmarkRows.clear(); benchmarkProject = project; renderBenchResults(); }
+    const noLlm = $('#bench-no-llm').checked;
+    const body = {project, agent, question: $('#bench-question').value.trim(), model: $('#bench-model').value,
+      repeats: Number($('#bench-repeats').value), no_llm: noLlm, log: $('#bench-log').value.trim(), log_source: $('#bench-log-source').value,
+      bridge_source: $('#bench-bridge-source').value, service: $('#bench-service').value.trim(), application: $('#bench-application').value.trim(),
+      app_namespace: $('#bench-app-namespace').value.trim(), namespace: $('#bench-namespace').value.trim()};
+    const name = $('#bench-agent').selectedOptions[0].textContent;
+    button.disabled = true; status.textContent = `Running ${name}… This can take several minutes.`;
+    try {
+      const result = await api('/api/agent/benchmark', body);
+      if (state.projectPath !== project) return;
+      const row = result.results?.[agent];
+      if (!row) throw new Error('No benchmark result was returned.');
+      benchmarkRows.set(agent, {name, mode: agent === 'graph' || noLlm ? 'No model' : body.model,
+        median: row.median_seconds, min: row.min_seconds, max: row.max_seconds, success: row.successful_runs, failed: row.failed_runs});
+      renderBenchResults();
+      status.textContent = row.failed_runs ? `${row.failed_runs} run(s) failed or timed out. Check the local model and inputs.` : `Finished ${name}. Times include process startup; model cache state is not controlled.`;
+    } catch (error) { status.textContent = error.message; }
+    finally { button.disabled = false; }
+  }
   async function loadClaudeAgents() {
     const seq = ++claudeAgentsRequest, project = state.projectPath;
     const status = $('#claude-agents-status'), list = $('#claude-agents-list');
@@ -60,6 +112,21 @@
     else if (nav === 'agents') showPage('agents');
     updateNav();
   }
+  let serverCheckPending = false;
+  async function checkServerConnection() {
+    const badge = $('#server-connection');
+    if (!serverToken) { badge.textContent = 'Standalone file'; badge.title = 'Open Token Graph with its local server for project tools.'; return; }
+    if (serverCheckPending || document.visibilityState === 'hidden') return;
+    serverCheckPending = true;
+    try {
+      await api('/api/ping');
+      badge.textContent = 'Server connected'; badge.className = 'server-pill online'; badge.title = 'Local Token Graph server is responding.';
+    } catch (_) {
+      badge.textContent = 'Server unavailable'; badge.className = 'server-pill offline'; badge.title = 'Restart Token Graph and open the new address it provides.';
+    } finally { serverCheckPending = false; }
+  }
+  checkServerConnection();
+  setInterval(checkServerConnection, 15000);
   // AI colour: every local model gets its own colour (--ai-color: chip border, Ask borders), so switching
   // models is visible at a glance; while AI works (a question, or an AI graph build) they pulse in it.
   const aiWork = { asks: 0, jobModel: '' };

@@ -274,6 +274,7 @@
       if (agentProject !== project) clearAgentChat();
       go.disabled = true; go.textContent = 'Searching…';
       $('#ask-hint').textContent = 'Searching the local graph and checking source locations…';
+      const started = performance.now();
       try {
         const history = agentHistory.slice(-12);
         const result = await api('/api/agent', {project, question: request.a, operation: 'query', limit: 10, hideTests: state.hideTests, hideGenerated: state.hideGenerated, history});
@@ -282,7 +283,7 @@
         appendAgentMessage('assistant', result.text);
         agentHistory.push({role:'user', content:request.a}, {role:'assistant', content:result.text.slice(0,8000)});
         $('#ask-a').value = '';
-        $('#ask-hint').textContent = 'Evidence retrieved locally. Each result identifies its source type and verification status.';
+        $('#ask-hint').textContent = `Evidence retrieved locally in ${((performance.now() - started) / 1000).toFixed(2)} s. Each result identifies its source type and verification status.`;
       } catch (error) { $('#ask-hint').textContent = error.message; }
       finally { go.disabled = false; go.textContent = 'Ask'; }
       return;

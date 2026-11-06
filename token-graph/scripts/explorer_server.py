@@ -422,6 +422,63 @@ def agent_answer(body: dict, project: Path) -> dict:
     return {"text": json.dumps(evidence, ensure_ascii=False, indent=2), "evidence": evidence}
 
 
+def agent_benchmark(body: dict, project: Path) -> dict:
+    """Run one explicitly selected agent benchmark without executing user-supplied commands."""
+    agent = str(body.get('agent') or '')
+    if agent not in {'graph', 'explorer', 'scout', 'log', 'bridge'}:
+        raise ValueError('Select an available agent.')
+    question = str(body.get('question') or '').strip()
+    if not question or len(question) > 1000:
+        raise ValueError('Enter a question of up to 1,000 characters.')
+    try:
+        repeats = int(body.get('repeats', 1))
+    except (TypeError, ValueError):
+        raise ValueError('Runs must be between 1 and 3.') from None
+    if not 1 <= repeats <= 3:
+        raise ValueError('Runs must be between 1 and 3.')
+    model = str(body.get('model') or '')
+    no_llm = bool(body.get('no_llm'))
+    if agent in {'explorer', 'bridge'} and no_llm:
+        raise ValueError('This agent requires a local model.')
+    if agent in {'explorer', 'scout', 'log', 'bridge'} and not no_llm:
+        if model not in ollama_models():
+            raise ValueError('Select an installed local Ollama model.')
+    args = [sys.executable, str(SCRIPTS / 'benchmark_agents.py'), '--project', str(project), '--question', question,
+            '--agent', agent, '--repeats', str(repeats), '--timeout', '600']
+    if model:
+        args += ['--model', model]
+    if no_llm:
+        args.append('--no-llm')
+    if agent == 'log':
+        path = Path(str(body.get('log') or '')).expanduser()
+        if not path.is_file():
+            raise ValueError('Enter an existing local log file path.')
+        args += ['--log', str(path.resolve())]
+        source = str(body.get('log_source') or 'file')
+        if source not in {'file', 'argocd', 'loki'}:
+            raise ValueError('Invalid log format.')
+        args += ['--source', source]
+    if agent == 'bridge':
+        source, service = str(body.get('bridge_source') or ''), str(body.get('service') or '')
+        if source not in {'grafana', 'argocd'} or not service or len(service) > 120:
+            raise ValueError('Select a source and enter a service name.')
+        args += ['--bridge-source', source, '--service', service]
+        if source == 'argocd':
+            application = str(body.get('application') or '').strip()
+            if not application or len(application) > 200:
+                raise ValueError('Enter an Argo CD application name.')
+            args += ['--application', application, '--app-namespace', str(body.get('app_namespace') or 'argocd')[:200]]
+            if body.get('namespace'):
+                args += ['--namespace', str(body['namespace'])[:200]]
+    try:
+        result = subprocess.run(args, capture_output=True, text=True, encoding='utf-8', errors='replace',
+                                timeout=650 * repeats, check=False, creationflags=NO_WINDOW)
+        payload = json.loads(result.stdout)
+    except (OSError, ValueError, subprocess.TimeoutExpired) as error:
+        raise ValueError(f'Benchmark could not complete: {error}') from error
+    return payload
+
+
 SYSTEM_SCANS: dict[str, tuple] = {}  # system id -> (saved timestamp, scan result); rescan on demand
 
 
@@ -997,6 +1054,9 @@ class Handler(BaseHTTPRequestHandler):
                     raise
                 record_activity(project, "ai_question", question, detail=f"Answered locally by {model}")
                 return self._json(200, answer)
+            if url.path == "/api/agent/benchmark":
+                project = self._known_project(body.get('project'))
+                return self._json(200, agent_benchmark(body, project))
             if url.path == "/api/llm":
                 project = self._known_project(body.get("project"))
                 question, model = str(body.get("question") or "").strip(), str(body.get("model") or "")

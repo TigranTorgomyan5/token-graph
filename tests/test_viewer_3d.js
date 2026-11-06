@@ -5,7 +5,7 @@ for (const name of ['index.html', 'token-graph/assets/project-explorer.html', 't
   const html = fs.readFileSync(require('path').join(root, name), 'utf8');
   let code = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map(m => m[1]).find(s => s.includes('(() =>'));
   new vm.Script(code);
-  code = code.replace(/\}\)\(\);\s*$/, 'globalThis.viewerTest = {state, normalizeGraph, projectNode, findNode, fitGraph, setDimension, select, draw, setView, recoverGraph, browserAsk, runAsk, setAskMode, importProjectFolder, switchGraph, showPage: typeof showPage === "function" ? showPage : null, renderDashboard: typeof renderDashboard === "function" ? renderDashboard : null, clusterModel: typeof clusterModel === "function" ? clusterModel : null, clustersActive: typeof clustersActive === "function" ? clustersActive : null, expandCluster: typeof expandCluster === "function" ? expandCluster : null, enterFocus: typeof enterFocus === "function" ? enterFocus : null, setLens: typeof setLens === "function" ? setLens : null, visible: typeof visible === "function" ? visible : null}; })();');
+  code = code.replace(/\}\)\(\);\s*$/, 'globalThis.viewerTest = {state, normalizeGraph, projectNode, findNode, fitGraph, setDimension, select, draw, setView, recoverGraph, browserAsk, runAsk, setAskMode, importProjectFolder, switchGraph, showPage: typeof showPage === "function" ? showPage : null, renderDashboard: typeof renderDashboard === "function" ? renderDashboard : null, clusterModel: typeof clusterModel === "function" ? clusterModel : null, clustersActive: typeof clustersActive === "function" ? clustersActive : null, expandCluster: typeof expandCluster === "function" ? expandCluster : null, enterFocus: typeof enterFocus === "function" ? enterFocus : null, setLens: typeof setLens === "function" ? setLens : null, visible: typeof visible === "function" ? visible : null, system: typeof sysState !== "undefined" ? {sysState, mapSvg, visibleSystemEdges, onSystemAction} : null}; })();');
   const elements = new Map(), arcs = [];
   const context = new Proxy({measureText:t=>({width:String(t).length*7}), arc:(...args)=>arcs.push(args)}, {get:(target,k)=>target[k] || (()=>{})});
   function el(key) {
@@ -149,6 +149,20 @@ for (const name of ['index.html', 'token-graph/assets/project-explorer.html', 't
     api.normalizeGraph(big); assert.equal(api.state.expanded.size,0);
   }
   api.normalizeGraph({nodes:[{id:'single',label:'Single',community:0}],edges:[]});assert(Number.isFinite(api.state.scale));assert(Number.isFinite(api.projectNode(api.state.nodes[0]).x));
+  if (api.system) {
+    const {sysState, mapSvg, visibleSystemEdges, onSystemAction} = api.system;
+    sysState.scan = {services:[{name:'Gateway',path:'/gateway',files:1},{name:'Config',path:'/config',files:1},{name:'Wallet',path:'/wallet',files:1}],edges:[{source:0,target:1,tech:'http',confidence:['route'],count:1,channels:[{name:'/config'}]},{source:1,target:2,tech:'grpc',confidence:['exact'],count:1,channels:[{name:'Wallet'}]}]};
+    sysState.pos = new Map([['/gateway',{x:100,y:100}],['/config',{x:400,y:300}],['/wallet',{x:700,y:500}]]);
+    assert(mapSvg().includes('aria-label="Select service Gateway"'));
+    assert(mapSvg().includes('aria-label="Gateway to Config, HTTP connection"'));
+    sysState.selected = {type:'service',index:0};
+    await onSystemAction({dataset:{sys:'focus'}});
+    assert.equal(sysState.focusOnly,true); assert.deepEqual(Array.from(visibleSystemEdges(), pair=>pair[1]),[0]);
+    assert(!mapSvg().includes('Select service Wallet'));
+    await onSystemAction({dataset:{sys:'zoom-in'}}); assert(sysState.mapView.zoom > 1);
+    await onSystemAction({dataset:{sys:'fit-map'}}); assert.equal(sysState.mapView.zoom,1);
+    await onSystemAction({dataset:{sys:'clear'}}); assert.equal(sysState.focusOnly,false);
+  }
   for (const path of process.argv.slice(2)) {
     const graph=JSON.parse(fs.readFileSync(path,'utf8'));
     api.normalizeGraph(graph);

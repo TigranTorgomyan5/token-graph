@@ -181,6 +181,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       .nav-sep{height:1px;background:#1b263b;margin:10px 4px}
       .project-switch{display:flex;align-items:center;gap:8px}
       .project-select{min-width:150px;max-width:240px;border:1px solid #2c3953;border-radius:7px;background:#111a2d;color:#e4e8f4;font:12px var(--sans);padding:6px 8px}
+      .server-pill{border:1px solid #34435f;border-radius:999px;background:#111a2d;color:#aeb8cb;font:11px var(--sans);padding:5px 10px;cursor:pointer;white-space:nowrap}.server-pill.online{border-color:#2d6b55;color:#7fe0b8}.server-pill.offline{border-color:#9a4f55;color:#f3a0a0}
       .ai-chip{border:1px solid #2c3953;border-radius:999px;background:#111a2d;color:#aeb8cb;font:11px var(--sans);padding:5px 10px;cursor:pointer;white-space:nowrap}
       .ai-chip.good{border-color:#2d6b55;color:#7fe0b8}.ai-chip.warning{border-color:#7a5b2a;color:#f0c27a}.ai-chip.off{color:#7f8ba3}
       .settings-projects{display:flex;flex-direction:column;gap:10px}
@@ -225,6 +226,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       .ask-page .ask-panel{margin-top:16px}
       .ask-page-note{margin-top:16px}
       #dashboard .benchmark-strip{margin-top:14px}
+      #dashboard .benchmark-explanation{flex-basis:100%;margin:0;color:#a8b6ca;font-size:11px;line-height:1.5}
       .graph-filters{position:relative}
       .graph-filters>summary{list-style:none;cursor:pointer;border:1px solid #2c3953;border-radius:7px;padding:5px 10px;font:12px var(--sans);color:#cfd6e6;background:#111a2d;white-space:nowrap}
       .graph-filters>summary::-webkit-details-marker{display:none}
@@ -254,6 +256,12 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       .agent-card .dash-link{align-self:flex-start}.agent-card details{color:#aebbd2;font-size:12px}.agent-card summary{cursor:pointer;color:#b8aaff}
       .agent-card pre{white-space:pre-wrap;overflow-wrap:anywhere;padding:10px;background:#0b1221;border:1px solid #26334c;border-radius:7px}
       .agent-badge{border:1px solid #5649a5;border-radius:999px;padding:3px 8px;color:#bdb3ff;font-size:11px;white-space:nowrap}
+      .agent-benchmark{margin-bottom:18px}.agent-bench-form{display:flex;flex-wrap:wrap;align-items:end;gap:12px}
+      .agent-bench-form label{display:flex;flex-direction:column;gap:5px;color:#aebbd2;font-size:12px;min-width:140px;flex:1}
+      .agent-bench-form input:not([type=checkbox]),.agent-bench-form select{width:100%;min-height:36px;padding:7px 9px;border:1px solid #34435f;border-radius:7px;background:#0b1221;color:#e4e8f4;font:inherit}
+      .agent-bench-form label.agent-bench-check{flex-direction:row;align-items:center;min-width:auto;flex:0 0 auto;padding-bottom:9px}
+      .agent-bench-form label.hidden{display:none}.agent-bench-form button{min-height:36px}
+      .agent-bench-table{width:100%;border-collapse:collapse;font-size:13px;text-align:left}.agent-bench-table th,.agent-bench-table td{padding:9px;border-bottom:1px solid #26334c}.agent-bench-table th{color:#aebbd2}
       .claude-agents-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:24px 0 12px}.claude-agents-heading h2{margin:0 0 5px;color:#e4e8f4;font-size:17px}.claude-agents-heading p{margin:0}
       .docs-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.docs-actions input{flex:1;min-width:200px}.docs-layout{display:grid;grid-template-columns:minmax(180px,300px) minmax(0,1fr);gap:14px}.docs-list{display:flex;flex-direction:column;gap:5px;max-height:70vh;overflow:auto}.docs-list button{width:100%;text-align:left;overflow-wrap:anywhere}.docs-list small{display:block;color:#7f8ba3;margin-top:3px}.docs-list button[aria-current="true"]{border-color:#8877ff;color:#fff}.docs-reader{min-height:250px;max-height:70vh;overflow:auto}.docs-reader pre{white-space:pre-wrap;overflow-wrap:anywhere;color:#cfd6e6;line-height:1.6;margin:0;font:13px var(--mono)}
       @media(max-width:800px){.docs-layout{grid-template-columns:1fr}.docs-list{max-height:240px}}
@@ -262,6 +270,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       .dash-link.primary{border-color:#8877ff;color:#fff;background:#2a2560}
       .dash-link:disabled{opacity:.55;cursor:default}
       .sys-legend{display:flex;flex-wrap:wrap;gap:6px}
+      .sys-map-controls{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.sys-map-controls button[aria-pressed="true"]{border-color:#8877ff;color:#fff;background:#2a2560}.sys-map-controls .dash-note{margin-left:auto}
       .sys-chip{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--tc);color:var(--tc);border-radius:999px;padding:2px 9px;font:11px var(--sans);background:transparent;white-space:nowrap}
       button.sys-chip{cursor:pointer}.sys-chip.off{opacity:.35;text-decoration:line-through}
       .sys-chips{display:flex;flex-wrap:wrap;gap:6px}
@@ -273,6 +282,8 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       .sys-label{cursor:pointer}.sys-label rect{fill:#0b1020;stroke-width:1}
       .sys-label text{font:600 10.5px var(--mono);text-anchor:middle}
       .sys-node{cursor:grab}.sys-node circle{fill:#131c31;stroke:#8877ff;stroke-width:2}
+      .sys-node:focus,.sys-edge:focus{outline:none}.sys-node:focus circle{stroke:#fff;stroke-width:3}.sys-edge:focus path:not(.hit){stroke-width:4}
+      .sys-edge-link{border:0;background:none;padding:2px;color:#cfc8ff;text-align:left;font:inherit;cursor:pointer}.sys-edge-link:hover,.sys-edge-link:focus-visible{text-decoration:underline;outline:2px solid #8877ff;outline-offset:2px}
       .sys-node.on circle{stroke:#edf1fa;stroke-width:3;fill:#1d2746}
       .sys-node.missing circle{stroke:#f07883;stroke-dasharray:4 3}
       .sys-node text{text-anchor:middle;pointer-events:none}
@@ -366,7 +377,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       <section class="workspace">
         <header class="topbar">
           <div><div class="breadcrumb">PROJECTS <span>/</span> <span id="project-name">LOCAL PROJECT</span> <span>/</span> <b id="view-crumb">GRAPH</b></div><h1 id="page-title">Codebase map</h1><p class="page-hint" id="page-hint"></p></div>
-          <div class="project-switch"><label class="eyebrow" for="graph-selector">PROJECT</label><select id="graph-selector" class="project-select" disabled aria-label="Switch loaded graph"></select><button type="button" class="ai-chip" id="ai-chip" data-nav="settings" title="Local AI status · open Settings">AI ·</button></div>
+          <div class="project-switch"><label class="eyebrow" for="graph-selector">PROJECT</label><select id="graph-selector" class="project-select" disabled aria-label="Switch loaded graph"></select><button type="button" class="server-pill" id="server-connection" data-nav="settings" role="status">Checking server…</button><button type="button" class="ai-chip" id="ai-chip" data-nav="settings" title="Local AI status · open Settings">AI ·</button></div>
           <div class="topbar-actions"><button type="button" class="stale-chip hidden" id="stale-chip"></button><button type="button" class="topbar-button hidden" id="diff-button" title="What was added, removed or re-connected in the graph by the last build or update">Changes since last build</button><span class="snapshot" id="snapshot">Graph snapshot</span><button class="icon-button" id="reset-view" title="Reset view" aria-label="Reset view">⟲</button></div>
         </header>
 
@@ -392,10 +403,11 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
             <article class="dash-card" id="dash-savings" aria-labelledby="dash-savings-title"><header><h2 id="dash-savings-title">Token savings in Claude Code</h2><span class="dash-head"></span></header><div class="dash-body"></div></article>
           </div>
           <section class="benchmark-strip" id="benchmark-strip" aria-label="Token Graph context reduction estimate">
-            <span class="benchmark-mark">↘</span>
-            <div class="benchmark-main"><span class="benchmark-label">TOKEN GRAPH CONTEXT REDUCTION</span><strong id="reduction-total">Loading estimate…</strong></div>
+            <span class="benchmark-mark" aria-hidden="true">↘</span>
+            <div class="benchmark-main"><span class="benchmark-label">PROJECT CONTEXT ESTIMATE</span><strong id="reduction-total">Loading estimate…</strong></div>
             <span class="benchmark-detail" id="benchmark-detail">Scanning this project locally…</span>
             <span class="benchmark-source" id="benchmark-source">Estimated savings/query</span>
+            <p class="benchmark-explanation">Based on this project's benchmark, independent of Claude Code sessions. An estimate, not measured token usage.</p>
           </section>
         </section>
 
@@ -406,6 +418,29 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
         </section>
 
         <section class="agents-page hidden" id="agents-page" aria-label="Local agents">
+          <article class="dash-card agent-benchmark" aria-labelledby="agent-bench-title">
+            <header><h2 id="agent-bench-title">Agent speed benchmark</h2><span class="agent-badge">On this computer</span></header>
+            <div class="dash-body">
+              <p class="dash-note">Measure end-to-end time on the selected project. Results depend on the question, model and cache; speed does not measure accuracy.</p>
+              <form id="agent-bench-form" class="agent-bench-form">
+                <label>Agent<select id="bench-agent"><option value="graph">Graph search</option><option value="explorer">Code Explorer</option><option value="scout">Repo Scout</option><option value="log">Log Analyzer</option><option value="bridge">Live log bridge</option></select></label>
+                <label>Question<input id="bench-question" value="How does this project work?" maxlength="1000" required></label>
+                <label>Model<select id="bench-model"><option value="">No local model detected</option></select></label>
+                <label>Runs<select id="bench-repeats"><option>1</option><option>2</option><option selected>3</option></select></label>
+                <label class="agent-bench-check"><input type="checkbox" id="bench-no-llm"> Without model</label>
+                <label class="bench-log hidden">Log file path<input id="bench-log" placeholder="/path/to/application.log"></label>
+                <label class="bench-log hidden">Log format<select id="bench-log-source"><option value="file">Plain or JSON lines</option><option value="argocd">Argo CD response</option><option value="loki">Loki response</option></select></label>
+                <label class="bench-bridge hidden">Source<select id="bench-bridge-source"><option value="grafana">Grafana</option><option value="argocd">Argo CD</option></select></label>
+                <label class="bench-bridge hidden">Service<input id="bench-service" placeholder="nh-gateway"></label>
+                <label class="bench-argo hidden">Application<input id="bench-application" placeholder="nh-gateway-dashtz"></label>
+                <label class="bench-argo hidden">Application namespace<input id="bench-app-namespace" value="argocd"></label>
+                <label class="bench-argo hidden">Workload namespace<input id="bench-namespace" placeholder="Optional"></label>
+                <button class="dash-link primary" type="submit" id="bench-run">Run benchmark</button>
+              </form>
+              <p class="dash-note" id="bench-status" role="status">Choose an agent and run a benchmark. Live log bridge contacts the selected MCP service.</p>
+              <div id="bench-results" aria-live="polite"></div>
+            </div>
+          </article>
           <div class="dash-grid">
             <article class="dash-card w-6 agent-card" aria-labelledby="agent-explorer-title">
               <header><h2 id="agent-explorer-title">Code Explorer</h2><span class="agent-badge">Local model</span></header>
@@ -476,7 +511,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
           <div class="sys-toolbar" id="sys-toolbar"></div>
           <div id="sys-message" class="hidden"></div>
           <div class="dash-grid hidden" id="sys-main">
-            <article class="dash-card w-8" aria-labelledby="sys-map-title"><header><h2 id="sys-map-title">Service map</h2><span class="dash-head sys-legend" id="sys-legend"></span></header><div class="dash-body" id="sys-map"></div></article>
+            <article class="dash-card w-8" aria-labelledby="sys-map-title"><header><h2 id="sys-map-title">Service map</h2><span class="dash-head sys-legend" id="sys-legend"></span></header><div class="sys-map-controls" role="group" aria-label="Service map controls"><button type="button" class="dash-link" data-sys="zoom-in" aria-label="Zoom in">+</button><button type="button" class="dash-link" data-sys="zoom-out" aria-label="Zoom out">−</button><button type="button" class="dash-link" data-sys="fit-map">Fit map</button><button type="button" class="dash-link" id="sys-focus" data-sys="focus" disabled aria-pressed="false">Focus selected service</button><span class="dash-note">Drag the background to pan. Select a service to inspect it.</span></div><div class="dash-body" id="sys-map"></div></article>
             <article class="dash-card w-4 sys-detail-card" aria-labelledby="sys-detail-title" aria-live="polite"><header><h2 id="sys-detail-title">System</h2></header><div class="dash-body" id="sys-detail"></div></article>
             <article class="dash-card" aria-labelledby="sys-edges-title"><header><h2 id="sys-edges-title">Connections</h2><span class="dash-head" id="sys-count"></span></header><div class="dash-body" id="sys-edges"></div></article>
           </div>
@@ -1981,6 +2016,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       if (agentProject !== project) clearAgentChat();
       go.disabled = true; go.textContent = 'Searching…';
       $('#ask-hint').textContent = 'Searching the local graph and checking source locations…';
+      const started = performance.now();
       try {
         const history = agentHistory.slice(-12);
         const result = await api('/api/agent', {project, question: request.a, operation: 'query', limit: 10, hideTests: state.hideTests, hideGenerated: state.hideGenerated, history});
@@ -1989,7 +2025,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
         appendAgentMessage('assistant', result.text);
         agentHistory.push({role:'user', content:request.a}, {role:'assistant', content:result.text.slice(0,8000)});
         $('#ask-a').value = '';
-        $('#ask-hint').textContent = 'Evidence retrieved locally. Each result identifies its source type and verification status.';
+        $('#ask-hint').textContent = `Evidence retrieved locally in ${((performance.now() - started) / 1000).toFixed(2)} s. Each result identifies its source type and verification status.`;
       } catch (error) { $('#ask-hint').textContent = error.message; }
       finally { go.disabled = false; go.textContent = 'Ask'; }
       return;
@@ -2298,6 +2334,58 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     if (text.trim()) runAsk(); else $('#ask-a').focus();
   }
   let claudeAgentsRequest = 0;
+  const benchmarkRows = new Map();
+  let benchmarkProject = null;
+  async function loadBenchModels() {
+    const select = $('#bench-model');
+    if (!serverToken) { select.replaceChildren(new Option('Local server required', '')); return; }
+    try {
+      const result = await api('/api/agent/status');
+      const models = Array.isArray(result.models) ? result.models : [];
+      const previous = select.value;
+      select.replaceChildren(...(models.length ? models : ['']).map(name => new Option(name || 'No local model installed', name)));
+      if (models.includes(previous)) select.value = previous;
+      else if (models.includes('qwen3:14b-q4_K_M')) select.value = 'qwen3:14b-q4_K_M';
+    } catch (_) { select.replaceChildren(new Option('Local model unavailable', '')); }
+  }
+  function updateBenchFields() {
+    const agent = $('#bench-agent').value, bridge = agent === 'bridge';
+    document.querySelectorAll('.bench-log').forEach(el => el.classList.toggle('hidden', agent !== 'log'));
+    document.querySelectorAll('.bench-bridge').forEach(el => el.classList.toggle('hidden', !bridge));
+    document.querySelectorAll('.bench-argo').forEach(el => el.classList.toggle('hidden', !bridge || $('#bench-bridge-source').value !== 'argocd'));
+    const noLlm = $('#bench-no-llm');
+    noLlm.disabled = agent === 'graph' || agent === 'explorer' || bridge;
+    if (noLlm.disabled) noLlm.checked = agent === 'graph';
+    $('#bench-model').disabled = agent === 'graph' || noLlm.checked;
+  }
+  function renderBenchResults() {
+    const rows = [...benchmarkRows.values()];
+    $('#bench-results').innerHTML = rows.length ? `<table class="agent-bench-table"><thead><tr><th>Agent</th><th>Mode</th><th>Median</th><th>Range</th><th>Runs</th></tr></thead><tbody>${rows.map(row => `<tr><td>${escapeHtml(row.name)}</td><td>${escapeHtml(row.mode)}</td><td>${row.median === null ? '—' : `${row.median.toFixed(3)} s`}</td><td>${row.min === null ? '—' : `${row.min.toFixed(3)}–${row.max.toFixed(3)} s`}</td><td>${row.success} passed${row.failed ? `, ${row.failed} failed` : ''}</td></tr>`).join('')}</tbody></table>` : '';
+  }
+  async function runAgentBenchmark(event) {
+    event.preventDefault();
+    const project = state.projectPath, agent = $('#bench-agent').value, button = $('#bench-run'), status = $('#bench-status');
+    if (!serverToken || !project) { status.textContent = 'Open a project using the local server first.'; return; }
+    if (benchmarkProject !== project) { benchmarkRows.clear(); benchmarkProject = project; renderBenchResults(); }
+    const noLlm = $('#bench-no-llm').checked;
+    const body = {project, agent, question: $('#bench-question').value.trim(), model: $('#bench-model').value,
+      repeats: Number($('#bench-repeats').value), no_llm: noLlm, log: $('#bench-log').value.trim(), log_source: $('#bench-log-source').value,
+      bridge_source: $('#bench-bridge-source').value, service: $('#bench-service').value.trim(), application: $('#bench-application').value.trim(),
+      app_namespace: $('#bench-app-namespace').value.trim(), namespace: $('#bench-namespace').value.trim()};
+    const name = $('#bench-agent').selectedOptions[0].textContent;
+    button.disabled = true; status.textContent = `Running ${name}… This can take several minutes.`;
+    try {
+      const result = await api('/api/agent/benchmark', body);
+      if (state.projectPath !== project) return;
+      const row = result.results?.[agent];
+      if (!row) throw new Error('No benchmark result was returned.');
+      benchmarkRows.set(agent, {name, mode: agent === 'graph' || noLlm ? 'No model' : body.model,
+        median: row.median_seconds, min: row.min_seconds, max: row.max_seconds, success: row.successful_runs, failed: row.failed_runs});
+      renderBenchResults();
+      status.textContent = row.failed_runs ? `${row.failed_runs} run(s) failed or timed out. Check the local model and inputs.` : `Finished ${name}. Times include process startup; model cache state is not controlled.`;
+    } catch (error) { status.textContent = error.message; }
+    finally { button.disabled = false; }
+  }
   async function loadClaudeAgents() {
     const seq = ++claudeAgentsRequest, project = state.projectPath;
     const status = $('#claude-agents-status'), list = $('#claude-agents-list');
@@ -2333,6 +2421,21 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     else if (nav === 'agents') showPage('agents');
     updateNav();
   }
+  let serverCheckPending = false;
+  async function checkServerConnection() {
+    const badge = $('#server-connection');
+    if (!serverToken) { badge.textContent = 'Standalone file'; badge.title = 'Open Token Graph with its local server for project tools.'; return; }
+    if (serverCheckPending || document.visibilityState === 'hidden') return;
+    serverCheckPending = true;
+    try {
+      await api('/api/ping');
+      badge.textContent = 'Server connected'; badge.className = 'server-pill online'; badge.title = 'Local Token Graph server is responding.';
+    } catch (_) {
+      badge.textContent = 'Server unavailable'; badge.className = 'server-pill offline'; badge.title = 'Restart Token Graph and open the new address it provides.';
+    } finally { serverCheckPending = false; }
+  }
+  checkServerConnection();
+  setInterval(checkServerConnection, 15000);
   // AI colour: every local model gets its own colour (--ai-color: chip border, Ask borders), so switching
   // models is visible at a glance; while AI works (a question, or an AI graph build) they pulse in it.
   const aiWork = { asks: 0, jobModel: '' };
@@ -2477,7 +2580,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
   // The server scans every service for NATS / Kafka / RabbitMQ / MassTransit / gRPC / HTTP endpoints
   // and links producer to consumer (scripts/system_links.py). This page draws the service map and
   // shows the code lines behind each connection; a service opens as a normal code graph.
-  const sysState = { list: [], current: null, scan: null, loading: false, error: '', note: '', editing: null, selected: null, projectQuery: '', hidden: new Set(), pos: new Map(), drag: null, noClick: false, graphIds: new Map(), building: false, browser: null, noteError: false, saving: false };
+  const sysState = { list: [], current: null, scan: null, loading: false, error: '', note: '', editing: null, selected: null, projectQuery: '', hidden: new Set(), pos: new Map(), drag: null, pan: null, noClick: false, focusOnly: false, mapView: { x: 500, y: 300, zoom: 1 }, graphIds: new Map(), building: false, browser: null, noteError: false, saving: false };
   const TECH_COLOR = { nats: '#52c9e8', http: '#8877ff', grpc: '#55d6a2', kafka: '#e6ad63', rabbitmq: '#f09461', masstransit: '#e58bd4', redis: '#f07883', websocket: '#b2d66e', mqtt: '#e0d56b', sqs: '#6f9cff', servicebus: '#53b9a6' };
   const TECH_LABEL = { nats: 'NATS', http: 'HTTP', grpc: 'gRPC', kafka: 'Kafka', rabbitmq: 'RabbitMQ', masstransit: 'MassTransit', redis: 'Redis', websocket: 'WebSocket', mqtt: 'MQTT', sqs: 'SQS/SNS', servicebus: 'Service Bus', pubsub: 'Pub/Sub', zeromq: 'ZeroMQ', jms: 'JMS' };
   const MATCH_NOTE = { exact: 'same subject/topic text on both sides', 'shared name': 'both sides use the same constant name', route: 'client path matches a server route; the destination is inferred', url: 'a URL names this service (caller side only)', 'config key': 'a config key names this service (caller side only)' };
@@ -2507,7 +2610,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     try {
       const result = await api('/api/systems/scan', { id, refresh });
       if (sysState.current?.id !== id) return;
-      sysState.scan = result; sysState.selected = null;
+      sysState.scan = result; sysState.selected = null; sysState.focusOnly = false;
       layoutSystem();
     } catch (error) { sysState.error = error.message; }
     sysState.loading = false;
@@ -2516,7 +2619,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
 
   function selectSystem(id) {
     sysState.current = sysState.list.find(s => s.id === id) || null;
-    sysState.scan = null; sysState.selected = null; sysState.projectQuery = '';
+    sysState.scan = null; sysState.selected = null; sysState.projectQuery = ''; sysState.focusOnly = false; sysState.mapView = { x: 500, y: 300, zoom: 1 };
     try { localStorage.setItem('tokenGraph.system', id); } catch (_) { /* per-viewer convenience only */ }
     renderSystem();
     scanSystem(false);
@@ -2532,6 +2635,10 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
   }
 
   // ---- service map (SVG) ----
+  function visibleSystemEdges() {
+    const selected = sysState.focusOnly && sysState.selected?.type === 'service' ? sysState.selected.index : null;
+    return sysState.scan.edges.map((edge, index) => [edge, index]).filter(([edge]) => !sysState.hidden.has(edge.tech) && (selected === null || edge.source === selected || edge.target === selected));
+  }
   function mapSvg() {
     const { services, edges } = sysState.scan;
     const query = sysState.projectQuery.trim().toLocaleLowerCase();
@@ -2542,7 +2649,8 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     const radius = i => 18 + Math.min(14, degree[i] * 2);
     const pairKey = e => `${Math.min(e.source, e.target)}-${Math.max(e.source, e.target)}`;
     const pairTotal = new Map(), pairSeen = new Map();
-    const visible = edges.map((e, i) => [e, i]).filter(([e]) => !sysState.hidden.has(e.tech));
+    const visible = visibleSystemEdges();
+    const focusedNodes = sysState.focusOnly && sysState.selected?.type === 'service' ? new Set([sysState.selected.index, ...visible.flatMap(([e]) => [e.source, e.target])]) : null;
     visible.forEach(([e]) => pairTotal.set(pairKey(e), (pairTotal.get(pairKey(e)) || 0) + 1));
     const sel = sysState.selected;
     let lines = '', labels = '';
@@ -2560,19 +2668,21 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       const on = sel?.type === 'edge' && sel.index === index;
       const dim = (sel && !on && !(sel.type === 'service' && (e.source === sel.index || e.target === sel.index))) || (query && !matchesService(services[e.source]) && !matchesService(services[e.target]));
       const color = techColor(e.tech);
-      lines += `<g class="sys-edge${on ? ' on' : ''}${dim ? ' dim' : ''}" data-sys="edge" data-i="${index}"><path d="${d}" class="hit"/><path d="${d}" stroke="${color}" marker-end="url(#sys-arrow-${e.tech.replace(/\W/g, '')})"${e.confidence.every(x => x === 'url' || x === 'config key' || x === 'shared name' || x === 'route') ? ' stroke-dasharray="6 4"' : ''}/><title>${escapeHtml(`${services[e.source].name} → ${services[e.target].name} · ${techLabel(e.tech)}\n${e.channels.map(ch => ch.name).join('\n')}`)}</title></g>`;
+      lines += `<g class="sys-edge${on ? ' on' : ''}${dim ? ' dim' : ''}" data-sys="edge" data-i="${index}" tabindex="0" role="button" aria-label="${escapeHtml(`${services[e.source].name} to ${services[e.target].name}, ${techLabel(e.tech)} connection`)}"><path d="${d}" class="hit"/><path d="${d}" stroke="${color}" marker-end="url(#sys-arrow-${e.tech.replace(/\W/g, '')})"${e.confidence.every(x => x === 'url' || x === 'config key' || x === 'shared name' || x === 'route') ? ' stroke-dasharray="6 4"' : ''}/><title>${escapeHtml(`${services[e.source].name} → ${services[e.target].name} · ${techLabel(e.tech)}\n${e.channels.map(ch => ch.name).join('\n')}`)}</title></g>`;
       const m = { x: 0.25 * s.x + 0.5 * c.x + 0.25 * t.x, y: 0.25 * s.y + 0.5 * c.y + 0.25 * t.y };
       const text = `${techLabel(e.tech)}${e.count > 1 ? ` · ${e.count}` : ''}`, w = text.length * 6.4 + 12;
       labels += `<g class="sys-label${dim ? ' dim' : ''}" data-sys="edge" data-i="${index}"><rect x="${(m.x - w / 2).toFixed(1)}" y="${(m.y - 9).toFixed(1)}" width="${w.toFixed(1)}" height="18" rx="9" stroke="${color}"/><text x="${m.x.toFixed(1)}" y="${(m.y + 3.5).toFixed(1)}" fill="${color}">${escapeHtml(text)}</text></g>`;
     }
     const nodes = services.map((s, i) => {
+      if (focusedNodes && !focusedNodes.has(i)) return '';
       const p = P(i), on = sel?.type === 'service' && sel.index === i;
       const dim = (sel && !on && !(sel.type === 'edge' && [edges[sel.index].source, edges[sel.index].target].includes(i)) && !(sel.type === 'service' && edges.some(e => (e.source === sel.index && e.target === i) || (e.target === sel.index && e.source === i)))) || (query && !matchesService(s));
-      return `<g class="sys-node${on ? ' on' : ''}${dim ? ' dim' : ''}${s.missing ? ' missing' : ''}" data-sys="node" data-i="${i}" transform="translate(${p.x.toFixed(1)},${p.y.toFixed(1)})"><circle r="${radius(i)}"/><text class="sys-node-icon" y="4">${escapeHtml(s.name.slice(0, 2).toUpperCase())}</text><text class="sys-node-name" y="${radius(i) + 16}">${escapeHtml(s.name)}</text><text class="sys-node-sub" y="${radius(i) + 29}">${escapeHtml(s.missing ? 'folder not found' : `${format(s.files)} files`)}</text><title>${escapeHtml(s.path)}</title></g>`;
+      return `<g class="sys-node${on ? ' on' : ''}${dim ? ' dim' : ''}${s.missing ? ' missing' : ''}" data-sys="node" data-i="${i}" tabindex="0" role="button" aria-label="${escapeHtml(`Select service ${s.name}`)}" transform="translate(${p.x.toFixed(1)},${p.y.toFixed(1)})"><circle r="${radius(i)}"/><text class="sys-node-icon" y="4">${escapeHtml(s.name.slice(0, 2).toUpperCase())}</text><text class="sys-node-name" y="${radius(i) + 16}">${escapeHtml(s.name)}</text><text class="sys-node-sub" y="${radius(i) + 29}">${escapeHtml(s.missing ? 'folder not found' : `${format(s.files)} files`)}</text><title>${escapeHtml(s.path)}</title></g>`;
     }).join('');
     const techs = [...new Set(edges.map(e => e.tech))];
     const markers = techs.map(t => `<marker id="sys-arrow-${t.replace(/\W/g, '')}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="${techColor(t)}"/></marker>`).join('');
-    return `<svg class="sys-svg" viewBox="0 0 1000 600" role="img" aria-label="Service map: ${services.length} services, ${edges.length} connections"><defs>${markers}</defs>${lines}${nodes}${labels}</svg>`;
+    const view = sysState.mapView, width = 1000 / view.zoom, height = 600 / view.zoom;
+    return `<svg class="sys-svg" viewBox="${view.x - width / 2} ${view.y - height / 2} ${width} ${height}" role="group" aria-label="Service map: ${services.length} services, ${visible.length} visible connections"><defs>${markers}</defs>${lines}${nodes}${labels}</svg>`;
   }
 
   // ---- one graph for the whole system: all services' code + cross-service links (Graph page, 2D/3D) ----
@@ -2633,10 +2743,10 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     const from = services[e.source], to = services[e.target];
     const how = e.confidence.map(c => MATCH_NOTE[c] || c).join('; ');
     return `<div class="sys-detail-head"><strong>${escapeHtml(from.name)} → ${escapeHtml(to.name)}</strong>${techChip(e.tech)}</div>
-      <p class="dash-note">Matched by: ${escapeHtml(how)}. Pattern matches, not proof — check the lines below.</p>
+      <p class="dash-note"><strong>Why this connection appears:</strong> ${escapeHtml(how)}. This is static evidence; it does not confirm a live connection.</p>
       ${e.channels.map(ch => `<div class="sys-channel"><div class="sys-channel-name"><code>${escapeHtml(ch.name)}</code></div>
-        <div class="sys-side"><span class="eyebrow">${escapeHtml(from.name)} sends</span>${evidenceList(ch.from, e.source, '—')}</div>
-        <div class="sys-side"><span class="eyebrow">${escapeHtml(to.name)} receives</span>${evidenceList(ch.to, e.target, 'Not located in the code: only the caller side names this service.')}</div></div>`).join('')}`;
+        <div class="sys-side"><span class="eyebrow">${escapeHtml(from.name)} · caller / publisher evidence</span>${evidenceList(ch.from, e.source, 'No source evidence found.')}</div>
+        <div class="sys-side"><span class="eyebrow">${escapeHtml(to.name)} · receiver evidence</span>${evidenceList(ch.to, e.target, 'No receiver evidence found; this destination is inferred from the caller or configuration.')}</div></div>`).join('')}`;
   }
 
   function serviceDetail(i) {
@@ -2650,10 +2760,10 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       <div class="sys-chips">${techs}</div>
       <p class="dash-note">${format(s.files)} files scanned · ${format(s.routes)} HTTP routes · ↑ sends/calls, ↓ receives/serves</p>
       <div class="dash-footer">${s.has_graph ? `<button type="button" class="dash-link" data-sys="graph" data-i="${i}">Open code graph</button>` : `<button type="button" class="dash-link" data-sys="build" data-i="${i}">Build code graph</button>`}</div>
-      <h3 class="sys-h3">Sends to / calls (${outgoing.length})</h3>${outgoing.length ? `<ul class="sys-links">${outgoing.map(x => edgeRow(x, x[0].target)).join('')}</ul>` : '<p class="dash-note">Nothing in this system.</p>'}
-      <h3 class="sys-h3">Receives from / called by (${incoming.length})</h3>${incoming.length ? `<ul class="sys-links">${incoming.map(x => edgeRow(x, x[0].source)).join('')}</ul>` : '<p class="dash-note">Nothing in this system.</p>'}
+      <h3 class="sys-h3">Sends to / calls (${outgoing.length})</h3>${outgoing.length ? `<ul class="sys-links">${outgoing.map(x => edgeRow(x, x[0].target)).join('')}</ul>` : '<p class="dash-note">No outgoing connections detected in this system.</p>'}
+      <h3 class="sys-h3">Receives from / called by (${incoming.length})</h3>${incoming.length ? `<ul class="sys-links">${incoming.map(x => edgeRow(x, x[0].source)).join('')}</ul>` : '<p class="dash-note">No incoming connections detected in this system.</p>'}
       <h3 class="sys-h3">No partner in this system (${s.unmatched.length})</h3>
-      ${outside.length ? `<ul class="sys-evidence">${outside.map(ev => `<li><button type="button" data-sys="open" data-svc="${i}" data-file="${escapeHtml(ev.file)}" data-line="${ev.line}">${techChip(ev.tech, `${techLabel(ev.tech)} ${ev.role === 'out' ? '↑' : '↓'}`)}<code>${escapeHtml(ev.channel)}</code><span class="sys-loc">${escapeHtml(ev.file)}:${ev.line}</span></button></li>`).join('')}</ul>` : '<p class="dash-note">Every endpoint found here is connected.</p>'}`;
+      ${outside.length ? `<ul class="sys-evidence">${outside.map(ev => `<li><button type="button" data-sys="open" data-svc="${i}" data-file="${escapeHtml(ev.file)}" data-line="${ev.line}">${techChip(ev.tech, `${techLabel(ev.tech)} ${ev.role === 'out' ? '↑' : '↓'}`)}<code>${escapeHtml(ev.channel)}</code><span class="sys-loc">${escapeHtml(ev.file)}:${ev.line}</span></button></li>`).join('')}</ul>` : '<p class="dash-note">No unmatched endpoints detected.</p>'}`;
   }
 
   function summaryDetail() {
@@ -2765,7 +2875,12 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       else if (action === 'edit' && sysState.current) { const c = sysState.current; sysState.editing = { id: c.id, name: c.name, root: c.root || '', services: c.services.map(s => ({ ...s, on: true })) }; sysState.note = ''; }
       else if (action === 'cancel') { sysState.editing = null; sysState.browser = null; }
       else if (action === 'rescan') { scanSystem(true); return; }
+      else if (action === 'retry-load') { await loadSystems(); return; }
       else if (action === 'system-graph') { openSystemGraph(); return; }
+      else if (action === 'zoom-in') sysState.mapView.zoom = Math.min(3, sysState.mapView.zoom * 1.35);
+      else if (action === 'zoom-out') sysState.mapView.zoom = Math.max(.6, sysState.mapView.zoom / 1.35);
+      else if (action === 'fit-map') sysState.mapView = { x: 500, y: 300, zoom: 1 };
+      else if (action === 'focus' && sysState.selected?.type === 'service') sysState.focusOnly = !sysState.focusOnly;
       else if (action === 'delete' && sysState.current) {
         if (!confirm(`Delete the system "${sysState.current.name}"?\n\nOnly the list of services is removed; no files are touched.`)) return;
         await api('/api/systems/delete', { id: sysState.current.id });
@@ -2801,9 +2916,9 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
           await loadSystems(); return;
         }
       }
-      else if (action === 'node') { if (sysState.noClick) { sysState.noClick = false; return; } sysState.selected = sysState.selected?.type === 'service' && sysState.selected.index === i ? null : { type: 'service', index: i }; }
-      else if (action === 'edge') sysState.selected = { type: 'edge', index: i };
-      else if (action === 'clear') sysState.selected = null;
+      else if (action === 'node') { if (sysState.noClick) { sysState.noClick = false; return; } sysState.selected = sysState.selected?.type === 'service' && sysState.selected.index === i ? null : { type: 'service', index: i }; if (!sysState.selected) sysState.focusOnly = false; }
+      else if (action === 'edge') { sysState.selected = { type: 'edge', index: i }; sysState.focusOnly = false; }
+      else if (action === 'clear') { sysState.selected = null; sysState.focusOnly = false; }
       else if (action === 'tech') { const t = target.dataset.tech; if (sysState.hidden.has(t)) sysState.hidden.delete(t); else sysState.hidden.add(t); }
       else if (action === 'graph' || action === 'build') {
         const s = sysState.scan.services[i];
@@ -2841,6 +2956,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     if (sysState.editing) { main.classList.add('hidden'); message.innerHTML = editorHtml(); message.classList.remove('hidden'); return; }
     if (!sysState.current) {
       main.classList.add('hidden');
+      if (sysState.error) { message.innerHTML = errorHtml(sysState.error).replace('data-dash="retry"', 'data-sys="retry-load"'); message.classList.remove('hidden'); return; }
       message.innerHTML = `<div class="dash-card"><div class="dash-empty"><strong>Map how your services talk to each other</strong><p>A system is a set of service folders — e.g. SparkleGaming with Adastra and Bet. Token Graph scans them for NATS, Kafka, RabbitMQ, MassTransit, gRPC and HTTP calls in any language and draws who sends what to whom.</p><button type="button" class="dash-link primary" data-sys="new">Create a system</button></div></div>`;
       message.classList.remove('hidden');
       return;
@@ -2851,17 +2967,22 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       message.classList.remove('hidden');
       return;
     }
-    message.classList.add('hidden'); main.classList.remove('hidden');
+    if (sysState.error) { message.innerHTML = `<div class="dash-error" role="alert">${escapeHtml(sysState.error)}. Showing the previous scan.</div>`; message.classList.remove('hidden'); }
+    else message.classList.add('hidden');
+    main.classList.remove('hidden');
     const { edges } = sysState.scan, techs = [...new Set(edges.map(e => e.tech))];
     sysEl('legend').innerHTML = techs.map(t => `<button type="button" class="sys-chip${sysState.hidden.has(t) ? ' off' : ''}" style="--tc:${techColor(t)}" data-sys="tech" data-tech="${escapeHtml(t)}" aria-pressed="${!sysState.hidden.has(t)}">${escapeHtml(techLabel(t))}</button>`).join('');
     sysEl('map').innerHTML = mapSvg();
     const sel = sysState.selected;
+    const focus = sysEl('focus');
+    focus.disabled = sel?.type !== 'service'; focus.setAttribute('aria-pressed', String(sysState.focusOnly)); focus.textContent = sysState.focusOnly ? 'Show all services' : 'Focus selected service';
     sysEl('detail-title').textContent = sel?.type === 'edge' ? 'Connection' : sel?.type === 'service' ? 'Service' : 'System';
     sysEl('detail').innerHTML = (sel ? `<button type="button" class="sys-x sys-close" data-sys="clear" aria-label="Back to system summary">×</button>` : '') + (sel?.type === 'edge' ? edgeDetail(sel.index) : sel?.type === 'service' ? serviceDetail(sel.index) : summaryDetail());
-    sysEl('count').textContent = `${edges.length}`;
+    const visibleEdges = visibleSystemEdges();
+    sysEl('count').textContent = visibleEdges.length === edges.length ? `${edges.length}` : `${visibleEdges.length} of ${edges.length}`;
     const names = sysState.scan.services.map(s => s.name);
-    sysEl('edges').innerHTML = edges.length ? `<table class="sys-table"><thead><tr><th>From</th><th></th><th>To</th><th>Via</th><th>Subjects / topics / routes</th></tr></thead><tbody>${edges.map((e, k) => `<tr data-sys="edge" data-i="${k}" class="${sel?.type === 'edge' && sel.index === k ? 'on' : ''}"><td>${escapeHtml(names[e.source])}</td><td aria-hidden="true">→</td><td>${escapeHtml(names[e.target])}</td><td>${techChip(e.tech)}</td><td class="sys-channels">${escapeHtml(e.channels.map(c => c.name).join(', '))}</td></tr>`).join('')}</tbody></table>`
-      : '<p class="dash-note">No connections found between these services. Check “No partner in this system” on each service: names that differ on both sides (e.g. config-driven subjects) cannot be matched yet.</p>';
+    sysEl('edges').innerHTML = visibleEdges.length ? `<table class="sys-table"><thead><tr><th>From</th><th></th><th>To</th><th>Via</th><th>Subjects / topics / routes</th></tr></thead><tbody>${visibleEdges.map(([e, k]) => `<tr data-sys="edge" data-i="${k}" class="${sel?.type === 'edge' && sel.index === k ? 'on' : ''}"><td><button type="button" class="sys-edge-link" data-sys="edge" data-i="${k}" aria-label="${escapeHtml(`Inspect connection from ${names[e.source]} to ${names[e.target]}`)}">${escapeHtml(names[e.source])}</button></td><td aria-hidden="true">→</td><td>${escapeHtml(names[e.target])}</td><td>${techChip(e.tech)}</td><td class="sys-channels">${escapeHtml(e.channels.map(c => c.name).join(', '))}</td></tr>`).join('')}</tbody></table>`
+      : `<p class="dash-note">${edges.length ? 'No connections match the current filters or selected service.' : 'No connections were detected. Check each service for unmatched endpoints; some patterns cannot be resolved.'}</p>`;
   }
 
   // Dragging a service moves it; a click without movement selects it.
@@ -2872,10 +2993,24 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
   }
   sysEl('map').addEventListener('pointerdown', event => {
     const node = event.target.closest('[data-sys="node"]');
-    if (!node || event.button !== 0) return;
+    if (event.button !== 0) return;
+    if (!node) {
+      if (event.target.closest('[data-sys]')) return;
+      sysState.pan = { x: event.clientX, y: event.clientY, view: { ...sysState.mapView } };
+      return;
+    }
     sysState.drag = { i: Number(node.dataset.i), moved: false, start: svgPoint(event) };
   });
   sysEl('map').addEventListener('pointermove', event => {
+    if (sysState.pan) {
+      const rect = sysEl('map').querySelector('svg')?.getBoundingClientRect(), pan = sysState.pan;
+      if (rect?.width && rect.height) {
+        sysState.mapView.x = pan.view.x - (event.clientX - pan.x) * 1000 / (pan.view.zoom * rect.width);
+        sysState.mapView.y = pan.view.y - (event.clientY - pan.y) * 600 / (pan.view.zoom * rect.height);
+        sysEl('map').innerHTML = mapSvg();
+      }
+      return;
+    }
     const drag = sysState.drag;
     if (!drag) return;
     const p = svgPoint(event);
@@ -2884,7 +3019,8 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     sysState.pos.set(sysState.scan.services[drag.i].path, { x: Math.max(30, Math.min(970, p.x)), y: Math.max(30, Math.min(560, p.y)) });
     sysEl('map').innerHTML = mapSvg();
   });
-  window.addEventListener('pointerup', () => { if (sysState.drag) { sysState.noClick = sysState.drag.moved; sysState.drag = null; } });
+  window.addEventListener('pointerup', () => { if (sysState.drag) { sysState.noClick = sysState.drag.moved; sysState.drag = null; } sysState.pan = null; });
+  window.addEventListener('pointercancel', () => { sysState.drag = null; sysState.pan = null; });
   $('#system-page').addEventListener('click', event => {
     const target = event.target.closest('[data-sys]');
     if (target && target.dataset.sys !== 'toggle') onSystemAction(target);
@@ -2900,6 +3036,14 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     if (sysState.scan) sysEl('map').innerHTML = mapSvg();
   });
   $('#system-page').addEventListener('keydown', event => {
+    const mapTarget = event.target.closest('.sys-node, .sys-edge');
+    if (mapTarget && (event.key === 'Enter' || event.key === ' ')) {
+      event.preventDefault();
+      const action = mapTarget.dataset.sys, index = mapTarget.dataset.i;
+      onSystemAction(mapTarget);
+      sysEl('map').querySelector(`[data-sys="${action}"][data-i="${index}"]`)?.focus();
+      return;
+    }
     if (event.key === 'Enter' && event.target.id === 'sys-path') onSystemAction({ dataset: { sys: 'add-path' } });
     if (event.key === 'Enter' && event.target.id === 'sys-project-search' && sysState.scan) {
       event.preventDefault();
@@ -3013,7 +3157,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     updateNav();
     try { localStorage.setItem('tokenGraph.page', state.page); } catch (_) { /* per-viewer convenience only */ }
     if (state.page === 'system') loadSystems();
-    else if (state.page === 'agents') loadClaudeAgents();
+    else if (state.page === 'agents') { loadClaudeAgents(); loadBenchModels(); if (benchmarkProject !== state.projectPath) { benchmarkRows.clear(); benchmarkProject = state.projectPath; renderBenchResults(); } }
     else if (state.page === 'documentation') loadDocumentation();
     else if (info.plain) refreshDashboard();
     else if (state.page === 'graph') { resize(); fitGraph(); }
@@ -3030,6 +3174,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     const seq = ++dash.seq;
     const project = state.projectPath;
     if (!serverToken || !project) { renderDashboard(); return; }
+    if (dash.savingsProject !== project) dash.savingsError = '';
     dash.loading = true;
     const aiFresh = dash.ai && Date.now() - dash.aiAt < 15000;
     dash.aiLoading = !aiFresh;
@@ -3046,7 +3191,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     if (ai.status === 'fulfilled') { dash.ai = ai.value; dash.aiAt = Date.now(); dash.aiError = ''; }
     else { dash.aiError = ai.reason?.message || 'Could not check the local AI provider.'; }
     if (savings.status === 'fulfilled') { dash.savings = savings.value.sessions || []; dash.savingsProject = project; dash.savingsError = ''; }
-    else { dash.savingsError = savings.reason?.message || 'Could not read the Claude Code sessions.'; }
+    else { dash.savings = null; dash.savingsProject = project; dash.savingsError = savings.reason?.message || 'Could not read the Claude Code sessions.'; }
     renderDashboard();
   }
 
@@ -3105,11 +3250,17 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
   const percentText = p => p === null || p === undefined ? '—' : `${p}%`;
   function renderSavings() {
     if (!serverToken) { setCard('savings', serverOnlyHtml('Counting saved tokens'), pill('off', 'Server off')); return; }
+    if (!state.projectPath) {
+      const choices = dash.savingsChoices;
+      const picker = choices?.length ? `<label class="eyebrow" for="savings-project">LOCAL PROJECT</label><select class="project-select" id="savings-project">${choices.map(p => `<option value="${escapeHtml(p.path)}">${escapeHtml(p.name)} — ${escapeHtml(p.path)}</option>`).join('')}</select><button type="button" class="dash-link primary" data-dash="savings-open-project">Open project</button>` : choices ? '<p>No saved local project graphs were found. Choose a project folder in Settings first.</p><button type="button" class="dash-link" data-dash="savings-settings">Open Settings</button>' : '<button type="button" class="dash-link" data-dash="savings-list-projects">Choose local project</button>';
+      setCard('savings', `<div class="dash-empty"><p>This graph is not linked to a single local project folder. Open a project from this computer to view its Claude Code savings.</p>${picker}</div>`, pill('off', 'Choose project'));
+      return;
+    }
     const sessions = dash.savingsProject === state.projectPath ? dash.savings : null;
     if (!sessions) { setCard('savings', dash.savingsError ? errorHtml(dash.savingsError) : loadingHtml('Reading Claude Code sessions…'), '', true); return; }
     const refresh = '<div class="dash-footer"><button type="button" class="dash-link" data-dash="savings-refresh">Refresh</button></div>';
     if (!sessions.length) {
-      setCard('savings', `<div class="dash-empty"><p>No recognized graph queries for this project were found in the 300 most recent Claude Code session and subagent transcripts on this computer.</p></div>${refresh}`, pill('off', 'No sessions'));
+      setCard('savings', `<div class="dash-empty"><p>No recognized Claude Code graph queries were found for this project.</p><p>To start tracking, ask Claude Code to explore this project using Token Graph, then refresh this card.</p><p class="dash-note">Checks this project's recent history and the 300 most recent Claude transcripts on this computer. Some query formats may not be recognized.</p></div>${refresh}`, pill('off', 'No sessions'));
       return;
     }
     const latest = sessions[0];
@@ -3125,14 +3276,14 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     ].join('');
     const started = s => s.started ? new Date(s.started).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'unknown time';
     const sessionName = s => s.title || `${s.scope === 'subagent' ? 'Subagent' : 'Session'} ${s.session.slice(0, 8)}`;
-    const where = s => `<p class="dash-note"><strong>${escapeHtml(sessionName(s))}</strong> · started ${escapeHtml(started(s))} · last active ${ago(s.updated)}<br>Folder: <code>${escapeHtml(s.folder || 'unknown')}</code> · session <code>${escapeHtml(s.session.slice(0, 8))}</code>${s.last_prompt ? `<br>Last request: “${escapeHtml(s.last_prompt.slice(0, 140))}”` : ''}</p>`;
+    const where = s => `<p class="dash-note"><strong>${escapeHtml(sessionName(s))}</strong> · started ${escapeHtml(started(s))} · last active ${ago(s.updated)}<br>Session started in: <code>${escapeHtml(s.folder || 'unknown')}</code> · session <code>${escapeHtml(s.session.slice(0, 8))}</code>${s.last_prompt ? `<br>Last request: “${escapeHtml(s.last_prompt.slice(0, 140))}”` : ''}</p>`;
     const rows = bars(sessions.map(s => ({
       name: `${sessionName(s)} · ${ago(s.updated)}`,
       value: Math.max(0, s.saved_tokens),
       text: `${tokensText(s.saved_tokens)} · ${percentText(s.saved_percent)}`,
       title: `${sessionName(s)} — folder ${s.folder || 'unknown'}, started ${started(s)}, session ${s.session}: without graph ${format(s.without_graph_tokens)}, with graph ${format(s.with_graph_tokens)}, saved ${format(s.saved_tokens)} tokens (${percentText(s.saved_percent)}) in ${count(s.graph_answers, 'graph answer')}`,
     })));
-    setCard('savings', `<p class="dash-sub">Latest session</p>${where(latest)}<div class="dash-tiles">${tiles}</div><p class="dash-sub">Saved per session (hover for folder and time)</p>${rows}<p class="dash-note">Estimate from the Claude Code transcripts on this computer (4 characters ≈ 1 token, no model used). Without graph: the files a graph answer pointed to and Claude then opened, read in full. With graph: the answers plus what Claude read from those files.</p>${refresh}`,
+    setCard('savings', `<p class="dash-sub">Latest session</p>${where(latest)}<p class="dash-note">Sessions can start in another folder and still query this project's graph.</p><div class="dash-tiles">${tiles}</div><p class="dash-sub">Saved per session (hover for folder and time)</p>${rows}<p class="dash-note">Estimate from the Claude Code transcripts on this computer (4 characters ≈ 1 token, no model used). Without graph: the files a graph answer pointed to and Claude then opened, read in full. With graph: the answers plus what Claude read from those files.</p>${refresh}`,
       pill(status, `${percentText(latest.saved_percent)} saved`, 'Latest session'));
   }
 
@@ -3312,6 +3463,21 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     if (action === 'docs') { generateDocs(); return; }
     if (action === 'retry') { dash.aiAt = 0; refreshDashboard(); return; }
     if (action === 'savings-refresh') { refreshDashboard(); return; }
+    if (action === 'savings-settings') { showPage('settings'); return; }
+    if (action === 'savings-list-projects') {
+      setCard('savings', loadingHtml('Finding local projects…'), '', true);
+      try { const result = await api('/api/projects'); dash.savingsChoices = (result.projects || []).filter(p => p.has_graph); }
+      catch (error) { setCard('savings', errorHtml(error.message), pill('warning', 'Unavailable')); return; }
+      if (!state.projectPath) renderSavings();
+      return;
+    }
+    if (action === 'savings-open-project') {
+      const path = $('#savings-project')?.value;
+      if (!path || !dash.savingsChoices?.some(p => p.path === path)) return;
+      try { await openServerProject(path); }
+      catch (error) { setCard('savings', errorHtml(error.message), pill('warning', 'Unavailable')); }
+      return;
+    }
     if (action === 'server-help') { showServerInstructions(); return; }
     if (action === 'build-first') { if (serverToken) buildProject(); else showServerInstructions(); return; }
     if (action === 'update') { if (state.projectPath) buildProject(state.projectPath); return; }
@@ -3331,6 +3497,11 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     $('#docs-search').addEventListener('input', renderDocumentationList);
     $('#docs-list').addEventListener('click', event => { const item = event.target.closest('[data-doc-index]'); if (item) openDocumentation(Number(item.dataset.docIndex)); });
     $('#docs-graph').addEventListener('click', () => { showPage('graph'); setView('docs'); updateNav(); });
+    $('#agent-bench-form').addEventListener('submit', runAgentBenchmark);
+    $('#bench-agent').addEventListener('change', updateBenchFields);
+    $('#bench-bridge-source').addEventListener('change', updateBenchFields);
+    $('#bench-no-llm').addEventListener('change', updateBenchFields);
+    updateBenchFields();
     $('.agent-open-explorer').addEventListener('click', () => { showPage('ask'); setAskMode('llm'); $('#ask-a').focus(); });
     $('#claude-agents-refresh').addEventListener('click', loadClaudeAgents);
     $('#dashboard').addEventListener('click', onDashboardClick);

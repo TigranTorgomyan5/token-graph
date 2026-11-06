@@ -27,7 +27,7 @@ from pathlib import Path
 PROJECTS = Path.home() / ".claude" / "projects"
 CHARS_PER_TOKEN = 4
 ANSWER_ACTIONS = ("query", "explain", "affected", "path", "hubs")
-GRAPHIFY_CALL = re.compile(r'''(?:^|[;&|]\s*)(?:command\s+)?["']?(?:[^\s"']*/)?graphify["']?\s+(query|explain|affected|path|hubs)\b''')
+GRAPHIFY_CALL = re.compile(r'''(?:^|[;&|])\s*(?:(?:env|command)\s+)?(?:[A-Za-z_]\w*=(?:"[^"]*"|'[^']*'|[^\s;&|]+)\s+)*(?:timeout\s+\d+[smh]?\s+)?(?:"[^"\n]*[/\\]graphify(?:\.exe)?"|'[^'\n]*[/\\]graphify(?:\.exe)?'|(?:[^\s"';&|]*[/\\])?graphify(?:\.exe)?)\s+(query|explain|affected|path|hubs)\b''', re.I)
 SHELL_TOOLS = ("Bash", "PowerShell")
 READ_VERB = re.compile(r"\b(cat|sed|head|tail|less|more|Get-Content|gc|type|awk)\b")
 FILE_PATTERNS = (
@@ -99,6 +99,25 @@ def absolute_path(path: Path) -> bool:
     return path.is_absolute() or bool(re.match(r'^[A-Za-z]:[/\\]', str(path)))
 
 
+def command_path(raw: str, command: str, cwd: str | None) -> Path | None:
+    """Resolve only literal shell path variables; never evaluate shell expressions."""
+    raw = raw.strip("\"'")
+    assignments = {}
+    for match in re.finditer(r'''(?:^|[;\s])(?:export\s+)?\$?([A-Za-z_]\w*)=("[^"\n]*"|'[^'\n]*'|[^\s;&|]+)''', command):
+        assignments[match.group(1)] = match.group(2).strip("\"'")
+    unresolved = False
+    def expand(match):
+        nonlocal unresolved
+        name = match.group(1) or match.group(2)
+        value = {'PWD': cwd or '', 'HOME': str(Path.home())}.get(name, assignments.get(name, ''))
+        if not value: unresolved = True
+        return value
+    raw = re.sub(r'\$\{([A-Za-z_]\w*)\}|\$([A-Za-z_]\w*)', expand, raw)
+    if unresolved or not raw or '$' in raw or '`' in raw:
+        return None
+    return Path(_windows_path(raw)).expanduser()
+
+
 def project_root(command: str, cwd: str | None = None) -> Path | None:
     """The project a `token_graph.py launch <project>` command ran on ($var paths included).
 
@@ -108,12 +127,14 @@ def project_root(command: str, cwd: str | None = None) -> Path | None:
     if graphify:
         base = Path(cwd) if cwd else None
         for moved in CHANGE_DIR.finditer(command[:graphify.start(1)]):
-            target = Path(_windows_path(moved.group(1).strip("\"'"))).expanduser()
+            target = command_path(moved.group(1), command[:graphify.start(1)], cwd)
+            if target is None: return None
             base = target if absolute_path(target) else (base / target if base else None)
         # An explicit graph may point at another project's index.
         explicit = re.search(r'''--graph(?:=|\s+)("[^"]+"|'[^']+'|[^\s;&|]+)''', command[graphify.end():])
         if explicit:
-            graph = Path(_windows_path(explicit.group(1).strip("\"'"))).expanduser()
+            graph = command_path(explicit.group(1), command[:graphify.end()], cwd)
+            if graph is None: return None
             if not absolute_path(graph):
                 if base is None: return None
                 graph = base / graph
@@ -145,7 +166,7 @@ def project_root(command: str, cwd: str | None = None) -> Path | None:
 def graph_action(command: str) -> str | None:
     match = GRAPHIFY_CALL.search(command)
     if match:
-        return match.group(1)
+        return match.group(1).lower()
     if "token_graph.py" not in command or not re.search(r"\blaunch\s", command):
         return None
     action = re.search(r"--action\s+(\w+)", command)
@@ -285,14 +306,32 @@ def recent(count: int) -> list[Path]:
     return [p for _, p in sorted(paths, key=lambda item: item[0], reverse=True)[:count]]
 
 
+def project_transcripts(project: Path, count: int) -> list[Path]:
+    """Also check this project's own history, even when newer sessions belong elsewhere."""
+    folder = PROJECTS / re.sub(r'[^A-Za-z0-9]', '-', str(project.resolve()))
+    paths = []
+    for pattern in ('*.jsonl', '*/subagents/*.jsonl'):
+        for path in folder.glob(pattern):
+            try: paths.append((path.stat().st_mtime, path))
+            except OSError: continue
+    return [p for _, p in sorted(paths, key=lambda item: item[0], reverse=True)[:count]]
+
+
 _CACHE: dict[tuple, dict] = {}
 
 
 def recent_savings(project: Path | None = None, *, scan: int = 300, limit: int = 10) -> list[dict]:
-    """Sessions among the `scan` most recent that used the graph (for `project`), newest first.
+    """Check recent global transcripts and recent transcripts from the project's own folder.
     Results are cached per transcript version, so a page refresh re-reads only changed sessions."""
     results = []
-    for path in recent(scan):
+    candidates = recent(scan)
+    if project:
+        candidates = list(dict.fromkeys(candidates + project_transcripts(project, scan)))
+        def modified(path):
+            try: return path.stat().st_mtime
+            except OSError: return 0
+        candidates.sort(key=modified, reverse=True)
+    for path in candidates:
         try:
             key = (str(path), path.stat().st_mtime, str(project or ""))
             if key not in _CACHE:

@@ -95,7 +95,7 @@
     updateNav();
     try { localStorage.setItem('tokenGraph.page', state.page); } catch (_) { /* per-viewer convenience only */ }
     if (state.page === 'system') loadSystems();
-    else if (state.page === 'agents') loadClaudeAgents();
+    else if (state.page === 'agents') { loadClaudeAgents(); loadBenchModels(); if (benchmarkProject !== state.projectPath) { benchmarkRows.clear(); benchmarkProject = state.projectPath; renderBenchResults(); } }
     else if (state.page === 'documentation') loadDocumentation();
     else if (info.plain) refreshDashboard();
     else if (state.page === 'graph') { resize(); fitGraph(); }
@@ -112,6 +112,7 @@
     const seq = ++dash.seq;
     const project = state.projectPath;
     if (!serverToken || !project) { renderDashboard(); return; }
+    if (dash.savingsProject !== project) dash.savingsError = '';
     dash.loading = true;
     const aiFresh = dash.ai && Date.now() - dash.aiAt < 15000;
     dash.aiLoading = !aiFresh;
@@ -128,7 +129,7 @@
     if (ai.status === 'fulfilled') { dash.ai = ai.value; dash.aiAt = Date.now(); dash.aiError = ''; }
     else { dash.aiError = ai.reason?.message || 'Could not check the local AI provider.'; }
     if (savings.status === 'fulfilled') { dash.savings = savings.value.sessions || []; dash.savingsProject = project; dash.savingsError = ''; }
-    else { dash.savingsError = savings.reason?.message || 'Could not read the Claude Code sessions.'; }
+    else { dash.savings = null; dash.savingsProject = project; dash.savingsError = savings.reason?.message || 'Could not read the Claude Code sessions.'; }
     renderDashboard();
   }
 
@@ -187,11 +188,17 @@
   const percentText = p => p === null || p === undefined ? '—' : `${p}%`;
   function renderSavings() {
     if (!serverToken) { setCard('savings', serverOnlyHtml('Counting saved tokens'), pill('off', 'Server off')); return; }
+    if (!state.projectPath) {
+      const choices = dash.savingsChoices;
+      const picker = choices?.length ? `<label class="eyebrow" for="savings-project">LOCAL PROJECT</label><select class="project-select" id="savings-project">${choices.map(p => `<option value="${escapeHtml(p.path)}">${escapeHtml(p.name)} — ${escapeHtml(p.path)}</option>`).join('')}</select><button type="button" class="dash-link primary" data-dash="savings-open-project">Open project</button>` : choices ? '<p>No saved local project graphs were found. Choose a project folder in Settings first.</p><button type="button" class="dash-link" data-dash="savings-settings">Open Settings</button>' : '<button type="button" class="dash-link" data-dash="savings-list-projects">Choose local project</button>';
+      setCard('savings', `<div class="dash-empty"><p>This graph is not linked to a single local project folder. Open a project from this computer to view its Claude Code savings.</p>${picker}</div>`, pill('off', 'Choose project'));
+      return;
+    }
     const sessions = dash.savingsProject === state.projectPath ? dash.savings : null;
     if (!sessions) { setCard('savings', dash.savingsError ? errorHtml(dash.savingsError) : loadingHtml('Reading Claude Code sessions…'), '', true); return; }
     const refresh = '<div class="dash-footer"><button type="button" class="dash-link" data-dash="savings-refresh">Refresh</button></div>';
     if (!sessions.length) {
-      setCard('savings', `<div class="dash-empty"><p>No recognized graph queries for this project were found in the 300 most recent Claude Code session and subagent transcripts on this computer.</p></div>${refresh}`, pill('off', 'No sessions'));
+      setCard('savings', `<div class="dash-empty"><p>No recognized Claude Code graph queries were found for this project.</p><p>To start tracking, ask Claude Code to explore this project using Token Graph, then refresh this card.</p><p class="dash-note">Checks this project's recent history and the 300 most recent Claude transcripts on this computer. Some query formats may not be recognized.</p></div>${refresh}`, pill('off', 'No sessions'));
       return;
     }
     const latest = sessions[0];
@@ -207,14 +214,14 @@
     ].join('');
     const started = s => s.started ? new Date(s.started).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'unknown time';
     const sessionName = s => s.title || `${s.scope === 'subagent' ? 'Subagent' : 'Session'} ${s.session.slice(0, 8)}`;
-    const where = s => `<p class="dash-note"><strong>${escapeHtml(sessionName(s))}</strong> · started ${escapeHtml(started(s))} · last active ${ago(s.updated)}<br>Folder: <code>${escapeHtml(s.folder || 'unknown')}</code> · session <code>${escapeHtml(s.session.slice(0, 8))}</code>${s.last_prompt ? `<br>Last request: “${escapeHtml(s.last_prompt.slice(0, 140))}”` : ''}</p>`;
+    const where = s => `<p class="dash-note"><strong>${escapeHtml(sessionName(s))}</strong> · started ${escapeHtml(started(s))} · last active ${ago(s.updated)}<br>Session started in: <code>${escapeHtml(s.folder || 'unknown')}</code> · session <code>${escapeHtml(s.session.slice(0, 8))}</code>${s.last_prompt ? `<br>Last request: “${escapeHtml(s.last_prompt.slice(0, 140))}”` : ''}</p>`;
     const rows = bars(sessions.map(s => ({
       name: `${sessionName(s)} · ${ago(s.updated)}`,
       value: Math.max(0, s.saved_tokens),
       text: `${tokensText(s.saved_tokens)} · ${percentText(s.saved_percent)}`,
       title: `${sessionName(s)} — folder ${s.folder || 'unknown'}, started ${started(s)}, session ${s.session}: without graph ${format(s.without_graph_tokens)}, with graph ${format(s.with_graph_tokens)}, saved ${format(s.saved_tokens)} tokens (${percentText(s.saved_percent)}) in ${count(s.graph_answers, 'graph answer')}`,
     })));
-    setCard('savings', `<p class="dash-sub">Latest session</p>${where(latest)}<div class="dash-tiles">${tiles}</div><p class="dash-sub">Saved per session (hover for folder and time)</p>${rows}<p class="dash-note">Estimate from the Claude Code transcripts on this computer (4 characters ≈ 1 token, no model used). Without graph: the files a graph answer pointed to and Claude then opened, read in full. With graph: the answers plus what Claude read from those files.</p>${refresh}`,
+    setCard('savings', `<p class="dash-sub">Latest session</p>${where(latest)}<p class="dash-note">Sessions can start in another folder and still query this project's graph.</p><div class="dash-tiles">${tiles}</div><p class="dash-sub">Saved per session (hover for folder and time)</p>${rows}<p class="dash-note">Estimate from the Claude Code transcripts on this computer (4 characters ≈ 1 token, no model used). Without graph: the files a graph answer pointed to and Claude then opened, read in full. With graph: the answers plus what Claude read from those files.</p>${refresh}`,
       pill(status, `${percentText(latest.saved_percent)} saved`, 'Latest session'));
   }
 
@@ -394,6 +401,21 @@
     if (action === 'docs') { generateDocs(); return; }
     if (action === 'retry') { dash.aiAt = 0; refreshDashboard(); return; }
     if (action === 'savings-refresh') { refreshDashboard(); return; }
+    if (action === 'savings-settings') { showPage('settings'); return; }
+    if (action === 'savings-list-projects') {
+      setCard('savings', loadingHtml('Finding local projects…'), '', true);
+      try { const result = await api('/api/projects'); dash.savingsChoices = (result.projects || []).filter(p => p.has_graph); }
+      catch (error) { setCard('savings', errorHtml(error.message), pill('warning', 'Unavailable')); return; }
+      if (!state.projectPath) renderSavings();
+      return;
+    }
+    if (action === 'savings-open-project') {
+      const path = $('#savings-project')?.value;
+      if (!path || !dash.savingsChoices?.some(p => p.path === path)) return;
+      try { await openServerProject(path); }
+      catch (error) { setCard('savings', errorHtml(error.message), pill('warning', 'Unavailable')); }
+      return;
+    }
     if (action === 'server-help') { showServerInstructions(); return; }
     if (action === 'build-first') { if (serverToken) buildProject(); else showServerInstructions(); return; }
     if (action === 'update') { if (state.projectPath) buildProject(state.projectPath); return; }
@@ -413,6 +435,11 @@
     $('#docs-search').addEventListener('input', renderDocumentationList);
     $('#docs-list').addEventListener('click', event => { const item = event.target.closest('[data-doc-index]'); if (item) openDocumentation(Number(item.dataset.docIndex)); });
     $('#docs-graph').addEventListener('click', () => { showPage('graph'); setView('docs'); updateNav(); });
+    $('#agent-bench-form').addEventListener('submit', runAgentBenchmark);
+    $('#bench-agent').addEventListener('change', updateBenchFields);
+    $('#bench-bridge-source').addEventListener('change', updateBenchFields);
+    $('#bench-no-llm').addEventListener('change', updateBenchFields);
+    updateBenchFields();
     $('.agent-open-explorer').addEventListener('click', () => { showPage('ask'); setAskMode('llm'); $('#ask-a').focus(); });
     $('#claude-agents-refresh').addEventListener('click', loadClaudeAgents);
     $('#dashboard').addEventListener('click', onDashboardClick);

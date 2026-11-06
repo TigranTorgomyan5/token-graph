@@ -99,7 +99,30 @@ The **Question**, **Path A → B**, and **Impact** controls are available direct
 For deterministic source-backed evidence, start the local server and use **Evidence**. Results include source paths, line citations, source types and verification status. Tests, evaluation fixtures and generated code are hidden by default; use the matching `--include-*` flag when needed. This browser evidence search does not use Ollama (`scripts/explorer_evidence.py` gives the same results from the command line). The viewer's **LLM** chat and the standalone CLI `scripts/explore_agent.py <project> <question>` use local Ollama; the CLI uses `qwen3:14b-q4_K_M` when installed, otherwise `qwen3:8b`, otherwise the first installed local model, and `--model` selects another installed model. The agent uses each project's graph and language-independent file ranking for broad architecture questions, and requires citations on factual answer lines. It is read-only: build a missing graph separately with `token_graph.py build`.
 Endpoint inventory questions use common route syntax hints and inspect route-like indexed source files. Completeness depends on the project's routing style; the agent should report routes or request/response details it could not verify rather than imply a complete inventory. The viewer agent is read-only: build a missing graph separately with `token_graph.py build`.
 
+## Measure agent speed
+
+Open **Agents → Agent speed benchmark** in the local viewer to choose an agent, model and run count, then compare the median and range in the results table. Log analysis needs a local log path; the optional live bridge contacts the selected MCP service. Results are kept in the current page session.
+
+`scripts/benchmark_agents.py` times graph search, the local explorer, repo scout and (when a log is supplied) the log analyzer. It reports each successful run, median/min/max wall time and failures as JSON; elapsed time includes process startup. For example:
+
+```sh
+python3 token-graph/scripts/benchmark_agents.py --project . --question 'How does authentication work?' --log /path/to/sample.log --model qwen3:8b --repeats 3
+python3 token-graph/scripts/benchmark_agents.py --project . --question 'authentication' --agent graph --agent scout --no-llm --repeats 3
+python3 token-graph/scripts/benchmark_agents.py --project . --agent bridge --bridge-source grafana --service nh-gateway --model qwen3:8b --repeats 1
+```
+
+The bridge option explicitly contacts the configured MCP service on each run; for Argo CD supply `--bridge-source argocd --application <name> --app-namespace <namespace>`. The local log bridge also prints separate retrieval and total times during normal use. These timings measure speed, not accuracy; model warm-up, caching and concurrent activity affect results. No model is downloaded. The graph-generation agent changes graph artifacts, so it is not included in this read-only benchmark.
+
 ## Local log analysis for Codex and Claude Code
+
+For direct local retrieval and interpretation, the read-only bridge can start a separate instance of a configured stdio MCP server and pass its results to Ollama. It only reads the Codex MCP configuration; it does not change existing server configuration or stop other sessions. The configured Grafana Docker image and Argo CD npm package must already be available locally; the bridge disables implicit downloads. Network access to the selected MCP service and local Ollama is required.
+
+```sh
+python3 /path/to/token-graph/scripts/local_log_agent.py grafana --service nh-gateway --server grafana-dev --model qwen3:14b-q4_K_M
+python3 /path/to/token-graph/scripts/local_log_agent.py argocd --service casino-core --application casino-core-dashtz --app-namespace argocd-space --namespace webex-dashtz --server argocd-mcp
+```
+
+Grafana defaults to datasource `loki`, the latest hour, and 100 records; use `--datasource`, `--since` and `--limit` to change them. Argo CD requires an exact application and a unique matching pod; its server may return a batch without a controllable time range. The tool returns a redacted model summary rather than raw logs. Redaction is best effort and generated interpretations can still be wrong. Running the bridge directly avoids sending its logs through a hosted model; a hosted assistant invoking it still consumes tokens for the conversation and returned summary.
 
 Both assistants can invoke the same scripts from the installed skill folder. For example:
 

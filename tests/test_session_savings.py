@@ -1,5 +1,7 @@
 """session_savings.py: tokens and percent saved by graph answers in a Claude Code transcript."""
 import json
+import os
+import re
 import sys
 import tempfile
 import threading
@@ -17,6 +19,30 @@ import explorer_server  # noqa: E402
 
 
 class SessionSavingsTest(unittest.TestCase):
+    def test_recent_project_history_is_not_lost_among_other_projects(self):
+        transcripts = Path(self.temp.name) / 'sessions'
+        folder = transcripts / re.sub(r'[^A-Za-z0-9]', '-', str(self.project.resolve()))
+        folder.mkdir(parents=True)
+        self.transcript = folder / 'old.jsonl'
+        self.call('Bash', {'command': f'cd "{self.project}" && graphify query x'}, 'NODE run() [src=src/big.py loc=L1]')
+        self.analyze()
+        os.utime(self.transcript, (1, 1))
+        other = transcripts / 'different-project'; other.mkdir()
+        for i in range(4): (other / f'new-{i}.jsonl').write_text('{}\n')
+        with mock.patch.object(session_savings, 'PROJECTS', transcripts):
+            session_savings._CACHE.clear()
+            results = session_savings.recent_savings(self.project, scan=3)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]['session'], 'old')
+
+    def test_graphify_project_from_literal_shell_variable_and_wrappers(self):
+        command = f'project="{self.project}"; cd "$project" && env TERM=dumb graphify query "test"'
+        self.call('Bash', {'command': command}, 'NODE run() [src=src/big.py loc=L1]')
+        self.assertEqual(self.analyze()['graph_answers'], 1)
+        self.assertEqual(session_savings.project_root(command, '/elsewhere'), self.project)
+        self.assertIsNone(session_savings.project_root('cd "$unknown/subdir" && graphify query test', '/elsewhere'))
+        self.assertIsNone(session_savings.graph_action('echo "graphify query test"'))
+
     def test_graphify_query_with_cd_and_project_filter(self):
         self.call('Bash', {'command': f'cd "{self.project}" && ~/.local/bin/graphify query "where is run" --budget 1500'}, 'NODE run() [src=src/big.py loc=L10]')
         result = self.analyze()

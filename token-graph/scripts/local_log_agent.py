@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import tomllib
 
 SCRIPTS = Path(__file__).resolve().parent
@@ -29,9 +30,13 @@ class MCP:
         self.responses = queue.Queue()
         threading.Thread(target=self._read, daemon=True).start()
         self.next_id = 0
-        self.request('initialize', {'protocolVersion': '2025-03-26', 'capabilities': {},
-                                    'clientInfo': {'name': 'token-graph-log-agent', 'version': '1'}})
-        self.send({'jsonrpc': '2.0', 'method': 'notifications/initialized'})
+        try:
+            self.request('initialize', {'protocolVersion': '2025-03-26', 'capabilities': {},
+                                        'clientInfo': {'name': 'token-graph-log-agent', 'version': '1'}})
+            self.send({'jsonrpc': '2.0', 'method': 'notifications/initialized'})
+        except Exception:
+            self.close()
+            raise
 
     def _read(self):
         for line in self.process.stdout:
@@ -90,17 +95,19 @@ def main():
     parser.add_argument('--namespace', help='workload namespace; required when ambiguous')
     parser.add_argument('--container', help='container name; defaults to service')
     parser.add_argument('--datasource', default='loki')
+    parser.add_argument('--server', help='configured MCP server name; defaults to grafana-dev or argocd-mcp')
     parser.add_argument('--since', default='now-1h')
     parser.add_argument('--limit', type=int, default=100)
     parser.add_argument('--model', default='qwen3:14b-q4_K_M')
     parser.add_argument('--question', default='Summarize failures and suggest investigation steps.')
     parser.add_argument('--config', type=Path, default=Path.home() / '.codex' / 'config.toml')
     args = parser.parse_args()
+    started = time.monotonic()
     if not 1 <= args.limit <= 100:
         parser.error('--limit must be between 1 and 100')
     if not all(c.isalnum() or c in '-_.' for c in args.service):
         parser.error('service must contain only letters, digits, dots, underscores and hyphens')
-    source_name = 'grafana-dev' if args.source == 'grafana' else 'argocd-mcp'
+    source_name = args.server or ('grafana-dev' if args.source == 'grafana' else 'argocd-mcp')
     client = None
     try:
         config = tomllib.loads(args.config.read_text())['mcp_servers'][source_name]
@@ -133,9 +140,26 @@ def main():
             print(f'SOURCE: {args.source}, service={args.service}; requested maximum {args.limit} records.', flush=True)
             if args.source == 'argocd':
                 print('Argo CD may return a bounded batch without a specified time window.', flush=True)
+            print(f'RETRIEVAL_SECONDS: {time.monotonic() - started:.3f}', flush=True)
             command = [sys.executable, str(SCRIPTS / 'log_analyzer.py'), str(path), args.question,
                        '--source', fmt, '--source-service', args.service, '--model', args.model]
-            return subprocess.run(command, check=False).returncode
+            result = subprocess.run(command, check=False, capture_output=True, text=True)
+            if result.returncode:
+                print('Log analyzer failed: ' + result.stderr.strip()[:500], file=sys.stderr)
+                return result.returncode
+            # Keep raw log excerpts and trace IDs out of the host conversation.
+            interpreting = False
+            for line in result.stdout.splitlines():
+                if line.startswith('LOCAL MODEL INTERPRETATION'):
+                    interpreting = True
+                    print(line)
+                elif line.startswith(('MODEL METRICS:', 'UNCERTAINTIES:', 'ELAPSED_SECONDS:')):
+                    interpreting = False
+                    print(line)
+                elif line.startswith(('TIME RANGE:', 'TOTAL EVENTS:')) or interpreting:
+                    print(line)
+            print(f'TOTAL_SECONDS: {time.monotonic() - started:.3f}')
+            return 0
     except (OSError, KeyError, ValueError, RuntimeError, json.JSONDecodeError) as error:
         print(f'Local log agent failed: {error}', file=sys.stderr)
         return 1

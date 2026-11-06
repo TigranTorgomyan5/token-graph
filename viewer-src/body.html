@@ -46,7 +46,7 @@
       <section class="workspace">
         <header class="topbar">
           <div><div class="breadcrumb">PROJECTS <span>/</span> <span id="project-name">LOCAL PROJECT</span> <span>/</span> <b id="view-crumb">GRAPH</b></div><h1 id="page-title">Codebase map</h1><p class="page-hint" id="page-hint"></p></div>
-          <div class="project-switch"><label class="eyebrow" for="graph-selector">PROJECT</label><select id="graph-selector" class="project-select" disabled aria-label="Switch loaded graph"></select><button type="button" class="ai-chip" id="ai-chip" data-nav="settings" title="Local AI status · open Settings">AI ·</button></div>
+          <div class="project-switch"><label class="eyebrow" for="graph-selector">PROJECT</label><select id="graph-selector" class="project-select" disabled aria-label="Switch loaded graph"></select><button type="button" class="server-pill" id="server-connection" data-nav="settings" role="status">Checking server…</button><button type="button" class="ai-chip" id="ai-chip" data-nav="settings" title="Local AI status · open Settings">AI ·</button></div>
           <div class="topbar-actions"><button type="button" class="stale-chip hidden" id="stale-chip"></button><button type="button" class="topbar-button hidden" id="diff-button" title="What was added, removed or re-connected in the graph by the last build or update">Changes since last build</button><span class="snapshot" id="snapshot">Graph snapshot</span><button class="icon-button" id="reset-view" title="Reset view" aria-label="Reset view">⟲</button></div>
         </header>
 
@@ -72,10 +72,11 @@
             <article class="dash-card" id="dash-savings" aria-labelledby="dash-savings-title"><header><h2 id="dash-savings-title">Token savings in Claude Code</h2><span class="dash-head"></span></header><div class="dash-body"></div></article>
           </div>
           <section class="benchmark-strip" id="benchmark-strip" aria-label="Token Graph context reduction estimate">
-            <span class="benchmark-mark">↘</span>
-            <div class="benchmark-main"><span class="benchmark-label">TOKEN GRAPH CONTEXT REDUCTION</span><strong id="reduction-total">Loading estimate…</strong></div>
+            <span class="benchmark-mark" aria-hidden="true">↘</span>
+            <div class="benchmark-main"><span class="benchmark-label">PROJECT CONTEXT ESTIMATE</span><strong id="reduction-total">Loading estimate…</strong></div>
             <span class="benchmark-detail" id="benchmark-detail">Scanning this project locally…</span>
             <span class="benchmark-source" id="benchmark-source">Estimated savings/query</span>
+            <p class="benchmark-explanation">Based on this project's benchmark, independent of Claude Code sessions. An estimate, not measured token usage.</p>
           </section>
         </section>
 
@@ -86,6 +87,29 @@
         </section>
 
         <section class="agents-page hidden" id="agents-page" aria-label="Local agents">
+          <article class="dash-card agent-benchmark" aria-labelledby="agent-bench-title">
+            <header><h2 id="agent-bench-title">Agent speed benchmark</h2><span class="agent-badge">On this computer</span></header>
+            <div class="dash-body">
+              <p class="dash-note">Measure end-to-end time on the selected project. Results depend on the question, model and cache; speed does not measure accuracy.</p>
+              <form id="agent-bench-form" class="agent-bench-form">
+                <label>Agent<select id="bench-agent"><option value="graph">Graph search</option><option value="explorer">Code Explorer</option><option value="scout">Repo Scout</option><option value="log">Log Analyzer</option><option value="bridge">Live log bridge</option></select></label>
+                <label>Question<input id="bench-question" value="How does this project work?" maxlength="1000" required></label>
+                <label>Model<select id="bench-model"><option value="">No local model detected</option></select></label>
+                <label>Runs<select id="bench-repeats"><option>1</option><option>2</option><option selected>3</option></select></label>
+                <label class="agent-bench-check"><input type="checkbox" id="bench-no-llm"> Without model</label>
+                <label class="bench-log hidden">Log file path<input id="bench-log" placeholder="/path/to/application.log"></label>
+                <label class="bench-log hidden">Log format<select id="bench-log-source"><option value="file">Plain or JSON lines</option><option value="argocd">Argo CD response</option><option value="loki">Loki response</option></select></label>
+                <label class="bench-bridge hidden">Source<select id="bench-bridge-source"><option value="grafana">Grafana</option><option value="argocd">Argo CD</option></select></label>
+                <label class="bench-bridge hidden">Service<input id="bench-service" placeholder="nh-gateway"></label>
+                <label class="bench-argo hidden">Application<input id="bench-application" placeholder="nh-gateway-dashtz"></label>
+                <label class="bench-argo hidden">Application namespace<input id="bench-app-namespace" value="argocd"></label>
+                <label class="bench-argo hidden">Workload namespace<input id="bench-namespace" placeholder="Optional"></label>
+                <button class="dash-link primary" type="submit" id="bench-run">Run benchmark</button>
+              </form>
+              <p class="dash-note" id="bench-status" role="status">Choose an agent and run a benchmark. Live log bridge contacts the selected MCP service.</p>
+              <div id="bench-results" aria-live="polite"></div>
+            </div>
+          </article>
           <div class="dash-grid">
             <article class="dash-card w-6 agent-card" aria-labelledby="agent-explorer-title">
               <header><h2 id="agent-explorer-title">Code Explorer</h2><span class="agent-badge">Local model</span></header>
@@ -156,7 +180,7 @@
           <div class="sys-toolbar" id="sys-toolbar"></div>
           <div id="sys-message" class="hidden"></div>
           <div class="dash-grid hidden" id="sys-main">
-            <article class="dash-card w-8" aria-labelledby="sys-map-title"><header><h2 id="sys-map-title">Service map</h2><span class="dash-head sys-legend" id="sys-legend"></span></header><div class="dash-body" id="sys-map"></div></article>
+            <article class="dash-card w-8" aria-labelledby="sys-map-title"><header><h2 id="sys-map-title">Service map</h2><span class="dash-head sys-legend" id="sys-legend"></span></header><div class="sys-map-controls" role="group" aria-label="Service map controls"><button type="button" class="dash-link" data-sys="zoom-in" aria-label="Zoom in">+</button><button type="button" class="dash-link" data-sys="zoom-out" aria-label="Zoom out">−</button><button type="button" class="dash-link" data-sys="fit-map">Fit map</button><button type="button" class="dash-link" id="sys-focus" data-sys="focus" disabled aria-pressed="false">Focus selected service</button><span class="dash-note">Drag the background to pan. Select a service to inspect it.</span></div><div class="dash-body" id="sys-map"></div></article>
             <article class="dash-card w-4 sys-detail-card" aria-labelledby="sys-detail-title" aria-live="polite"><header><h2 id="sys-detail-title">System</h2></header><div class="dash-body" id="sys-detail"></div></article>
             <article class="dash-card" aria-labelledby="sys-edges-title"><header><h2 id="sys-edges-title">Connections</h2><span class="dash-head" id="sys-count"></span></header><div class="dash-body" id="sys-edges"></div></article>
           </div>
