@@ -1,3 +1,14 @@
+  let graphSwitchRequest = 0;
+  function filterProjectOptions() {
+    const query = $('#project-search').value.trim().toLowerCase();
+    let matches = 0;
+    for (const option of $('#graph-selector').options) {
+      const entry = loadedGraphs.get(option.value);
+      option.hidden = !`${entry?.name || ''} ${entry?.path || ''}`.toLowerCase().includes(query);
+      if (!option.hidden) matches++;
+    }
+    $('#project-search-status').textContent = query ? (matches ? `${matches} matching projects` : 'No projects match. Clear the search to see all projects.') : '';
+  }
   // raw may be null for a server project; switchGraph then fetches it on first view.
   function addGraph(raw, name, path = null, folderFiles = null, sourceRoot = '') {
     if (raw !== null && (!raw || !Array.isArray(raw.nodes) || !Array.isArray(raw.links ?? raw.edges))) {
@@ -13,14 +24,19 @@
     const option = document.createElement('option');
     option.value = id;
     option.textContent = name;
+    option.title = path || 'Imported graph';
     $('#graph-selector').append(option);
     $('#graph-selector').disabled = false;
+    filterProjectOptions();
     return id;
   }
 
   async function switchGraph(id) {
     const entry = loadedGraphs.get(id);
     if (!entry) return;
+    const request = ++graphSwitchRequest;
+    dash.pending = null;
+    dash.pendingError = '';
     if (!entry.raw && entry.path) {
       $('#data-status').textContent = `Loading ${entry.name}…`;
       dash.pending = entry.name; dash.pendingError = '';
@@ -28,16 +44,21 @@
       try {
         entry.raw = await api(`/api/graph?project=${encodeURIComponent(entry.path)}`);
       } catch (error) {
+        if (request !== graphSwitchRequest) return;
         $('#data-status').textContent = `${entry.name}: ${error.message}`;
         $('#data-status').classList.add('error-state');
         dash.pendingError = `${entry.name}: ${error.message}`;
         if (state.page === 'dashboard') renderDashboard();
         return;
       } finally {
-        dash.pending = null;
+        if (request === graphSwitchRequest) dash.pending = null;
       }
     }
+    if (request !== graphSwitchRequest || loadedGraphs.get(id) !== entry) return;
+    $('#data-status').classList.remove('error-state');
     state.projectPath = entry.path || null;
+    $('#project-location').textContent = entry.path || `${entry.name} · imported graph`;
+    $('#graph-selector').title = entry.path || entry.name;
     if (state.page === 'agents') loadClaudeAgents();
     if (state.page === 'documentation') loadDocumentation();
     state.editorRootKey = `tokenGraph.vscodeRoot.${hashString(`${entry.name}|${entry.sourceRoot || ''}`)}`;
@@ -104,6 +125,7 @@
   });
 
   $('#graph-selector').addEventListener('change', event => switchGraph(event.target.value));
+  $('#project-search').addEventListener('input', filterProjectOptions);
   $('#graph-file').addEventListener('change', async event => {
     let lastId;
     const errors = [];

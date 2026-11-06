@@ -11,7 +11,7 @@ for (const name of ['index.html', 'token-graph/assets/project-explorer.html', 't
   function el(key) {
     if (!elements.has(key)) {
       const classes = new Set(), handlers = {};
-      elements.set(key, {value:'',textContent:'',innerHTML:'',dataset:{},style:{},width:1000,height:650,clientWidth:1000,clientHeight:650,handlers,
+      elements.set(key, {value:'',textContent:'',innerHTML:'',options:[],dataset:{},style:{},width:1000,height:650,clientWidth:1000,clientHeight:650,handlers,
         classList:{add:x=>classes.add(x),remove:x=>classes.delete(x),contains:x=>classes.has(x),toggle:(x,on)=>{if(on)classes.add(x);else classes.delete(x)}},
         addEventListener:(event,handler)=>{handlers[event]=handler},setAttribute(){},append(){},appendChild(){},replaceChildren(){},click(){},getContext:()=>context,
         getBoundingClientRect:()=>({left:0,top:0,width:1000,height:650}),setPointerCapture(){},focus(){},querySelector:s=>el(key+' '+s),querySelectorAll:()=>[]});

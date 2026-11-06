@@ -134,6 +134,7 @@
       .ask-page .ask-panel{margin-top:16px}
       .ask-page-note{margin-top:16px}
       #dashboard .benchmark-strip{margin-top:14px}
+      #project-search{width:150px;min-width:100px}.project-location{flex-basis:100%;margin:0;overflow-wrap:anywhere}.project-switch{flex-wrap:wrap}
       #dashboard .benchmark-explanation{flex-basis:100%;margin:0;color:#a8b6ca;font-size:11px;line-height:1.5}
       .graph-filters{position:relative}
       .graph-filters>summary{list-style:none;cursor:pointer;border:1px solid #2c3953;border-radius:7px;padding:5px 10px;font:12px var(--sans);color:#cfd6e6;background:#111a2d;white-space:nowrap}

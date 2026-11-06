@@ -46,7 +46,7 @@
       <section class="workspace">
         <header class="topbar">
           <div><div class="breadcrumb">PROJECTS <span>/</span> <span id="project-name">LOCAL PROJECT</span> <span>/</span> <b id="view-crumb">GRAPH</b></div><h1 id="page-title">Codebase map</h1><p class="page-hint" id="page-hint"></p></div>
-          <div class="project-switch"><label class="eyebrow" for="graph-selector">PROJECT</label><select id="graph-selector" class="project-select" disabled aria-label="Switch loaded graph"></select><button type="button" class="server-pill" id="server-connection" data-nav="settings" role="status">Checking server…</button><button type="button" class="ai-chip" id="ai-chip" data-nav="settings" title="Local AI status · open Settings">AI ·</button></div>
+          <div class="project-switch"><label class="eyebrow" for="graph-selector">PROJECT</label><input id="project-search" class="ask-input" type="search" placeholder="Find project…" aria-label="Find a loaded project"><select id="graph-selector" class="project-select" disabled aria-label="Switch loaded graph"></select><button type="button" class="server-pill" id="server-connection" data-nav="settings" role="status">Checking server…</button><button type="button" class="ai-chip" id="ai-chip" data-nav="settings" title="Local AI status · open Settings">AI ·</button><span id="project-search-status" class="dash-note" role="status" aria-live="polite"></span><p id="project-location" class="dash-note project-location"></p></div>
           <div class="topbar-actions"><button type="button" class="stale-chip hidden" id="stale-chip"></button><button type="button" class="topbar-button hidden" id="diff-button" title="What was added, removed or re-connected in the graph by the last build or update">Changes since last build</button><span class="snapshot" id="snapshot">Graph snapshot</span><button class="icon-button" id="reset-view" title="Reset view" aria-label="Reset view">⟲</button></div>
         </header>
 
@@ -81,7 +81,7 @@
         </section>
 
         <section class="documentation-page hidden" id="documentation-page" aria-label="Project documentation">
-          <div class="docs-actions"><input class="ask-input" id="docs-search" type="search" placeholder="Search document names…" aria-label="Search document names"><button type="button" class="dash-link" id="docs-graph">Documentation graph</button><button type="button" class="dash-link" data-nav="docs">Generate wiki</button></div>
+          <div class="docs-actions"><input class="ask-input" id="docs-search" type="search" placeholder="Search document names…" aria-label="Search document names"><select class="project-select" id="docs-kind" aria-label="Filter documents by type"><option value="all">All documents</option><option value="Project document">Project documents</option><option value="Generated wiki">Generated wiki</option></select><button type="button" class="dash-link" id="docs-graph">Documentation graph</button><button type="button" class="dash-link" data-nav="docs">Generate wiki</button></div>
           <p class="dash-note" id="docs-status" role="status">Choose a project to browse its documents.</p>
           <div class="docs-layout"><div class="docs-list" id="docs-list" aria-label="Documents"></div><article class="dash-card docs-reader"><header><h2 id="docs-title">Choose a document</h2></header><pre id="docs-content">Select a file to read it here.</pre></article></div>
         </section>

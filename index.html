@@ -226,6 +226,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       .ask-page .ask-panel{margin-top:16px}
       .ask-page-note{margin-top:16px}
       #dashboard .benchmark-strip{margin-top:14px}
+      #project-search{width:150px;min-width:100px}.project-location{flex-basis:100%;margin:0;overflow-wrap:anywhere}.project-switch{flex-wrap:wrap}
       #dashboard .benchmark-explanation{flex-basis:100%;margin:0;color:#a8b6ca;font-size:11px;line-height:1.5}
       .graph-filters{position:relative}
       .graph-filters>summary{list-style:none;cursor:pointer;border:1px solid #2c3953;border-radius:7px;padding:5px 10px;font:12px var(--sans);color:#cfd6e6;background:#111a2d;white-space:nowrap}
@@ -377,7 +378,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       <section class="workspace">
         <header class="topbar">
           <div><div class="breadcrumb">PROJECTS <span>/</span> <span id="project-name">LOCAL PROJECT</span> <span>/</span> <b id="view-crumb">GRAPH</b></div><h1 id="page-title">Codebase map</h1><p class="page-hint" id="page-hint"></p></div>
-          <div class="project-switch"><label class="eyebrow" for="graph-selector">PROJECT</label><select id="graph-selector" class="project-select" disabled aria-label="Switch loaded graph"></select><button type="button" class="server-pill" id="server-connection" data-nav="settings" role="status">Checking server…</button><button type="button" class="ai-chip" id="ai-chip" data-nav="settings" title="Local AI status · open Settings">AI ·</button></div>
+          <div class="project-switch"><label class="eyebrow" for="graph-selector">PROJECT</label><input id="project-search" class="ask-input" type="search" placeholder="Find project…" aria-label="Find a loaded project"><select id="graph-selector" class="project-select" disabled aria-label="Switch loaded graph"></select><button type="button" class="server-pill" id="server-connection" data-nav="settings" role="status">Checking server…</button><button type="button" class="ai-chip" id="ai-chip" data-nav="settings" title="Local AI status · open Settings">AI ·</button><span id="project-search-status" class="dash-note" role="status" aria-live="polite"></span><p id="project-location" class="dash-note project-location"></p></div>
           <div class="topbar-actions"><button type="button" class="stale-chip hidden" id="stale-chip"></button><button type="button" class="topbar-button hidden" id="diff-button" title="What was added, removed or re-connected in the graph by the last build or update">Changes since last build</button><span class="snapshot" id="snapshot">Graph snapshot</span><button class="icon-button" id="reset-view" title="Reset view" aria-label="Reset view">⟲</button></div>
         </header>
 
@@ -412,7 +413,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
         </section>
 
         <section class="documentation-page hidden" id="documentation-page" aria-label="Project documentation">
-          <div class="docs-actions"><input class="ask-input" id="docs-search" type="search" placeholder="Search document names…" aria-label="Search document names"><button type="button" class="dash-link" id="docs-graph">Documentation graph</button><button type="button" class="dash-link" data-nav="docs">Generate wiki</button></div>
+          <div class="docs-actions"><input class="ask-input" id="docs-search" type="search" placeholder="Search document names…" aria-label="Search document names"><select class="project-select" id="docs-kind" aria-label="Filter documents by type"><option value="all">All documents</option><option value="Project document">Project documents</option><option value="Generated wiki">Generated wiki</option></select><button type="button" class="dash-link" id="docs-graph">Documentation graph</button><button type="button" class="dash-link" data-nav="docs">Generate wiki</button></div>
           <p class="dash-note" id="docs-status" role="status">Choose a project to browse its documents.</p>
           <div class="docs-layout"><div class="docs-list" id="docs-list" aria-label="Documents"></div><article class="dash-card docs-reader"><header><h2 id="docs-title">Choose a document</h2></header><pre id="docs-content">Select a file to read it here.</pre></article></div>
         </section>
@@ -1601,6 +1602,17 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     updateNav();
   }
   document.querySelectorAll('[data-lens]').forEach(b => b.addEventListener('click', () => setLens(b.dataset.lens)));
+  let graphSwitchRequest = 0;
+  function filterProjectOptions() {
+    const query = $('#project-search').value.trim().toLowerCase();
+    let matches = 0;
+    for (const option of $('#graph-selector').options) {
+      const entry = loadedGraphs.get(option.value);
+      option.hidden = !`${entry?.name || ''} ${entry?.path || ''}`.toLowerCase().includes(query);
+      if (!option.hidden) matches++;
+    }
+    $('#project-search-status').textContent = query ? (matches ? `${matches} matching projects` : 'No projects match. Clear the search to see all projects.') : '';
+  }
   // raw may be null for a server project; switchGraph then fetches it on first view.
   function addGraph(raw, name, path = null, folderFiles = null, sourceRoot = '') {
     if (raw !== null && (!raw || !Array.isArray(raw.nodes) || !Array.isArray(raw.links ?? raw.edges))) {
@@ -1616,14 +1628,19 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     const option = document.createElement('option');
     option.value = id;
     option.textContent = name;
+    option.title = path || 'Imported graph';
     $('#graph-selector').append(option);
     $('#graph-selector').disabled = false;
+    filterProjectOptions();
     return id;
   }
 
   async function switchGraph(id) {
     const entry = loadedGraphs.get(id);
     if (!entry) return;
+    const request = ++graphSwitchRequest;
+    dash.pending = null;
+    dash.pendingError = '';
     if (!entry.raw && entry.path) {
       $('#data-status').textContent = `Loading ${entry.name}…`;
       dash.pending = entry.name; dash.pendingError = '';
@@ -1631,16 +1648,21 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       try {
         entry.raw = await api(`/api/graph?project=${encodeURIComponent(entry.path)}`);
       } catch (error) {
+        if (request !== graphSwitchRequest) return;
         $('#data-status').textContent = `${entry.name}: ${error.message}`;
         $('#data-status').classList.add('error-state');
         dash.pendingError = `${entry.name}: ${error.message}`;
         if (state.page === 'dashboard') renderDashboard();
         return;
       } finally {
-        dash.pending = null;
+        if (request === graphSwitchRequest) dash.pending = null;
       }
     }
+    if (request !== graphSwitchRequest || loadedGraphs.get(id) !== entry) return;
+    $('#data-status').classList.remove('error-state');
     state.projectPath = entry.path || null;
+    $('#project-location').textContent = entry.path || `${entry.name} · imported graph`;
+    $('#graph-selector').title = entry.path || entry.name;
     if (state.page === 'agents') loadClaudeAgents();
     if (state.page === 'documentation') loadDocumentation();
     state.editorRootKey = `tokenGraph.vscodeRoot.${hashString(`${entry.name}|${entry.sourceRoot || ''}`)}`;
@@ -1707,6 +1729,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
   });
 
   $('#graph-selector').addEventListener('change', event => switchGraph(event.target.value));
+  $('#project-search').addEventListener('input', filterProjectOptions);
   $('#graph-file').addEventListener('change', async event => {
     let lastId;
     const errors = [];
@@ -2981,7 +3004,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     const visibleEdges = visibleSystemEdges();
     sysEl('count').textContent = visibleEdges.length === edges.length ? `${edges.length}` : `${visibleEdges.length} of ${edges.length}`;
     const names = sysState.scan.services.map(s => s.name);
-    sysEl('edges').innerHTML = visibleEdges.length ? `<table class="sys-table"><thead><tr><th>From</th><th></th><th>To</th><th>Via</th><th>Subjects / topics / routes</th></tr></thead><tbody>${visibleEdges.map(([e, k]) => `<tr data-sys="edge" data-i="${k}" class="${sel?.type === 'edge' && sel.index === k ? 'on' : ''}"><td><button type="button" class="sys-edge-link" data-sys="edge" data-i="${k}" aria-label="${escapeHtml(`Inspect connection from ${names[e.source]} to ${names[e.target]}`)}">${escapeHtml(names[e.source])}</button></td><td aria-hidden="true">→</td><td>${escapeHtml(names[e.target])}</td><td>${techChip(e.tech)}</td><td class="sys-channels">${escapeHtml(e.channels.map(c => c.name).join(', '))}</td></tr>`).join('')}</tbody></table>`
+    sysEl('edges').innerHTML = visibleEdges.length ? `<table class="sys-table"><thead><tr><th>From</th><th></th><th>To</th><th>Via</th><th>Subjects / topics / routes</th><th>Match evidence</th></tr></thead><tbody>${visibleEdges.map(([e, k]) => `<tr data-sys="edge" data-i="${k}" class="${sel?.type === 'edge' && sel.index === k ? 'on' : ''}"><td><button type="button" class="sys-edge-link" data-sys="edge" data-i="${k}" aria-label="${escapeHtml(`Inspect connection from ${names[e.source]} to ${names[e.target]}`)}">${escapeHtml(names[e.source])}</button></td><td aria-hidden="true">→</td><td>${escapeHtml(names[e.target])}</td><td>${techChip(e.tech)}</td><td class="sys-channels">${escapeHtml(e.channels.map(c => c.name).join(', '))}</td><td>${escapeHtml(e.confidence.map(c => MATCH_NOTE[c] || c).join('; '))}</td></tr>`).join('')}</tbody></table>`
       : `<p class="dash-note">${edges.length ? 'No connections match the current filters or selected service.' : 'No connections were detected. Check each service for unmatched endpoints; some patterns cannot be resolved.'}</p>`;
   }
 
@@ -3099,11 +3122,14 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
   const documentation = { items: [], selected: '', project: null, request: 0, detail: 0 };
   function renderDocumentationList() {
     const query = $('#docs-search').value.trim().toLowerCase();
-    const matches = documentation.items.map((item, index) => ({item, index})).filter(({item}) => item.path.toLowerCase().includes(query));
-    $('#docs-list').innerHTML = matches.length ? matches.map(({item, index}) => `<button type="button" class="dash-link" data-doc-index="${index}" aria-current="${item.path === documentation.selected}">${escapeHtml(item.path)}<small>${escapeHtml(item.kind)}</small></button>`).join('') : '<p class="dash-note">No documents match.</p>';
+    const kind = $('#docs-kind').value;
+    const matches = documentation.items.map((item, index) => ({item, index})).filter(({item}) => item.path.toLowerCase().includes(query) && (kind === 'all' || item.kind === kind));
+    $('#docs-status').textContent = documentation.items.length ? `Showing ${format(matches.length)} of ${format(documentation.items.length)} documents. Content is shown as plain text.` : 'No project documents or generated wiki articles found.';
+    $('#docs-list').innerHTML = matches.length ? matches.map(({item, index}) => `<button type="button" class="dash-link" data-doc-index="${index}" aria-current="${item.path === documentation.selected}">${escapeHtml(item.path)}<small>${escapeHtml(item.kind)}</small></button>`).join('') : '<p class="dash-note">No documents match these filters. Try a different search or document type.</p>';
   }
   async function loadDocumentation() {
     const seq = ++documentation.request, project = state.projectPath;
+    if (documentation.project !== project) { $('#docs-search').value = ''; $('#docs-kind').value = 'all'; }
     documentation.project = project; documentation.items = []; documentation.selected = ''; documentation.detail++;
     $('#docs-title').textContent = 'Choose a document'; $('#docs-content').textContent = 'Select a file to read it here.'; $('#docs-list').innerHTML = '';
     if (!serverToken || !project) {
@@ -3495,6 +3521,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
 
   function initDashboard() {
     $('#docs-search').addEventListener('input', renderDocumentationList);
+    $('#docs-kind').addEventListener('change', renderDocumentationList);
     $('#docs-list').addEventListener('click', event => { const item = event.target.closest('[data-doc-index]'); if (item) openDocumentation(Number(item.dataset.docIndex)); });
     $('#docs-graph').addEventListener('click', () => { showPage('graph'); setView('docs'); updateNav(); });
     $('#agent-bench-form').addEventListener('submit', runAgentBenchmark);

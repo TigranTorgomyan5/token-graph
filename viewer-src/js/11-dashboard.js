@@ -37,11 +37,14 @@
   const documentation = { items: [], selected: '', project: null, request: 0, detail: 0 };
   function renderDocumentationList() {
     const query = $('#docs-search').value.trim().toLowerCase();
-    const matches = documentation.items.map((item, index) => ({item, index})).filter(({item}) => item.path.toLowerCase().includes(query));
-    $('#docs-list').innerHTML = matches.length ? matches.map(({item, index}) => `<button type="button" class="dash-link" data-doc-index="${index}" aria-current="${item.path === documentation.selected}">${escapeHtml(item.path)}<small>${escapeHtml(item.kind)}</small></button>`).join('') : '<p class="dash-note">No documents match.</p>';
+    const kind = $('#docs-kind').value;
+    const matches = documentation.items.map((item, index) => ({item, index})).filter(({item}) => item.path.toLowerCase().includes(query) && (kind === 'all' || item.kind === kind));
+    $('#docs-status').textContent = documentation.items.length ? `Showing ${format(matches.length)} of ${format(documentation.items.length)} documents. Content is shown as plain text.` : 'No project documents or generated wiki articles found.';
+    $('#docs-list').innerHTML = matches.length ? matches.map(({item, index}) => `<button type="button" class="dash-link" data-doc-index="${index}" aria-current="${item.path === documentation.selected}">${escapeHtml(item.path)}<small>${escapeHtml(item.kind)}</small></button>`).join('') : '<p class="dash-note">No documents match these filters. Try a different search or document type.</p>';
   }
   async function loadDocumentation() {
     const seq = ++documentation.request, project = state.projectPath;
+    if (documentation.project !== project) { $('#docs-search').value = ''; $('#docs-kind').value = 'all'; }
     documentation.project = project; documentation.items = []; documentation.selected = ''; documentation.detail++;
     $('#docs-title').textContent = 'Choose a document'; $('#docs-content').textContent = 'Select a file to read it here.'; $('#docs-list').innerHTML = '';
     if (!serverToken || !project) {
@@ -433,6 +436,7 @@
 
   function initDashboard() {
     $('#docs-search').addEventListener('input', renderDocumentationList);
+    $('#docs-kind').addEventListener('change', renderDocumentationList);
     $('#docs-list').addEventListener('click', event => { const item = event.target.closest('[data-doc-index]'); if (item) openDocumentation(Number(item.dataset.docIndex)); });
     $('#docs-graph').addEventListener('click', () => { showPage('graph'); setView('docs'); updateNav(); });
     $('#agent-bench-form').addEventListener('submit', runAgentBenchmark);
