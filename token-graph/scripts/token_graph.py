@@ -24,6 +24,8 @@ SECRET_ENV = {
 }
 LOCAL_OLLAMA = "http://127.0.0.1:11434"
 QUIET_LOG: Path | None = None
+INCLUDE_DOCS = False       # documentation nodes crowd code answers; --include-docs keeps them
+INCLUDE_VENDORED = False   # minified/vendored bundles do too; --include-vendored keeps them
 
 
 def engine_python() -> str:
@@ -166,9 +168,18 @@ def prepare_project(root: Path) -> None:
     if "graphify-out/" not in previous.splitlines(): path.write_text(previous.rstrip() + "\ngraphify-out/\n", encoding="utf-8")
 
 
+def engine_invocation(args) -> list[str]:
+    """The command for an engine call. A `query` goes through graph_answer.py (ranked, compact, with
+    relations); TOKEN_GRAPH_RAW_QUERY=1 selects the engine's own output instead."""
+    args = list(args)
+    if args and args[0] == "query" and os.environ.get("TOKEN_GRAPH_RAW_QUERY") != "1":
+        return [engine_python(), str(Path(__file__).with_name("graph_answer.py")), *args[1:]]
+    return [*engine_command(), *args]
+
+
 def run_engine(root: Path, *args: str, local_model: bool = False, vision: bool = False) -> int:
     if args and args[0] in {"extract", "update"}: prepare_project(root)
-    command = [*engine_command(), *args]
+    command = engine_invocation(args)
     env = clean_env(ollama=local_model, vision=vision)
     if QUIET_LOG is None:
         return subprocess.run(command, cwd=root, env=env, check=False).returncode
@@ -452,8 +463,8 @@ def launch_local(root: Path, question: str | None, refresh: bool, *, open_page: 
         if question:
             if budget < 1: raise ValueError("--budget must be positive")
             from node_filters import scoped_graph
-            answer_graph = scoped_graph(graph, tests=tests, generated=generated, external=external, line_ranges=True)
-            query_command = [*engine_command(), "query", question, "--graph", str(answer_graph), "--budget", str(budget)]
+            answer_graph = scoped_graph(graph, tests=tests, generated=generated, external=external, line_ranges=True, docs=INCLUDE_DOCS, vendored=INCLUDE_VENDORED)
+            query_command = engine_invocation(["query", question, "--graph", str(answer_graph), "--budget", str(budget)])
             for context in contexts or []: query_command.extend(["--context", context])
             with QUIET_LOG.open("a", encoding="utf-8") as log:
                 result = subprocess.run(query_command, cwd=root, env=clean_env(), capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
@@ -530,7 +541,7 @@ def local_feature(root: Path, action: str, *, question: str | None = None,
     # those nodes crowd the bounded answer without explaining the code.
     from node_filters import scoped_graph
     # External names (json, os, ILogger ...) have no source file and only crowd the answer.
-    answer_graph = scoped_graph(graph, tests=tests, generated=generated, external=external, line_ranges=True) if answering else graph
+    answer_graph = scoped_graph(graph, tests=tests, generated=generated, external=external, line_ranges=True, docs=INCLUDE_DOCS, vendored=INCLUDE_VENDORED) if answering else graph
     commands: dict[str, list[str]] = {
         "query": ["query", question or "", "--graph", str(answer_graph)],
         "path": ["path", source or "", target or "", "--graph", str(answer_graph)],
@@ -654,7 +665,7 @@ def local_feature(root: Path, action: str, *, question: str | None = None,
         else:
             command = commands[action]
             if action in ("query", "path", "explain", "affected", "hubs", "tree", "export", "hook-install", "hook-uninstall", "reflect", "merge", "diagnose"):
-                command = [*engine_command(), *command]
+                command = engine_invocation(command)
             env = clean_env()
             completed = subprocess.run(command, cwd=root, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
             if action == "export" and export_format == "svg" and completed.returncode:
@@ -730,6 +741,8 @@ def main() -> int:
     one.add_argument("--no-tests", action="store_true", help="answer from the graph without test files")
     one.add_argument("--include-generated", action="store_true", help="include generated code (gen/, *.pb.go, *.g.cs …) in answers")
     one.add_argument("--include-external", action="store_true", help="include names the project only imports (json, os, ILogger ...) in answers")
+    one.add_argument("--include-docs", action="store_true", help="include documentation nodes (README, rules ...) in code answers")
+    one.add_argument("--include-vendored", action="store_true", help="include minified/vendored bundles in answers")
     one.add_argument("--no-auto-update", action="store_true", help="answer from the graph as it is; only warn when it is older than the code")
     one.add_argument("--context", action="append", default=[], help="edge context filter for a query; repeat as needed")
     one.add_argument("--refresh", action="store_true", help="refresh the graph before generating artifacts")
@@ -754,7 +767,11 @@ def main() -> int:
         command_parser.add_argument("--no-tests", action="store_true", help="exclude test nodes from answers")
         command_parser.add_argument("--include-generated", action="store_true", help="include generated nodes in answers")
         command_parser.add_argument("--include-external", action="store_true", help="include imported-only names in answers")
+        command_parser.add_argument("--include-docs", action="store_true", help="include documentation nodes in code answers")
+        command_parser.add_argument("--include-vendored", action="store_true", help="include minified/vendored bundles in answers")
     args = parser.parse_args()
+    global INCLUDE_DOCS, INCLUDE_VENDORED
+    INCLUDE_DOCS, INCLUDE_VENDORED = bool(getattr(args, "include_docs", False)), bool(getattr(args, "include_vendored", False))
     try:
         root = project_path(args.project)
         if args.command == "launch":
@@ -795,7 +812,7 @@ def main() -> int:
             return run_engine(root, "export", args.format, "--graph", graph)
         if args.command in {"query", "path", "explain", "affected", "hubs"}:
             from node_filters import scoped_graph
-            answer_graph = scoped_graph(graph_file(root), tests=not args.no_tests, generated=args.include_generated, external=args.include_external, line_ranges=True)
+            answer_graph = scoped_graph(graph_file(root), tests=not args.no_tests, generated=args.include_generated, external=args.include_external, line_ranges=True, docs=INCLUDE_DOCS, vendored=INCLUDE_VENDORED)
         if args.command == "query":
             if args.budget < 1: raise ValueError("--budget must be positive")
             cmd = ["query", args.question, "--graph", str(answer_graph), "--budget", str(args.budget)]

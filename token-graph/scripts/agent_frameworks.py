@@ -817,6 +817,44 @@ def method_declares(filename: str, line: str, type_name: str, method: str) -> bo
     return bool(re.match(r'\s*func\s*\(\s*\w+\s+\*?' + re.escape(type_name) + r'(?:\[[^\]]*\])?\s*\)\s*' + re.escape(method) + r'\s*\(', line))
 
 
+def is_interface_type(filename: str, line: str, type_name: str) -> bool:
+    """Whether line declares type_name as an interface: type Limiter interface {."""
+    if language(filename) != 'go':
+        return False
+    return bool(re.match(r'\s*type\s+' + re.escape(type_name) + r'\s+interface\b', line))
+
+
+def method_receiver(filename: str, line: str, method: str) -> str | None:
+    """The receiver type of a method declaration of that name on any type: func (l *redisLimiter) Check( -> 'redisLimiter'."""
+    if language(filename) != 'go':
+        return None
+    match = re.match(r'\s*func\s*\(\s*\w+\s+\*?(\w+)(?:\[[^\]]*\])?\s*\)\s*' + re.escape(method) + r'\s*\(', line)
+    return match.group(1) if match else None
+
+
+def middleware_uses(filename: str, lines: list[str]) -> list[tuple[int, str | None, str]]:
+    """(line, package qualifier or None, name) of each named middleware the file mounts on a router:
+    api.Use(internalauth.Gate(...)) -> (n, 'internalauth', 'Gate'); app.use(requireAuth); app.UseMiddleware<Gate>().
+    Inline functions (Use(func...)) have no name and give nothing."""
+    lang = language(filename)
+    pattern = {
+        'go': r'\.Use\(\s*(?:(\w+)\.)?([A-Za-z_]\w*)',
+        'js': r'\b(?:app|router|api|server|\w+Router)\.use\(\s*(?:(\w+)\.)?([A-Za-z_]\w*)',
+        'csharp': r'\.UseMiddleware<\s*(?:(\w+)\.)?([A-Za-z_]\w*)',
+        'python': r'add_middleware\(\s*(?:(\w+)\.)?([A-Za-z_]\w*)',
+    }.get(lang or '')
+    if not pattern:
+        return []
+    found = []
+    for number, text in enumerate(lines, 1):
+        if is_comment(lang, text):
+            continue
+        match = re.search(pattern, text)
+        if match and match.group(2) not in {'func', 'function', 'async', 'req', 'request'}:
+            found.append((number, match.group(1), match.group(2)))
+    return found
+
+
 # ── Request and response bodies ──────────────────────────────────────────────
 #
 # Found by code from the handler's own lines and the type definitions they name. A body type is

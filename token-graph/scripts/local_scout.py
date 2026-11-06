@@ -34,7 +34,7 @@ sys.dont_write_bytecode = True
 import agent_frameworks as frameworks  # noqa: E402
 import system_links  # noqa: E402
 import explore_agent as explorer  # noqa: E402
-from explorer_evidence import classify_source  # noqa: E402
+from explorer_evidence import classify_source, _source_path  # noqa: E402
 
 SCRIPTS = Path(__file__).resolve().parent
 CACHE = Path.home() / '.token-graph' / 'scout'
@@ -42,6 +42,8 @@ INDENT = ' ' * 11
 MAX_TESTS = 5
 MAX_RULES = 4
 MAX_STEPS = 10           # steps per handler; selfExclude's insert and session revoke come after six others
+MAX_CALLEE_STEPS = 3     # steps kept per function the handler calls, directly or further down
+MAX_CALLEE_TOTAL = 24    # callee steps per handler, so a deep flow cannot bury the handler's own steps
 
 
 def git(repo: Path, *args: str) -> str:
@@ -73,7 +75,10 @@ def graph_of(project: Path) -> dict:
 
 def read(project: Path, file: str) -> list[str]:
     try:
-        return (project / file).read_text(encoding='utf-8').split('\n')
+        path = _source_path(project, file)
+        if path is None or not path.is_file() or path.stat().st_size > 1_000_000:
+            return []
+        return path.read_text(encoding='utf-8').split('\n')
     except (OSError, UnicodeError):
         return []
 
@@ -256,6 +261,37 @@ def scout(project: Path, repo_label: str, question: str, model: str | None, sibl
                 if cite and not step.startswith('- Outcomes'):
                     path, first, last = cite[-1]
                     behaviour.append(f'- {text} ({path}:{first}' + (f'-{last}' if last else '') + ')')
+            # The functions this handler calls, however deep (the flow answer has a section for each): their checked
+            # steps, each tagged with the function. Before this the scout kept only the handler's own steps, so
+            # everything the explorer read below the first call (signing, the limiter, the revoke) was dropped.
+            if answer:
+                parent = {}
+                for _, _, _, source_why in sources:
+                    link = re.fullmatch(r'(?:helper )?(\w+), called by (?:handler )?(\w+)', source_why)
+                    if link:
+                        parent[link.group(1)] = link.group(2)
+                def root_of(function: str) -> str:
+                    for _ in range(8):
+                        if function not in parent:
+                            return function
+                        function = parent[function]
+                    return function
+                taken = 0
+                gate_names = {w.split(', applied')[0] for _, _, _, w in sources if ', applied to every request' in w}
+                for section_match in re.finditer(r'^\*\*(?!Request and responses)(\w+), (?:called by|applied to every request by) [^*]+\*\* \([^)]*\)\n((?:- .*\n?)+)', answer, re.M):
+                    function = section_match.group(1)
+                    if (root_of(function) != name and function not in gate_names) or taken >= MAX_CALLEE_TOTAL:
+                        continue
+                    kept = 0
+                    for step in section_match.group(2).splitlines():
+                        cite = explorer.CITATION.findall(step)
+                        if not cite or step.startswith('- Outcomes') or kept >= MAX_CALLEE_STEPS or taken >= MAX_CALLEE_TOTAL:
+                            continue
+                        text = re.sub(r'\s*(`[^`]*`\s*)*[\w./-]+\.\w+:\d+(?:-\d+)?\s*$', '', step[2:]).rstrip('. ')
+                        path, first, last = cite[-1]
+                        behaviour.append(f'- in `{function}`: {text} ({path}:{first}' + (f'-{last}' if last else '') + ')')
+                        kept += 1
+                        taken += 1
             for text in blocks.get(' '.join(route.split()[:2]), []):      # its header names method and path only
                 if text.startswith(('- Request body', '  - ', '- POST', '- GET', '- PUT', '- DELETE', '- PATCH', '- HANDLE')):
                     behaviour.append(text.strip() if not text.startswith('  - ') else '  ' + text.strip())

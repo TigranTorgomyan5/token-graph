@@ -240,13 +240,17 @@ METHOD_VERBS = {'PUT': ('update', 'modify', 'change', 'edit', 'replace'), 'PATCH
                 'DELETE': ('delete', 'remove', 'erase')}
 # Each function is extracted in its own call, so these bound time, not context. Windows end at the function's
 # real body; nh_identity's validateCredentials does its actual hash check at line 32 of its body.
-HANDLER_LINES = 80     # nh_identity's exchangeToken mints the token pair at line 61 of its body
+HANDLER_LINES = 130    # nh_identity's exchangeToken mints the token pair at line 61 of its body
 CALLEE_LINES = 50
-MAX_CALLEES = 5
+MAX_CALLEES = 8
 HELPER_BODY_LINES = 8   # a called function this short is shown beside its caller, not extracted on its own
 MAX_HELPERS = 2
-MAX_CALL_DEPTH = 2      # handler -> callee -> one callee of the first callee
-MAX_FLOW_LINES = 320    # all registration, handler and callee lines together
+MAX_CALL_DEPTH = 4      # handler -> callee -> callee ... four levels (handler, RevokeByIDs, revokeSessions, Publish)
+MAX_FLOW_LINES = 480    # all registration, handler and callee lines together
+LEVEL_ONE_CALLEES = 3   # callees read below the handler itself
+MAX_MIDDLEWARE = 2       # named middleware read because the question's words match it (a secret gate)
+MAX_IMPLEMENTERS = 3     # types that implement an interface a handler calls through (memLimiter, redisLimiter)
+LEVEL_ONE_BRANCHES = 2  # of those, how many are followed further down
 # The prefix is case-insensitive (WriteJSON, write_json); the word boundary after it is not, so `val` does not
 # match validateCredentials and `log` does not match login.
 # write and internal only as response writers (writeJSON, write_error) and internalServerError: writeHistory and
@@ -465,6 +469,19 @@ def question_route_sources(project: Path, question: str, hints: str | None = Non
                     matches.append((file, line))      # the graph's line: the key of its node
             if len(matches) == 1 and by_location.get(matches[0]):
                 found.append(by_location[matches[0]])
+            elif not matches:
+                # The field's type is an interface (rateLimiter otpratelimit.Limiter): the call runs one of the types
+                # that implement it, so read the methods of that name declared in the interface's package.
+                package_files = [f for f in production_files if in_package(f, package) and frameworks.language(f) == language]
+                if any(frameworks.is_interface_type(f, text, target_type) for f in package_files for text in source_lines(f)):
+                    for file, line in definitions.get(method, []):
+                        if file in package_files:
+                            real = declared_at(file, line, method)
+                            lines = source_lines(file)
+                            if 0 < real <= len(lines) and frameworks.method_receiver(file, lines[real - 1], method) and by_location.get((file, line)):
+                                found.append(by_location[(file, line)])
+                                if len(found) >= MAX_IMPLEMENTERS:
+                                    break
         return found
 
     def call_targets(handler_id: str, handler_file: str, handler_line: int) -> tuple[list[str], list[str]]:
@@ -540,7 +557,7 @@ def question_route_sources(project: Path, question: str, hints: str | None = Non
             other = next((item for item in ordered[1:] if item[2] != picked[0][2]), None)
             picked.append(other if other and (not same or other[0] * 2 >= same[0]) else same)
             # Third slot: the next best of any file (addFavourite: GetFavourite, InsertFavourite, invalidate).
-            picked += [item for item in ordered if item not in picked][:1]
+            picked += [item for item in ordered if item not in picked][:LEVEL_ONE_CALLEES - 2]
         best = [(name, file, line, target, rank) for rank, (score, name, file, line, target) in enumerate(picked)]
         # Shown in the order the handler calls them, so the answer reads as the request flows.
         position = {name: index for index, name in enumerate(called_order)}
@@ -600,7 +617,7 @@ def question_route_sources(project: Path, question: str, hints: str | None = Non
             # Two levels: the handler's best callees, then the best callee of the first of them
             # (balance -> GetBalanceByWalletID -> resolveByWalletID), within a total line budget.
             frontier = [(handler_id, handler_file, handler_line, f'handler {handler[-1]}', 1)]
-            deepened = False
+            expanded: dict[int, int] = {}      # callees followed further down, per level
             while frontier:
                 caller_id, caller_file, caller_line, caller_label, level = frontier.pop(0)
                 found = callees(caller_id, caller_file, caller_line)
@@ -608,7 +625,7 @@ def question_route_sources(project: Path, question: str, hints: str | None = Non
                 # (Service.Banners: repo.Banners, then the cache.GetOrSet wrapped around it). The second one only
                 # when the question matched one route, so several routes keep the budget for their own handlers.
                 deep = 1 if len(best) == 1 else 0
-                for callee, file, line, callee_id, rank in (found[:3] if level == 1 else [item for item in found if item[4] <= deep]):
+                for callee, file, line, callee_id, rank in (found[:LEVEL_ONE_CALLEES] if level == 1 else [item for item in found if item[4] <= deep]):
                     size = body_length(file, line, CALLEE_LINES)
                     if callee_budget <= 0 or sum(count for *_, count, _ in sources) + size > MAX_FLOW_LINES:
                         break
@@ -617,13 +634,37 @@ def question_route_sources(project: Path, question: str, hints: str | None = Non
                         continue
                     sources.append((file, line, size, f'{callee}, called by {caller_label}'))
                     callee_budget -= 1
-                    # Go one level deeper from the best-ranked callee (not merely the first one called).
-                    if level < MAX_CALL_DEPTH and not deepened and rank == 0:
+                    # Go deeper from the best-ranked callees (not merely the first ones called): two branches below
+                    # the handler, one branch at each level after that.
+                    branches = LEVEL_ONE_BRANCHES if level == 1 else 1
+                    if level < MAX_CALL_DEPTH and expanded.get(level, 0) < branches and rank < branches:
                         frontier.append((callee_id, file, line, callee, level + 1))
-                        deepened = True
+                        expanded[level] = expanded.get(level, 0) + 1
             for helper, file, line, size in short_helpers(handler_id, handler_file, handler_line, sources):
                 if sum(count for *_, count, _ in sources) + size <= MAX_FLOW_LINES:
                     sources.append((file, line, size, f'helper {helper}, called by handler {handler[-1]}'))
+    # Middleware mounted for every route (a secret gate, an auth check) runs before any handler, so no call edge
+    # leads to it. Read the named middleware whose name shares a word with the question.
+    asked_words = [word for word in order if len(word) >= 4 and not word.startswith('path:')]
+    if best and asked_words:
+        gates = 0
+        for file in production_files:
+            lines = source_lines(file)
+            for number, qualifier, name in frameworks.middleware_uses(file, lines):
+                joined = ((qualifier or '') + name).casefold()
+                if gates >= MAX_MIDDLEWARE or not any(word in joined for word in asked_words):
+                    continue
+                language = frameworks.language(file)
+                found = [item for item in definitions.get(name, []) if frameworks.language(item[0]) == language
+                         and (not qualifier or Path(item[0]).parent.name == qualifier)]
+                if len(found) != 1:
+                    continue
+                target_file, graph_line = found[0]
+                line = declared_at(target_file, graph_line, name)
+                size = body_length(target_file, line, CALLEE_LINES)
+                if has_body(target_file, line) and sum(count for *_, count, _ in sources) + size <= MAX_FLOW_LINES:
+                    sources.append((target_file, line, size, f'{name}, applied to every request by {file}:{number}'))
+                    gates += 1
     return list(dict.fromkeys(sources))
 
 
@@ -1324,6 +1365,8 @@ def explore(project: Path, question: str, model: str, history: list | None = Non
             return label + ' (lines not shown)'
         if not inventory_question and end - start + 1 > MAX_CITE_SPAN:
             return label + f' (spans {end - start + 1} lines; cite at most {MAX_CITE_SPAN})'
+        if any(n not in lines for n in range(start, end + 1)):
+            return label + ' (some lines in the range were not shown)'
         return ''
 
     def ungrounded_identifiers(clean: str) -> list[str]:
