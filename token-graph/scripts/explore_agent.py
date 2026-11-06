@@ -248,6 +248,9 @@ MAX_HELPERS = 2
 MAX_CALL_DEPTH = 4      # handler -> callee -> callee ... four levels (handler, RevokeByIDs, revokeSessions, Publish)
 MAX_FLOW_LINES = 480    # all registration, handler and callee lines together
 LEVEL_ONE_CALLEES = 3   # callees read below the handler itself
+QUESTION_SYNONYMS = {'sign': ('mint', 'jwt', 'issue', 'encode'), 'encrypt': ('cipher', 'seal'), 'authoriz': ('permission', 'policy', 'guard'),
+                     'cache': ('memo', 'store'), 'persist': ('save', 'insert', 'upsert', 'store'), 'delet': ('remove', 'revoke'),
+                     'rate': ('limit', 'throttle'), 'limit': ('throttle', 'quota'), 'valid': ('check', 'verify')}
 MAX_MIDDLEWARE = 2       # named middleware read because the question's words match it (a secret gate)
 MAX_IMPLEMENTERS = 3     # types that implement an interface a handler calls through (memLimiter, redisLimiter)
 LEVEL_ONE_BRANCHES = 2  # of those, how many are followed further down
@@ -372,6 +375,12 @@ def question_route_sources(project: Path, question: str, hints: str | None = Non
         if isinstance(edge, dict) and edge.get('relation') in {'calls', 'indirect_call'}:
             calls.setdefault(str(edge.get('source')), []).append(str(edge.get('target')))
     callee_budget = MAX_CALLEES
+    # Words the question uses for what a function is named differently: "signing" is mintTokenPair / issueJwt.
+    question_terms = set(order)
+    for word in list(order):
+        for stem, names in QUESTION_SYNONYMS.items():
+            if word.startswith(stem):
+                question_terms |= set(names)
 
     sources_cache: dict[str, list[str]] = {}
 
@@ -532,7 +541,7 @@ def question_route_sources(project: Path, question: str, hints: str | None = Non
                        len(frameworks.called_names(file, frameworks.function_body(source_lines(file), line, CALLEE_LINES))))
             # A question word in the name helps, but must not let store queries that repeat the question's noun
             # outrank the call doing the side effect (selfExclude's revokeAllSessions).
-            score = 6 * len(parts & set(order)) + min(8, work)
+            score = 6 * len(parts & question_terms) + min(8, work)
             score += 2 if Path(file).parent == Path(handler_file).parent else 0
             if MAPPER_NAME.search(name):
                 score -= 8    # balanceDto, toResponse: shapes the answer, rarely decides it
@@ -542,12 +551,17 @@ def question_route_sources(project: Path, question: str, hints: str | None = Non
             # A question word in a helper's name (LoginOK for "login") does not make it the answer.
             if HELPER_NAME.search(name) or {part.casefold() for part in Path(file).parts[:-1]} & HELPER_DIRS:
                 score -= 20
-            ranked.append((score, name, file, line, target))
+            ranked.append((score, name, file, line, target, parts & question_terms))
         # Prefer callees in different files, so two queries in one store file do not crowd out the handler's
         # other side effects (selfExclude: the exclusion insert, then revokeAllSessions in its own module);
         # a second callee from the same file still fills the slot when nothing else qualifies
         # (addFavourite: GetFavourite, then InsertFavourite).
-        ordered = [item for item in sorted(ranked, key=lambda item: (-item[0], item[2], item[3])) if item[0] > 0]
+        # Among equal scores, the callee that matches a word few other callees match: of tokenClaims and mintTokenPair
+        # (both "token"), the one named for "signing" (mint) is the answer, not the one that shares only "token".
+        term_counts = {term: sum(term in item[5] for item in ranked) for item in ranked for term in item[5]}
+        rarity = lambda item: sum(term_counts[term] <= 2 for term in item[5])
+        ranked = [item[:5] for item in sorted(ranked, key=lambda item: (-item[0], -rarity(item), item[2], item[3]))]
+        ordered = [item for item in ranked if item[0] > 0]
         picked = ordered[:1]
         if len(ordered) > 1:
             # The second slot goes to the best callee in another file when it scores at least half as well as

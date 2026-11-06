@@ -568,6 +568,13 @@ def handler_reference(filename: str, lines: list[str], number: int) -> tuple[str
     if lang == 'php':   # Route::post('/x', [InvoiceController::class, 'store']) / 'InvoiceController@store'
         named = re.search(r'(\w+)::class\s*,\s*[\'"](\w+)[\'"]|[\'"](\w+)@(\w+)[\'"]', call)
         return ((named.group(2) or named.group(4)), (named.group(1) or named.group(3))) if named else (None, None)
+    # A handler built by a factory called with literals only: r.Post("/pages", h.section("page", "GetPages")).
+    # The function that runs is the factory (its body returns the handler); a call with a name argument
+    # (middleware.Auth(h.login)) is not this case and falls through to the last-name rule below.
+    literal = r'(?:"[^"]*"|\'[^\']*\'|`[^`]*`|\d+)'
+    factory = re.search(r',\s*(?:(\w+)\.)?([A-Za-z_]\w*)\(\s*' + literal + r'(?:\s*,\s*' + literal + r')*\s*\)\s*\)[\s,)]*;?\s*$', call)
+    if factory and factory.group(2) not in _NOT_NAMES:
+        return factory.group(2), factory.group(1)
     # The last name closed by the call's parentheses; trailing commas/parens of multi-line calls are allowed.
     names = re.findall(r'(?:\b(\w+)(?:\.|::))?([A-Za-z_]\w*)\s*\)[\s,)]*;?\s*$', call)
     if not names or names[-1][1] in _NOT_NAMES:
