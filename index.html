@@ -328,9 +328,21 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       .sys-service-list li{display:flex;align-items:center;gap:8px;border-top:1px solid #1a2338;padding:6px 0;font-size:12px;color:#cfd6e6}
       .sys-service-list label{flex:1;min-width:0;display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}
       @media(max-width:820px){.sys-table th:nth-child(5),.sys-table td:nth-child(5){display:none}}
+
+      /* Shared interaction and reflow rules. */
+      :where(button,a,input,select,textarea,summary,[tabindex]):focus-visible{outline:2px solid #c1b7ff;outline-offset:3px;scroll-margin:16px}
+      .skip-link{position:fixed;top:12px;left:12px;z-index:10000;padding:12px 18px;border-radius:8px;background:#eeeaff;color:#201a49;font-weight:600;transform:translateY(-200%)}
+      .skip-link:focus{transform:translateY(0);outline:3px solid #8877ff;outline-offset:3px}
+      .nav-item{min-height:40px}.dash-link,.server-pill,.ai-chip,.project-select,.docs-actions input{min-height:36px}
+      .icon-button,.detail-close,.sys-close{min-width:28px;min-height:28px}
+      .project-switch{min-width:0}.project-switch .project-select{flex:1;min-width:120px}.project-location{color:#a7b4cb}
+      .docs-actions .project-select{max-width:100%}.docs-reader{scroll-padding:16px}.docs-list{padding:4px;scroll-padding:8px}
+      @media(max-width:700px){.project-switch{width:100%}#project-search{flex:1;min-width:120px}.project-switch .project-select{max-width:100%}.side-nav{padding:4px;scroll-padding:8px}.nav-item{min-height:44px}.docs-actions input{min-width:0;width:100%}.docs-actions .project-select{flex:1}.workspace{min-width:0}}
+      @media(prefers-reduced-motion:reduce){.skip-link{transition:none}html{scroll-behavior:auto}}
     </style>
   </head>
   <body>
+    <a class="skip-link" href="#main-content">Skip to project content</a>
     <main class="app-shell">
       <aside class="sidebar">
         <a class="brand" href="./" aria-label="Token Graph Explorer home">
@@ -375,7 +387,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
         </div>
       </aside>
 
-      <section class="workspace">
+      <section class="workspace" id="main-content" tabindex="-1" aria-label="Project content">
         <header class="topbar">
           <div><div class="breadcrumb">PROJECTS <span>/</span> <span id="project-name">LOCAL PROJECT</span> <span>/</span> <b id="view-crumb">GRAPH</b></div><h1 id="page-title">Codebase map</h1><p class="page-hint" id="page-hint"></p></div>
           <div class="project-switch"><label class="eyebrow" for="graph-selector">PROJECT</label><input id="project-search" class="ask-input" type="search" placeholder="Find project…" aria-label="Find a loaded project"><select id="graph-selector" class="project-select" disabled aria-label="Switch loaded graph"></select><button type="button" class="server-pill" id="server-connection" data-nav="settings" role="status">Checking server…</button><button type="button" class="ai-chip" id="ai-chip" data-nav="settings" title="Local AI status · open Settings">AI ·</button><span id="project-search-status" class="dash-note" role="status" aria-live="polite"></span><p id="project-location" class="dash-note project-location"></p></div>

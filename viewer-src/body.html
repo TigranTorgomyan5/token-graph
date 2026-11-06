@@ -1,4 +1,5 @@
   <body>
+    <a class="skip-link" href="#main-content">Skip to project content</a>
     <main class="app-shell">
       <aside class="sidebar">
         <a class="brand" href="./" aria-label="Token Graph Explorer home">
@@ -43,7 +44,7 @@
         </div>
       </aside>
 
-      <section class="workspace">
+      <section class="workspace" id="main-content" tabindex="-1" aria-label="Project content">
         <header class="topbar">
           <div><div class="breadcrumb">PROJECTS <span>/</span> <span id="project-name">LOCAL PROJECT</span> <span>/</span> <b id="view-crumb">GRAPH</b></div><h1 id="page-title">Codebase map</h1><p class="page-hint" id="page-hint"></p></div>
           <div class="project-switch"><label class="eyebrow" for="graph-selector">PROJECT</label><input id="project-search" class="ask-input" type="search" placeholder="Find project…" aria-label="Find a loaded project"><select id="graph-selector" class="project-select" disabled aria-label="Switch loaded graph"></select><button type="button" class="server-pill" id="server-connection" data-nav="settings" role="status">Checking server…</button><button type="button" class="ai-chip" id="ai-chip" data-nav="settings" title="Local AI status · open Settings">AI ·</button><span id="project-search-status" class="dash-note" role="status" aria-live="polite"></span><p id="project-location" class="dash-note project-location"></p></div>
