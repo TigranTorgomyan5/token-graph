@@ -112,6 +112,26 @@ class LogTests(unittest.TestCase):
         text = logs.redact('postgres://alice:password123@db/x api_key=secret123 bob@example.com')
         for secret in ('password123', 'secret123', 'bob@example.com'): self.assertNotIn(secret, text)
 
+    def test_redaction_hides_complete_quoted_values(self):
+        for line in ('password="alpha bravo"', 'token=\'alpha bravo\'', 'password="alpha \\"bravo\\" charlie"'):
+            result = logs.redact(line)
+            for word in ('alpha', 'bravo', 'charlie'):
+                self.assertNotIn(word, result)
+
+    def test_imported_evidence_references_source_records(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / 'argo.json'
+            source.write_text(json.dumps([{'content': ''}, {'content': 'ERROR password="alpha bravo"'}, {'content': '    at caller()'}]))
+            output = Path(directory) / 'evidence.txt'
+            out = io.StringIO()
+            with patch.object(sys, 'argv', ['log_analyzer.py', str(source), '--source', 'argocd', '--source-service', 'api', '--no-llm', '--evidence-out', str(output)]), redirect_stdout(out):
+                self.assertEqual(logs.main(), 0)
+            self.assertIn('example records 2-3', out.getvalue())
+            evidence = output.read_text()
+            self.assertIn('record 2:', evidence)
+            self.assertNotIn('alpha', evidence)
+            self.assertNotIn('bravo', evidence)
+
     def test_large_file_is_limited(self):
         with tempfile.TemporaryDirectory() as directory:
             file = Path(directory) / 'input.log'
@@ -279,7 +299,7 @@ class ExplorerTests(unittest.TestCase):
         reads = []
         def read(project, filename, line=1, count=50):
             reads.append((filename, line, count))
-            return f'{line}: source line\n{line + count - 1}: last source line'
+            return '\n'.join(f'{n}: source line' for n in range(line, line + count))
         with tempfile.TemporaryDirectory() as directory, \
              patch.object(explorer, 'graph_query', return_value=json.dumps({'results': []})), \
              patch.object(explorer, 'endpoint_inventory_sources', return_value=[('cmd/nh-sport/router.go', 55, 20), ('internal/sport/controller.go', 124, 30)]), \
@@ -504,6 +524,11 @@ class ExplorerGroundingTests(unittest.TestCase):
     def test_whole_excerpt_citation_is_rejected(self):
         lines = {n: f'line {n}' for n in range(1, 61)}
         answer, _ = self.ask(self.evidence('main.go', lines), ['- The service handles everything. main.go:1-60'])
+        self.assertIn('Insufficient verified evidence', answer)
+
+    def test_citation_spanning_unshown_lines_is_rejected(self):
+        answer, _ = self.ask(self.evidence('main.go', {1: 'func main() {', 3: 'serve()'}),
+                             ['- The entry calls `serve`. main.go:1-3'])
         self.assertIn('Insufficient verified evidence', answer)
 
     def test_narrow_citation_inside_shown_range_is_accepted(self):

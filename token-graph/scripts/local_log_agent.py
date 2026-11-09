@@ -100,6 +100,7 @@ def main():
     parser.add_argument('--limit', type=int, default=100)
     parser.add_argument('--model', default='qwen3:14b-q4_K_M')
     parser.add_argument('--question', default='Summarize failures and suggest investigation steps.')
+    parser.add_argument('--evidence-out', type=Path, help='save redacted source records to a new file for review')
     parser.add_argument('--config', type=Path, default=Path.home() / '.codex' / 'config.toml')
     args = parser.parse_args()
     started = time.monotonic()
@@ -143,6 +144,8 @@ def main():
             print(f'RETRIEVAL_SECONDS: {time.monotonic() - started:.3f}', flush=True)
             command = [sys.executable, str(SCRIPTS / 'log_analyzer.py'), str(path), args.question,
                        '--source', fmt, '--source-service', args.service, '--model', args.model]
+            if args.evidence_out:
+                command += ['--evidence-out', str(args.evidence_out)]
             result = subprocess.run(command, check=False, capture_output=True, text=True)
             if result.returncode:
                 print('Log analyzer failed: ' + result.stderr.strip()[:500], file=sys.stderr)

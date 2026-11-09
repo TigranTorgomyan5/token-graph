@@ -41,6 +41,7 @@
     renderCommunityList();
     fitGraph();
     renderSearchResults();
+    updateArchitectureDisplay();
   }
 
   function setView(view) {
@@ -92,7 +93,7 @@
   $('#kind-filter').addEventListener('change', event => {
     state.kind = event.target.value;
     if (state.selected && !visible(state.selected)) select(null);
-    updateMetrics({}); renderCommunityList(); fitGraph(); renderSearchResults();
+    updateMetrics({}); renderCommunityList(); fitGraph(); renderSearchResults(); updateArchitectureDisplay();
   });
   document.querySelectorAll('[data-group-by]').forEach(b => {
     b.setAttribute('aria-pressed', String(b.dataset.groupBy === state.groupBy));

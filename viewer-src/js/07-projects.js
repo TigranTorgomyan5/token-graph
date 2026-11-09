@@ -68,6 +68,7 @@
     renderDetails(null);
     if (state.view === 'docs' && !entry.raw.nodes.some(isDocument)) setView('all');
     normalizeGraph(entry.raw);
+    updateArchitectureDisplay();
     loadBenchmark(entry.raw.benchmark ?? entry.raw.graph?.benchmark ?? null);
     $('#graph-selector').value = id;
     $('#graph-source-note').textContent = `Viewing ${entry.name}. ${loadedGraphs.size} graph(s) loaded in this tab. Data stays in this browser.`;

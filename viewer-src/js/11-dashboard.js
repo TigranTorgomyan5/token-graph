@@ -35,6 +35,32 @@
   function showCard(id, on) { $(`#dash-${id}`).classList.toggle('hidden', !on); }
 
   const documentation = { items: [], selected: '', project: null, request: 0, detail: 0 };
+  const apiDocs = { request: 0, project: null, markdown: '' };
+  async function discoverApiDocs() {
+    const project = state.projectPath, request = ++apiDocs.request;
+    apiDocs.project = project; apiDocs.markdown = '';
+    $('#docs-api-results').classList.add('hidden'); $('#docs-api-export').classList.add('hidden');
+    if (!serverToken || !project) { $('#docs-api-status').textContent = 'Open a local project using the Token Graph server first.'; return; }
+    $('#docs-api-scan').disabled = true; $('#docs-api-status').textContent = 'Inspecting indexed routes and handlers…';
+    try {
+      const result = await api(`/api/documentation/endpoints?project=${encodeURIComponent(project)}`);
+      if (request !== apiDocs.request || state.projectPath !== project) return;
+      const routes = Array.isArray(result.routes) ? result.routes : [];
+      $('#docs-api-list').replaceChildren();
+      const lines = ['# API endpoint inventory', '', result.note || '', ''];
+      for (const route of routes) {
+        const title = `${route.method} ${route.path}`, evidence = `Route: ${route.file}:${route.line}`;
+        const details = document.createElement('details'), summary = document.createElement('summary'), pre = document.createElement('pre');
+        summary.textContent = title; const findings = Array.isArray(route.contracts) && route.contracts.length ? route.contracts.join('\n') : 'Request and response details: unknown; inspect the handler and middleware.';
+        pre.textContent = `${evidence}\n\n${findings}`; details.append(summary, pre); $('#docs-api-list').append(details);
+        lines.push(`## ${title}`, '', evidence, '', findings, '', 'Authentication and validation: verify handler and middleware.', '');
+      }
+      if (!routes.length) $('#docs-api-list').textContent = 'No routes detected. The service may use unsupported routing patterns.';
+      apiDocs.markdown = lines.join('\n'); $('#docs-api-results').classList.remove('hidden'); $('#docs-api-export').classList.toggle('hidden', !routes.length);
+      $('#docs-api-status').textContent = `Found ${result.total} route declarations${result.truncated ? `; showing the first ${routes.length}` : ''}. Verify completeness.`;
+    } catch (error) { if (request === apiDocs.request && state.projectPath === project) $('#docs-api-status').textContent = `Could not discover endpoints: ${error.message}`; }
+    finally { if (request === apiDocs.request) $('#docs-api-scan').disabled = false; }
+  }
   function renderDocumentationList() {
     const query = $('#docs-search').value.trim().toLowerCase();
     const kind = $('#docs-kind').value;
@@ -44,6 +70,7 @@
   }
   async function loadDocumentation() {
     const seq = ++documentation.request, project = state.projectPath;
+    if (apiDocs.project !== project) { apiDocs.request++; apiDocs.project = project; apiDocs.markdown = ''; $('#docs-api-results').classList.add('hidden'); $('#docs-api-export').classList.add('hidden'); $('#docs-api-status').textContent = ''; $('#docs-api-scan').disabled = false; }
     if (documentation.project !== project) { $('#docs-search').value = ''; $('#docs-kind').value = 'all'; }
     documentation.project = project; documentation.items = []; documentation.selected = ''; documentation.detail++;
     $('#docs-title').textContent = 'Choose a document'; $('#docs-content').textContent = 'Select a file to read it here.'; $('#docs-list').innerHTML = '';
@@ -68,10 +95,35 @@
     documentation.selected = item.path; renderDocumentationList(); $('#docs-title').textContent = item.path; $('#docs-content').textContent = 'Loading…';
     try {
       const result = await api(`/api/documentation/file?project=${encodeURIComponent(project)}&file=${encodeURIComponent(item.path)}`);
-      if (seq === documentation.detail && state.projectPath === project) $('#docs-content').textContent = result.content;
+      if (seq === documentation.detail && state.projectPath === project) renderDocumentationContent(item.path, result.content);
     } catch (error) {
       if (seq === documentation.detail) $('#docs-content').textContent = `Could not open document: ${error.message}`;
     }
+  }
+  function renderDocumentationContent(path, content) {
+    const container = $('#docs-content');
+    container.replaceChildren();
+    const text = String(content || ''), pattern = /\[([^\]\n]+)\]\(([^)\n]+)\)/g;
+    let last = 0, match;
+    while ((match = pattern.exec(text))) {
+      const target = match[2].split('#')[0].split('?')[0];
+      let decoded;
+      try { decoded = decodeURIComponent(target); } catch (_) { decoded = ''; }
+      const parts = path.split('/').slice(0, -1);
+      let valid = !!decoded && !/^(?:[a-z][a-z0-9+.-]*:|\/|\\)/i.test(decoded) && !decoded.includes('\\');
+      if (valid) for (const part of decoded.split('/')) {
+        if (!part || part === '.') continue;
+        if (part === '..') { if (!parts.length) { valid = false; break; } parts.pop(); }
+        else parts.push(part);
+      }
+      const index = valid ? documentation.items.findIndex(item => item.path === parts.join('/')) : -1;
+      if (index < 0) continue;
+      container.append(document.createTextNode(text.slice(last, match.index)));
+      const button = document.createElement('button');
+      button.type = 'button'; button.className = 'docs-inline-link'; button.dataset.docIndex = String(index); button.textContent = match[1];
+      container.append(button); last = pattern.lastIndex;
+    }
+    container.append(document.createTextNode(text.slice(last)));
   }
 
   function showPage(page) {
@@ -224,7 +276,7 @@
       text: `${tokensText(s.saved_tokens)} · ${percentText(s.saved_percent)}`,
       title: `${sessionName(s)} — folder ${s.folder || 'unknown'}, started ${started(s)}, session ${s.session}: without graph ${format(s.without_graph_tokens)}, with graph ${format(s.with_graph_tokens)}, saved ${format(s.saved_tokens)} tokens (${percentText(s.saved_percent)}) in ${count(s.graph_answers, 'graph answer')}`,
     })));
-    setCard('savings', `<p class="dash-sub">Latest session</p>${where(latest)}<p class="dash-note">Sessions can start in another folder and still query this project's graph.</p><div class="dash-tiles">${tiles}</div><p class="dash-sub">Saved per session (hover for folder and time)</p>${rows}<p class="dash-note">Estimate from the Claude Code transcripts on this computer (4 characters ≈ 1 token, no model used). Without graph: the files a graph answer pointed to and Claude then opened, read in full. With graph: the answers plus what Claude read from those files.</p>${refresh}`,
+    setCard('savings', `<div class="dash-tiles">${tiles}</div><details class="savings-details"><summary>Session history and calculation details</summary><p class="dash-sub">Latest session</p>${where(latest)}<p class="dash-note">Sessions can start in another folder and still query this project's graph.</p><p class="dash-sub">Saved per session (hover for folder and time)</p>${rows}</details><p class="dash-note">Estimate from the Claude Code transcripts on this computer (4 characters ≈ 1 token, no model used). Without graph: the files a graph answer pointed to and Claude then opened, read in full. With graph: the answers plus what Claude read from those files.</p>${refresh}`,
       pill(status, `${percentText(latest.saved_percent)} saved`, 'Latest session'));
   }
 
@@ -435,9 +487,16 @@
   }
 
   function initDashboard() {
+    $('#docs-api-scan').addEventListener('click', discoverApiDocs);
+    $('#docs-api-export').addEventListener('click', () => {
+      if (!apiDocs.markdown || apiDocs.project !== state.projectPath) return;
+      const url = URL.createObjectURL(new Blob([apiDocs.markdown], {type: 'text/markdown;charset=utf-8'}));
+      const link = document.createElement('a'); link.href = url; link.download = 'api-endpoints.md'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    });
     $('#docs-search').addEventListener('input', renderDocumentationList);
     $('#docs-kind').addEventListener('change', renderDocumentationList);
     $('#docs-list').addEventListener('click', event => { const item = event.target.closest('[data-doc-index]'); if (item) openDocumentation(Number(item.dataset.docIndex)); });
+    $('#docs-content').addEventListener('click', event => { const item = event.target.closest('[data-doc-index]'); if (item) openDocumentation(Number(item.dataset.docIndex)); });
     $('#docs-graph').addEventListener('click', () => { showPage('graph'); setView('docs'); updateNav(); });
     $('#agent-bench-form').addEventListener('submit', runAgentBenchmark);
     $('#bench-agent').addEventListener('change', updateBenchFields);

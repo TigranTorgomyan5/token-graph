@@ -7,10 +7,34 @@ refreshes the graph (or says it is stale) when this returns a reason.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+import sys
 from pathlib import Path
 
 GIT_TIMEOUT = 10
+
+
+def _new_code_files(root: Path, indexed: set[str]) -> list[str]:
+    """Find new code without reading file contents, respecting the engine's ignore rules."""
+    root = root.resolve()
+    vendor = str(Path(__file__).resolve().parents[1] / 'vendor')
+    if vendor not in sys.path:
+        sys.path.insert(0, vendor)
+    from graphify.detect import CODE_EXTENSIONS, ignored_predicate, _is_sensitive
+    ignored = ignored_predicate(root)
+    found = []
+    for directory, dirs, files in os.walk(root, followlinks=False):
+        parent = Path(directory)
+        dirs[:] = [name for name in dirs if name != 'graphify-out' and not (parent / name).is_symlink() and not ignored(parent / name)]
+        for name in files:
+            path = parent / name
+            if path.is_symlink() or path.suffix.lower() not in CODE_EXTENSIONS or ignored(path) or _is_sensitive(path):
+                continue
+            relative = path.relative_to(root).as_posix()
+            if relative not in indexed:
+                found.append(relative)
+    return found
 
 
 def _git(root: Path, *args: str) -> str | None:
@@ -74,8 +98,12 @@ def stale_reason(root: Path, graph: Path) -> str | None:
         return f"{len(edited)} files edited after the graph was built" if edited else None
     manifest = graph.with_name("manifest.json")
     try:
-        files = list(json.loads(manifest.read_text(encoding="utf-8")))
+        contents = json.loads(manifest.read_text(encoding="utf-8"))
+        if not isinstance(contents, dict):
+            return 'graph manifest is invalid; freshness cannot be verified'
+        files = list(contents)
     except (OSError, ValueError):
-        return None
+        return 'graph manifest is unavailable; freshness cannot be verified'
     edited = _changed_since(root, files, graph_time)
+    edited += _new_code_files(root, set(files))
     return f"{len(edited)} files edited after the graph was built" if edited else None

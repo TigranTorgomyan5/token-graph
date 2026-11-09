@@ -53,6 +53,35 @@ NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 MAX_PROJECTS = 50
 
 
+def api_documentation(project: Path) -> dict:
+    """Build a bounded, source-backed route inventory without invoking a model."""
+    if not graph_path(project).is_file():
+        raise ValueError('This project has no graph yet; build it first.')
+    hints = explore_agent.endpoint_route_hints(project)
+    routes = []
+    seen = set()
+    for hint in hints.splitlines():
+        match = re.match(r'^(\S+)\s+(/\S*).* — (.+):(\d+)$', hint)
+        if not match:
+            continue
+        method, path, file, line = match.groups()
+        key = (method, path, file, line)
+        if key in seen:
+            continue
+        seen.add(key)
+        routes.append({'method': method, 'path': path, 'file': file, 'line': int(line), 'evidence': hint})
+    total = len(routes)
+    routes = routes[:40]
+    for route in routes:
+        name = f"{route['method']} {route['path']}"
+        sources = explore_agent.question_route_sources(project, name, hints=hints)
+        sources = [source for source in sources if source[3] == f'registration of {name}' or source[3].startswith(f'registration of {name} ') or source[3].endswith(f' of {name}')]
+        findings = explore_agent.endpoint_contracts(project, sources) if sources else []
+        route['contracts'] = [line.replace('Request body: none read by the handler', 'Request body: not detected in the inspected handler; verify middleware and helpers') for line in findings]
+    return {'routes': routes, 'total': total, 'truncated': total > len(routes),
+            'note': 'Static discovery is incomplete; authentication, validation, middleware, nested fields, and runtime responses may be missing. Verify source.'}
+
+
 def documentation_files(project: Path) -> list[dict]:
     """Find bounded, non-ignored documentation and generated wiki articles."""
     items = []
@@ -965,6 +994,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(200, {"agents": claude_agents(project)})
             if url.path == "/api/documentation":
                 return self._json(200, {"documents": documentation_files(self._known_project(query.get('project')))})
+            if url.path == "/api/documentation/endpoints":
+                return self._json(200, api_documentation(self._known_project(query.get('project'))))
             if url.path == "/api/documentation/file":
                 project = self._known_project(query.get('project'))
                 relative = query.get('file', '')

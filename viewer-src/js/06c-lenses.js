@@ -73,9 +73,41 @@
   function updateLensButtons() {
     document.querySelectorAll('[data-lens]').forEach(b => { const on = b.dataset.lens === state.lens; b.classList.toggle('active', on); b.setAttribute('aria-pressed', String(on)); });
   }
+  let architectureCardsSelected = false;
+  function updateArchitectureDisplay() {
+    const isArchitecture = state.lens === 'architecture';
+    const cards = isArchitecture && architectureCardsSelected;
+    $('#architecture-switch').classList.toggle('hidden', !isArchitecture);
+    $('#architecture-card-view').classList.toggle('hidden', !cards);
+    $('#canvas-wrap').classList.toggle('hidden', cards);
+    $('#architecture-network').setAttribute('aria-pressed', String(!architectureCardsSelected));
+    $('#architecture-cards').setAttribute('aria-pressed', String(architectureCardsSelected));
+    $('#architecture-network').classList.toggle('active', !architectureCardsSelected);
+    $('#architecture-cards').classList.toggle('active', architectureCardsSelected);
+    if (!cards) return;
+    const groups = state.modules.filter(m => m.id !== '(external / unresolved)' && m.nodes.some(passesFilters));
+    const shown = groups.slice(0, 40), ids = new Set(shown.map(m => m.id));
+    const links = moduleLinks().filter(l => ids.has(l.from) && ids.has(l.to));
+    const width = 1000, cols = 3, cardW = 240, cardH = 80, gapX = 115, gapY = 62, rows = Math.ceil(shown.length / cols);
+    const pos = new Map(shown.map((m, i) => [m.id, {x: 30 + (i % cols) * (cardW + gapX), y: 25 + Math.floor(i / cols) * (cardH + gapY)}]));
+    const edges = links.map(l => { const a = pos.get(l.from), b = pos.get(l.to), dx = b.x - a.x, dy = b.y - a.y, scale = Math.min(dx ? (cardW / 2 + 4) / Math.abs(dx) : Infinity, dy ? (cardH / 2 + 4) / Math.abs(dy) : Infinity); return `<path d="M ${a.x + cardW / 2 + dx * scale} ${a.y + cardH / 2 + dy * scale} L ${b.x + cardW / 2 - dx * scale} ${b.y + cardH / 2 - dy * scale}" marker-end="url(#arch-arrow)"><title>${escapeHtml(`${l.from} → ${l.to}: ${l.count} detected links`)}</title></path>`; }).join('');
+    const boxes = shown.map(m => { const p = pos.get(m.id), files = new Set(m.nodes.filter(passesFilters).map(n => n.source_file).filter(Boolean)).size; return `<g class="architecture-box" role="button" tabindex="0" data-architecture-module="${escapeHtml(m.id)}" aria-label="${escapeHtml(`${m.name}, ${files} files. Open details`)}" transform="translate(${p.x} ${p.y})"><rect width="${cardW}" height="${cardH}" rx="10"></rect><text x="14" y="30">${escapeHtml(m.name.length > 29 ? m.name.slice(0, 26) + '…' : m.name)}</text><text class="architecture-box-note" x="14" y="55">${files} files · ${m.nodes.filter(passesFilters).length} symbols</text><title>${escapeHtml(m.name)}</title></g>`; }).join('');
+    $('#architecture-card-map').innerHTML = shown.length ? `${groups.length > shown.length ? `<p class="dash-note">Showing ${shown.length} of ${groups.length} groups.</p>` : ''}<svg viewBox="0 0 ${width} ${Math.max(130, rows * (cardH + gapY))}" role="group" aria-label="Architecture folder groups and relationships"><defs><marker id="arch-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#aaa0ff"></path></marker></defs><g class="architecture-edges">${edges}</g>${boxes}</svg>` : '<p class="dash-note">No folder groups match the current filters.</p>';
+  }
+  $('#architecture-network').addEventListener('click', () => { architectureCardsSelected = false; updateArchitectureDisplay(); resize(); });
+  $('#architecture-cards').addEventListener('click', () => { architectureCardsSelected = true; updateArchitectureDisplay(); });
+  function openArchitectureCard(event) {
+    const target = event.target.closest?.('[data-architecture-module]');
+    if (!target) return;
+    const group = state.modules[state.moduleIndex.get(target.dataset.architectureModule)];
+    showClusterDetails(group);
+  }
+  $('#architecture-card-map').addEventListener('click', openArchitectureCard);
+  $('#architecture-card-map').addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openArchitectureCard(event); } });
   function setLens(lens) {
     if (state.view === 'docs' && lens !== 'full') setView('all');
     state.lens = lens;
+    updateArchitectureDisplay();
     state.focus = null; $('#focus-bar').classList.add('hidden');
     state.expanded = new Set(); state.selectedCluster = null;
     state.focusDir = lens === 'flow' ? 'out' : 'both';

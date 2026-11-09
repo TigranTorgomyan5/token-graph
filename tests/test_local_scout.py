@@ -55,6 +55,16 @@ class LocalScoutTests(unittest.TestCase):
         self.addCleanup(self.directory.cleanup)
         self.root = make_project(Path(self.directory.name))
 
+    def test_read_rejects_outside_paths_and_symlinks(self):
+        with tempfile.TemporaryDirectory() as outside:
+            secret = Path(outside) / 'test_private.py'
+            secret.write_text('private value')
+            self.assertEqual(scout.read(self.root, str(secret)), [])
+            self.assertEqual(scout.read(self.root, str(Path('..') / Path(outside).name / secret.name)), [])
+            link = self.root / 'e2e' / 'linked_test.py'
+            link.symlink_to(secret)
+            self.assertEqual(scout.read(self.root, 'e2e/linked_test.py'), [])
+
     def test_block_has_every_kit_field_in_order(self):
         block = scout.scout(self.root, 'nh-player-service (origin/V5.0 @ abc)', 'How does self exclusion work?', None)
         labels = [line.split(':')[0] for line in block.splitlines() if line[:1].isalpha()]

@@ -193,6 +193,20 @@ class FreshnessTest(unittest.TestCase):
 
 
 class FreshnessWithoutGitTest(unittest.TestCase):
+    def test_new_code_marks_non_git_graph_stale_but_ignored_files_do_not(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            output = root / 'graphify-out'
+            output.mkdir()
+            graph = output / 'graph.json'
+            graph.write_text('{}')
+            (output / 'manifest.json').write_text('{}')
+            (root / '.graphifyignore').write_text('ignored.py\n')
+            (root / 'ignored.py').write_text('ignored = True\n')
+            self.assertIsNone(graph_freshness.stale_reason(root, graph))
+            (root / 'added.py').write_text('value = 1\n')
+            self.assertEqual(graph_freshness.stale_reason(root, graph), '1 files edited after the graph was built')
+
     def test_manifest_files_newer_than_graph(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

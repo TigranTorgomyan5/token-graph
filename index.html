@@ -339,6 +339,21 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       .docs-actions .project-select{max-width:100%}.docs-reader{scroll-padding:16px}.docs-list{padding:4px;scroll-padding:8px}
       @media(max-width:700px){.project-switch{width:100%}#project-search{flex:1;min-width:120px}.project-switch .project-select{max-width:100%}.side-nav{padding:4px;scroll-padding:8px}.nav-item{min-height:44px}.docs-actions input{min-width:0;width:100%}.docs-actions .project-select{flex:1}.workspace{min-width:0}}
       @media(prefers-reduced-motion:reduce){.skip-link{transition:none}html{scroll-behavior:auto}}
+
+      /* Task-first overview: primary investigation, supporting project context. */
+      .explore-intro{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:8px 0 20px;border-bottom:1px solid #26324a;margin-bottom:16px}
+      .explore-intro h2{font:600 clamp(21px,2vw,30px)/1.2 var(--sans);letter-spacing:-.025em;margin:9px 0;color:#edf1fa}
+      .explore-intro p{color:#a5b2c8;font-size:13px;line-height:1.6;max-width:650px;margin:0}
+      .workflow-badge{flex:none;color:#c4baff;font:11px var(--mono);padding:10px 14px;border:1px solid #443d70;border-radius:999px;background:#1c1a32}
+      #dash-ask{border-color:#504783;background:linear-gradient(120deg,#191c36,#10172a);padding:20px}
+      #dashboard .dash-actions{flex-wrap:wrap;margin-bottom:16px}#dash-docs{margin-left:auto}
+      @media(min-width:1251px){#dash-ask{grid-column:span 7}#dash-overview{grid-column:span 5}}
+      @media(max-width:820px){.explore-intro{align-items:flex-start;flex-direction:column;gap:14px}.workflow-badge{font-size:10px}#dash-docs{margin-left:0}}
+      #dash-savings{border-color:#31594d}#dash-savings .dash-tiles{grid-template-columns:repeat(4,minmax(0,1fr))}.savings-details summary{cursor:pointer;color:#c7bfff;padding:8px 0;min-height:36px}.savings-details[open]{display:block}.savings-details .dash-bars{margin-top:12px}@media(max-width:820px){#dash-savings .dash-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:420px){#dash-savings .dash-tiles{grid-template-columns:1fr}}
+      #dashboard .dash-grid>.benchmark-strip{grid-column:1/-1;margin-top:0;margin-bottom:4px}
+      .architecture-switch{display:flex;gap:4px;padding:10px 16px}.architecture-card-view{padding:12px 18px;min-height:360px}.architecture-card-map{overflow:auto;max-height:70vh}.architecture-card-map svg{display:block;width:100%;min-width:680px}.architecture-edges path{fill:none;stroke:#7770b6;stroke-width:1.5;opacity:.7}.architecture-edges marker path{fill:#aaa0ff;stroke:none}.architecture-box{cursor:pointer}.architecture-box rect{fill:#18223a;stroke:#7569cb;stroke-width:1.5}.architecture-box:hover rect,.architecture-box:focus-visible rect{fill:#24244b;stroke:#c0b6ff;stroke-width:3}.architecture-box text{fill:#edf0ff;font:600 14px var(--sans);pointer-events:none}.architecture-box .architecture-box-note{fill:#a2b0c7;font:11px var(--sans)}
+      .docs-inline-link{display:inline;border:0;background:none;padding:0;color:#b8abff;font:inherit;text-align:left;text-decoration:underline;text-underline-offset:3px;cursor:pointer}.docs-inline-link:hover{color:#e5dfff}
+      .docs-api-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:12px 0}.docs-api{margin-bottom:14px}.docs-api details{border-top:1px solid #26324a;padding:10px 2px}.docs-api summary{cursor:pointer;color:#d9d2ff;font-weight:600;overflow-wrap:anywhere}.docs-api pre{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.6 var(--mono);color:#cbd5e5}
     </style>
   </head>
   <body>
@@ -404,17 +419,15 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
         </section>
 
         <section class="dashboard hidden" id="dashboard" role="tabpanel" aria-label="Project dashboard">
+          <div class="explore-intro"><div><span class="eyebrow">LOCAL CODE KNOWLEDGE</span><h2>Find the code. Follow the evidence.</h2><p>Start with a question or symbol. Get focused paths and relationships, then verify the relevant source.</p></div><span class="workflow-badge">Search → Trace → Verify</span></div>
           <div class="dash-actions" role="group" aria-label="Quick actions">
+            <button type="button" class="dash-action" data-dash="search"><span aria-hidden="true">⌕</span>Find a symbol or file</button>
+            <button type="button" class="dash-action" data-nav="documentation"><span aria-hidden="true">▤</span>Read documentation</button>
             <button type="button" class="dash-action" data-dash="docs" id="dash-docs" title="Write Markdown articles for communities and key symbols into graphify-out/wiki"><span aria-hidden="true">≡</span>Generate documentation</button>
           </div>
           <div class="dash-action-status" id="dash-action-status" role="status" aria-live="polite"></div>
           <div class="dash-grid">
-            <article class="dash-card" id="dash-ask" aria-labelledby="dash-ask-title"><header><h2 id="dash-ask-title">Ask about this project</h2><span class="dash-head"></span></header><div class="dash-body"></div></article>
-            <article class="dash-card" id="dash-overview" aria-labelledby="dash-overview-title"><header><h2 id="dash-overview-title">Project overview</h2><span class="dash-head"></span></header><div class="dash-body"></div></article>
-            <article class="dash-card w-7" id="dash-architecture" aria-labelledby="dash-architecture-title"><header><h2 id="dash-architecture-title">How it is built</h2><span class="dash-head"></span></header><div class="dash-body"></div></article>
-            <article class="dash-card w-5" id="dash-components" aria-labelledby="dash-components-title"><header><h2 id="dash-components-title">Key components</h2><span class="dash-head"></span></header><div class="dash-body"></div></article>
             <article class="dash-card" id="dash-savings" aria-labelledby="dash-savings-title"><header><h2 id="dash-savings-title">Token savings in Claude Code</h2><span class="dash-head"></span></header><div class="dash-body"></div></article>
-          </div>
           <section class="benchmark-strip" id="benchmark-strip" aria-label="Token Graph context reduction estimate">
             <span class="benchmark-mark" aria-hidden="true">↘</span>
             <div class="benchmark-main"><span class="benchmark-label">PROJECT CONTEXT ESTIMATE</span><strong id="reduction-total">Loading estimate…</strong></div>
@@ -422,10 +435,17 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
             <span class="benchmark-source" id="benchmark-source">Estimated savings/query</span>
             <p class="benchmark-explanation">Based on this project's benchmark, independent of Claude Code sessions. An estimate, not measured token usage.</p>
           </section>
+            <article class="dash-card" id="dash-ask" aria-labelledby="dash-ask-title"><header><h2 id="dash-ask-title">Find the implementation</h2><span class="dash-head"></span></header><div class="dash-body"></div></article>
+            <article class="dash-card" id="dash-overview" aria-labelledby="dash-overview-title"><header><h2 id="dash-overview-title">Project overview</h2><span class="dash-head"></span></header><div class="dash-body"></div></article>
+            <article class="dash-card w-7" id="dash-architecture" aria-labelledby="dash-architecture-title"><header><h2 id="dash-architecture-title">How it is built</h2><span class="dash-head"></span></header><div class="dash-body"></div></article>
+            <article class="dash-card w-5" id="dash-components" aria-labelledby="dash-components-title"><header><h2 id="dash-components-title">Key components</h2><span class="dash-head"></span></header><div class="dash-body"></div></article>
+          </div>
         </section>
 
         <section class="documentation-page hidden" id="documentation-page" aria-label="Project documentation">
           <div class="docs-actions"><input class="ask-input" id="docs-search" type="search" placeholder="Search document names…" aria-label="Search document names"><select class="project-select" id="docs-kind" aria-label="Filter documents by type"><option value="all">All documents</option><option value="Project document">Project documents</option><option value="Generated wiki">Generated wiki</option></select><button type="button" class="dash-link" id="docs-graph">Documentation graph</button><button type="button" class="dash-link" data-nav="docs">Generate wiki</button></div>
+          <div class="docs-api-actions"><button type="button" class="dash-link" id="docs-api-scan">Discover API endpoints</button><button type="button" class="dash-link hidden" id="docs-api-export">Download API Markdown</button><span class="dash-note" id="docs-api-status" role="status"></span></div>
+          <section class="dash-card docs-api hidden" id="docs-api-results" aria-label="API endpoints"><header><h2>API endpoints</h2></header><p class="dash-note">Static discovery can miss routes, middleware, authentication, validation and response details. Verify each contract in source.</p><div id="docs-api-list"></div></section>
           <p class="dash-note" id="docs-status" role="status">Choose a project to browse its documents.</p>
           <div class="docs-layout"><div class="docs-list" id="docs-list" aria-label="Documents"></div><article class="dash-card docs-reader"><header><h2 id="docs-title">Choose a document</h2></header><pre id="docs-content">Select a file to read it here.</pre></article></div>
         </section>
@@ -573,6 +593,8 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
         <section class="graph-panel">
           <div class="graph-toolbar"><div class="graph-title"><span class="live-dot"></span><strong id="graph-title">Relationship graph</strong><span id="visible-count" class="muted">All nodes</span><button class="help-button" id="graph-help-toggle" aria-expanded="false" aria-controls="graph-help">How to read this</button></div><div class="toolbar-right"><div class="view-toggle" role="group" aria-label="Graph lens"><button class="view-button active" data-lens="full" aria-pressed="true" title="All relationships">Full</button><button class="view-button" data-lens="architecture" aria-pressed="false" title="Modules (top source folders) and how they depend on each other">Architecture</button><button class="view-button" data-lens="dependency" aria-pressed="false" title="Only imports, references and inheritance">Dependencies</button><button class="view-button" data-lens="flow" aria-pressed="false" title="Only calls and dispatches. Double-click a method to trace what it calls">Execution flow</button></div><div class="view-toggle" role="group" aria-label="Graph dimensions"><button class="view-button active" id="mode-3d" aria-pressed="true">3D</button><button class="view-button" id="mode-2d" aria-pressed="false">2D</button></div><details class="graph-filters" id="graph-filters"><summary title="Clusters, hidden nodes, documentation view and legend">Filters ▾</summary><div class="filters-pop"><div class="view-toggle hidden" id="cluster-controls" role="group" aria-label="Cluster view"><button class="view-button" id="cluster-toggle" aria-pressed="true" title="Large graphs: draw each group as one bubble. Double-click a bubble to expand it.">Clusters</button><button class="view-button hidden" id="collapse-all" title="Fold every expanded cluster back into a bubble">Collapse all</button></div><div class="filter-toggle" role="group" aria-label="Hide nodes"><button class="filter-button" id="hide-tests" aria-pressed="false" title="Hide test files (_test.go, *.Tests projects, tests/ folders, *.spec.ts …)">Hide tests</button><button class="filter-button" id="hide-generated" aria-pressed="false" title="Hide generated code (gen/ folders, *.pb.go, *.g.cs, *.Designer.cs, EF Migrations …)">Hide generated</button></div><div class="view-toggle" role="group" aria-label="Graph view"><button class="view-button active" id="all-view" aria-pressed="true">All graph</button><button class="view-button" id="docs-view" aria-pressed="false">Documentation</button></div><div class="legend"><span class="legend-code"><i class="legend-dot code-dot"></i>Community</span><span><i class="legend-dot doc-dot"></i>Docs</span><span><i class="legend-line"></i>Connection</span></div></div></details></div></div>
           <div class="graph-help hidden" id="graph-help"><button class="help-close" id="graph-help-close" aria-label="Close graph guide">×</button><strong>Reading the graph</strong><p>Each dot is an indexed code symbol or documentation section. Colors group nodes by Token Graph community; documentation dots are cyan.</p><p>Lines show relationships between two visible nodes. Select a dot to see its source excerpt and connections. In 3D, drag to orbit and Shift-drag or right-drag to pan. Scroll to zoom. Switch to 2D for a flat map. Search or click a node to inspect it.</p></div>
+          <div id="architecture-switch" class="architecture-switch hidden" role="group" aria-label="Architecture display"><button type="button" class="view-button active" id="architecture-network" aria-pressed="true">Network</button><button type="button" class="view-button" id="architecture-cards" aria-pressed="false">Cards</button></div>
+          <section id="architecture-card-view" class="architecture-card-view hidden" aria-label="Architecture cards"><p class="dash-note">Folder groups and detected calls, imports, and references. Arrows point toward the referenced group; verify important connections in source.</p><div id="architecture-card-map" class="architecture-card-map"></div></section>
           <div class="focus-bar hidden" id="focus-bar"><span>Focus on</span><b id="focus-name"></b><button id="focus-1" aria-pressed="true" title="Direct neighbours only">1 step</button><button id="focus-2" aria-pressed="false" title="Neighbours of neighbours too">2 steps</button><button id="focus-3" aria-pressed="false" title="Three steps out">3 steps</button><span class="focus-sep"></span><button id="focus-dir-both" aria-pressed="true" title="Follow relationships in both directions">↔ Both</button><button id="focus-dir-in" aria-pressed="false" title="Only what points to this node: callers, importers, users">← Incoming</button><button id="focus-dir-out" aria-pressed="false" title="Only what this node points to: calls, imports, dependencies">→ Outgoing</button><span class="muted" id="focus-count"></span><button class="focus-exit" id="focus-exit" title="Show the whole graph again (Esc)">✕ Exit focus</button></div>
           <div class="canvas-wrap" id="canvas-wrap"><canvas id="graph-canvas" aria-label="Interactive graph of project files and code symbols"></canvas>
             <div class="canvas-hint" id="navigation-hint"><span>DRAG</span> rotate <b>·</b> <span>SHIFT + DRAG</span> pan <b>·</b> <span>SCROLL</span> zoom <b>·</b> double-click to focus</div>
@@ -1253,6 +1275,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     renderCommunityList();
     fitGraph();
     renderSearchResults();
+    updateArchitectureDisplay();
   }
 
   function setView(view) {
@@ -1304,7 +1327,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
   $('#kind-filter').addEventListener('change', event => {
     state.kind = event.target.value;
     if (state.selected && !visible(state.selected)) select(null);
-    updateMetrics({}); renderCommunityList(); fitGraph(); renderSearchResults();
+    updateMetrics({}); renderCommunityList(); fitGraph(); renderSearchResults(); updateArchitectureDisplay();
   });
   document.querySelectorAll('[data-group-by]').forEach(b => {
     b.setAttribute('aria-pressed', String(b.dataset.groupBy === state.groupBy));
@@ -1600,9 +1623,41 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
   function updateLensButtons() {
     document.querySelectorAll('[data-lens]').forEach(b => { const on = b.dataset.lens === state.lens; b.classList.toggle('active', on); b.setAttribute('aria-pressed', String(on)); });
   }
+  let architectureCardsSelected = false;
+  function updateArchitectureDisplay() {
+    const isArchitecture = state.lens === 'architecture';
+    const cards = isArchitecture && architectureCardsSelected;
+    $('#architecture-switch').classList.toggle('hidden', !isArchitecture);
+    $('#architecture-card-view').classList.toggle('hidden', !cards);
+    $('#canvas-wrap').classList.toggle('hidden', cards);
+    $('#architecture-network').setAttribute('aria-pressed', String(!architectureCardsSelected));
+    $('#architecture-cards').setAttribute('aria-pressed', String(architectureCardsSelected));
+    $('#architecture-network').classList.toggle('active', !architectureCardsSelected);
+    $('#architecture-cards').classList.toggle('active', architectureCardsSelected);
+    if (!cards) return;
+    const groups = state.modules.filter(m => m.id !== '(external / unresolved)' && m.nodes.some(passesFilters));
+    const shown = groups.slice(0, 40), ids = new Set(shown.map(m => m.id));
+    const links = moduleLinks().filter(l => ids.has(l.from) && ids.has(l.to));
+    const width = 1000, cols = 3, cardW = 240, cardH = 80, gapX = 115, gapY = 62, rows = Math.ceil(shown.length / cols);
+    const pos = new Map(shown.map((m, i) => [m.id, {x: 30 + (i % cols) * (cardW + gapX), y: 25 + Math.floor(i / cols) * (cardH + gapY)}]));
+    const edges = links.map(l => { const a = pos.get(l.from), b = pos.get(l.to), dx = b.x - a.x, dy = b.y - a.y, scale = Math.min(dx ? (cardW / 2 + 4) / Math.abs(dx) : Infinity, dy ? (cardH / 2 + 4) / Math.abs(dy) : Infinity); return `<path d="M ${a.x + cardW / 2 + dx * scale} ${a.y + cardH / 2 + dy * scale} L ${b.x + cardW / 2 - dx * scale} ${b.y + cardH / 2 - dy * scale}" marker-end="url(#arch-arrow)"><title>${escapeHtml(`${l.from} → ${l.to}: ${l.count} detected links`)}</title></path>`; }).join('');
+    const boxes = shown.map(m => { const p = pos.get(m.id), files = new Set(m.nodes.filter(passesFilters).map(n => n.source_file).filter(Boolean)).size; return `<g class="architecture-box" role="button" tabindex="0" data-architecture-module="${escapeHtml(m.id)}" aria-label="${escapeHtml(`${m.name}, ${files} files. Open details`)}" transform="translate(${p.x} ${p.y})"><rect width="${cardW}" height="${cardH}" rx="10"></rect><text x="14" y="30">${escapeHtml(m.name.length > 29 ? m.name.slice(0, 26) + '…' : m.name)}</text><text class="architecture-box-note" x="14" y="55">${files} files · ${m.nodes.filter(passesFilters).length} symbols</text><title>${escapeHtml(m.name)}</title></g>`; }).join('');
+    $('#architecture-card-map').innerHTML = shown.length ? `${groups.length > shown.length ? `<p class="dash-note">Showing ${shown.length} of ${groups.length} groups.</p>` : ''}<svg viewBox="0 0 ${width} ${Math.max(130, rows * (cardH + gapY))}" role="group" aria-label="Architecture folder groups and relationships"><defs><marker id="arch-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#aaa0ff"></path></marker></defs><g class="architecture-edges">${edges}</g>${boxes}</svg>` : '<p class="dash-note">No folder groups match the current filters.</p>';
+  }
+  $('#architecture-network').addEventListener('click', () => { architectureCardsSelected = false; updateArchitectureDisplay(); resize(); });
+  $('#architecture-cards').addEventListener('click', () => { architectureCardsSelected = true; updateArchitectureDisplay(); });
+  function openArchitectureCard(event) {
+    const target = event.target.closest?.('[data-architecture-module]');
+    if (!target) return;
+    const group = state.modules[state.moduleIndex.get(target.dataset.architectureModule)];
+    showClusterDetails(group);
+  }
+  $('#architecture-card-map').addEventListener('click', openArchitectureCard);
+  $('#architecture-card-map').addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openArchitectureCard(event); } });
   function setLens(lens) {
     if (state.view === 'docs' && lens !== 'full') setView('all');
     state.lens = lens;
+    updateArchitectureDisplay();
     state.focus = null; $('#focus-bar').classList.add('hidden');
     state.expanded = new Set(); state.selectedCluster = null;
     state.focusDir = lens === 'flow' ? 'out' : 'both';
@@ -1684,6 +1739,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     renderDetails(null);
     if (state.view === 'docs' && !entry.raw.nodes.some(isDocument)) setView('all');
     normalizeGraph(entry.raw);
+    updateArchitectureDisplay();
     loadBenchmark(entry.raw.benchmark ?? entry.raw.graph?.benchmark ?? null);
     $('#graph-selector').value = id;
     $('#graph-source-note').textContent = `Viewing ${entry.name}. ${loadedGraphs.size} graph(s) loaded in this tab. Data stays in this browser.`;
@@ -3132,6 +3188,32 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
   function showCard(id, on) { $(`#dash-${id}`).classList.toggle('hidden', !on); }
 
   const documentation = { items: [], selected: '', project: null, request: 0, detail: 0 };
+  const apiDocs = { request: 0, project: null, markdown: '' };
+  async function discoverApiDocs() {
+    const project = state.projectPath, request = ++apiDocs.request;
+    apiDocs.project = project; apiDocs.markdown = '';
+    $('#docs-api-results').classList.add('hidden'); $('#docs-api-export').classList.add('hidden');
+    if (!serverToken || !project) { $('#docs-api-status').textContent = 'Open a local project using the Token Graph server first.'; return; }
+    $('#docs-api-scan').disabled = true; $('#docs-api-status').textContent = 'Inspecting indexed routes and handlers…';
+    try {
+      const result = await api(`/api/documentation/endpoints?project=${encodeURIComponent(project)}`);
+      if (request !== apiDocs.request || state.projectPath !== project) return;
+      const routes = Array.isArray(result.routes) ? result.routes : [];
+      $('#docs-api-list').replaceChildren();
+      const lines = ['# API endpoint inventory', '', result.note || '', ''];
+      for (const route of routes) {
+        const title = `${route.method} ${route.path}`, evidence = `Route: ${route.file}:${route.line}`;
+        const details = document.createElement('details'), summary = document.createElement('summary'), pre = document.createElement('pre');
+        summary.textContent = title; const findings = Array.isArray(route.contracts) && route.contracts.length ? route.contracts.join('\n') : 'Request and response details: unknown; inspect the handler and middleware.';
+        pre.textContent = `${evidence}\n\n${findings}`; details.append(summary, pre); $('#docs-api-list').append(details);
+        lines.push(`## ${title}`, '', evidence, '', findings, '', 'Authentication and validation: verify handler and middleware.', '');
+      }
+      if (!routes.length) $('#docs-api-list').textContent = 'No routes detected. The service may use unsupported routing patterns.';
+      apiDocs.markdown = lines.join('\n'); $('#docs-api-results').classList.remove('hidden'); $('#docs-api-export').classList.toggle('hidden', !routes.length);
+      $('#docs-api-status').textContent = `Found ${result.total} route declarations${result.truncated ? `; showing the first ${routes.length}` : ''}. Verify completeness.`;
+    } catch (error) { if (request === apiDocs.request && state.projectPath === project) $('#docs-api-status').textContent = `Could not discover endpoints: ${error.message}`; }
+    finally { if (request === apiDocs.request) $('#docs-api-scan').disabled = false; }
+  }
   function renderDocumentationList() {
     const query = $('#docs-search').value.trim().toLowerCase();
     const kind = $('#docs-kind').value;
@@ -3141,6 +3223,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
   }
   async function loadDocumentation() {
     const seq = ++documentation.request, project = state.projectPath;
+    if (apiDocs.project !== project) { apiDocs.request++; apiDocs.project = project; apiDocs.markdown = ''; $('#docs-api-results').classList.add('hidden'); $('#docs-api-export').classList.add('hidden'); $('#docs-api-status').textContent = ''; $('#docs-api-scan').disabled = false; }
     if (documentation.project !== project) { $('#docs-search').value = ''; $('#docs-kind').value = 'all'; }
     documentation.project = project; documentation.items = []; documentation.selected = ''; documentation.detail++;
     $('#docs-title').textContent = 'Choose a document'; $('#docs-content').textContent = 'Select a file to read it here.'; $('#docs-list').innerHTML = '';
@@ -3165,10 +3248,35 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     documentation.selected = item.path; renderDocumentationList(); $('#docs-title').textContent = item.path; $('#docs-content').textContent = 'Loading…';
     try {
       const result = await api(`/api/documentation/file?project=${encodeURIComponent(project)}&file=${encodeURIComponent(item.path)}`);
-      if (seq === documentation.detail && state.projectPath === project) $('#docs-content').textContent = result.content;
+      if (seq === documentation.detail && state.projectPath === project) renderDocumentationContent(item.path, result.content);
     } catch (error) {
       if (seq === documentation.detail) $('#docs-content').textContent = `Could not open document: ${error.message}`;
     }
+  }
+  function renderDocumentationContent(path, content) {
+    const container = $('#docs-content');
+    container.replaceChildren();
+    const text = String(content || ''), pattern = /\[([^\]\n]+)\]\(([^)\n]+)\)/g;
+    let last = 0, match;
+    while ((match = pattern.exec(text))) {
+      const target = match[2].split('#')[0].split('?')[0];
+      let decoded;
+      try { decoded = decodeURIComponent(target); } catch (_) { decoded = ''; }
+      const parts = path.split('/').slice(0, -1);
+      let valid = !!decoded && !/^(?:[a-z][a-z0-9+.-]*:|\/|\\)/i.test(decoded) && !decoded.includes('\\');
+      if (valid) for (const part of decoded.split('/')) {
+        if (!part || part === '.') continue;
+        if (part === '..') { if (!parts.length) { valid = false; break; } parts.pop(); }
+        else parts.push(part);
+      }
+      const index = valid ? documentation.items.findIndex(item => item.path === parts.join('/')) : -1;
+      if (index < 0) continue;
+      container.append(document.createTextNode(text.slice(last, match.index)));
+      const button = document.createElement('button');
+      button.type = 'button'; button.className = 'docs-inline-link'; button.dataset.docIndex = String(index); button.textContent = match[1];
+      container.append(button); last = pattern.lastIndex;
+    }
+    container.append(document.createTextNode(text.slice(last)));
   }
 
   function showPage(page) {
@@ -3321,7 +3429,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       text: `${tokensText(s.saved_tokens)} · ${percentText(s.saved_percent)}`,
       title: `${sessionName(s)} — folder ${s.folder || 'unknown'}, started ${started(s)}, session ${s.session}: without graph ${format(s.without_graph_tokens)}, with graph ${format(s.with_graph_tokens)}, saved ${format(s.saved_tokens)} tokens (${percentText(s.saved_percent)}) in ${count(s.graph_answers, 'graph answer')}`,
     })));
-    setCard('savings', `<p class="dash-sub">Latest session</p>${where(latest)}<p class="dash-note">Sessions can start in another folder and still query this project's graph.</p><div class="dash-tiles">${tiles}</div><p class="dash-sub">Saved per session (hover for folder and time)</p>${rows}<p class="dash-note">Estimate from the Claude Code transcripts on this computer (4 characters ≈ 1 token, no model used). Without graph: the files a graph answer pointed to and Claude then opened, read in full. With graph: the answers plus what Claude read from those files.</p>${refresh}`,
+    setCard('savings', `<div class="dash-tiles">${tiles}</div><details class="savings-details"><summary>Session history and calculation details</summary><p class="dash-sub">Latest session</p>${where(latest)}<p class="dash-note">Sessions can start in another folder and still query this project's graph.</p><p class="dash-sub">Saved per session (hover for folder and time)</p>${rows}</details><p class="dash-note">Estimate from the Claude Code transcripts on this computer (4 characters ≈ 1 token, no model used). Without graph: the files a graph answer pointed to and Claude then opened, read in full. With graph: the answers plus what Claude read from those files.</p>${refresh}`,
       pill(status, `${percentText(latest.saved_percent)} saved`, 'Latest session'));
   }
 
@@ -3532,9 +3640,16 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
   }
 
   function initDashboard() {
+    $('#docs-api-scan').addEventListener('click', discoverApiDocs);
+    $('#docs-api-export').addEventListener('click', () => {
+      if (!apiDocs.markdown || apiDocs.project !== state.projectPath) return;
+      const url = URL.createObjectURL(new Blob([apiDocs.markdown], {type: 'text/markdown;charset=utf-8'}));
+      const link = document.createElement('a'); link.href = url; link.download = 'api-endpoints.md'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    });
     $('#docs-search').addEventListener('input', renderDocumentationList);
     $('#docs-kind').addEventListener('change', renderDocumentationList);
     $('#docs-list').addEventListener('click', event => { const item = event.target.closest('[data-doc-index]'); if (item) openDocumentation(Number(item.dataset.docIndex)); });
+    $('#docs-content').addEventListener('click', event => { const item = event.target.closest('[data-doc-index]'); if (item) openDocumentation(Number(item.dataset.docIndex)); });
     $('#docs-graph').addEventListener('click', () => { showPage('graph'); setView('docs'); updateNav(); });
     $('#agent-bench-form').addEventListener('submit', runAgentBenchmark);
     $('#bench-agent').addEventListener('change', updateBenchFields);
