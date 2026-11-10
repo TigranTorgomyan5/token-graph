@@ -1282,7 +1282,42 @@ def installed_models() -> set[str]:
     return local_models(OLLAMA_API)
 
 
-def explore(project: Path, question: str, model: str, history: list | None = None) -> str:
+def explore(project: Path, question: str, model: str, history: list | None = None, *, full_output: bool = False, max_output_chars: int = 3000) -> str:
+    report = _explore_report(project, question, model, history)
+    return report if full_output else compact_report(report, max_output_chars)
+
+
+def compact_report(report: str, limit: int = 3000) -> str:
+    """Bound returned context without another model pass; keep whole cited claims and warnings."""
+    if limit < 1000:
+        raise ValueError('Output limit must be at least 1000 characters.')
+    if len(report) <= limit:
+        return report
+    lines = report.splitlines()
+    warnings = [line for line in lines if re.match(r'^\s*(?:UNCERTAINTIES|UNVERIFIED|WARNING|ERROR)', line, re.I)]
+    notice = '\nOUTPUT LIMITED: Some findings omitted. Use --full-output for the full evidence report.\n'
+    warning_text = '\n'.join(warnings)
+    if len(warning_text) > limit // 2:
+        warning_text = warning_text[:limit // 2] + '… [uncertainties shortened; inspect full report]'
+    budget = limit - len(notice) - len(warning_text) - 30
+    selected = ['ANSWER (compact):']
+    used = len(selected[0])
+    in_path = False
+    for line in lines:
+        if line.startswith('**'):
+            in_path = line.startswith('**Code path')
+        if in_path or not line.startswith('- ') or line.startswith('- Outcomes'):
+            continue
+        if not re.search(r'[\w./-]+:\d+', line):
+            continue
+        if used + len(line) + 1 <= budget:
+            selected.append(line); used += len(line) + 1
+    if len(selected) == 1:
+        selected.append('No cited findings fit the output limit. Inspect --full-output before drawing conclusions.')
+    return '\n'.join(selected) + notice + warning_text
+
+
+def _explore_report(project: Path, question: str, model: str, history: list | None = None) -> str:
     # Listing every endpoint is what "all/every endpoint", "endpoint inventory" or "API endpoints" ask for.
     # "Request and response" asks for bodies: of the routes the question names when it names any
     # ("how is registration done? show the request and response bodies"), of every endpoint otherwise.
@@ -1758,9 +1793,13 @@ def main() -> int:
     parser.add_argument('--model', help=f'installed local Ollama model (default: {DEFAULT_MODEL} if installed, else {FALLBACK_MODEL}, else the first installed model)')
     parser.add_argument('--endpoint', default=DEFAULT_ENDPOINT, help='loopback Ollama origin')
     parser.add_argument('--metrics', action='store_true', help='write local inference token and time counters to stderr')
+    parser.add_argument('--full-output', action='store_true', help='return the full evidence report instead of a compact answer')
+    parser.add_argument('--max-output-chars', type=int, default=3000, help='compact response character limit (minimum 1000)')
     parser.add_argument('--verify', action='store_true', help='second model pass that checks each extracted claim against its cited lines (slower)')
     parser.add_argument('--build', action='store_true', help='deprecated; explorer is read-only, build the graph separately')
     args = parser.parse_args()
+    if args.max_output_chars < 1000:
+        parser.error('--max-output-chars must be at least 1000')
     global OLLAMA_API, VERIFY_CLAIMS
     OLLAMA_API = args.endpoint
     VERIFY_CLAIMS = args.verify
@@ -1784,7 +1823,7 @@ def main() -> int:
         if args.question:
             METRICS.clear()
             started = time.monotonic()
-            answer = explore(project, args.question, model)
+            answer = explore(project, args.question, model, full_output=args.full_output, max_output_chars=args.max_output_chars)
             print(answer)
             if args.metrics:
                 print(json.dumps({'wall_seconds': round(time.monotonic() - started, 3), 'model_calls': METRICS,
@@ -1797,7 +1836,7 @@ def main() -> int:
                 except EOFError:
                     break
                 if question:
-                    print(explore(project, question, model))
+                    print(explore(project, question, model, full_output=args.full_output, max_output_chars=args.max_output_chars))
     except (error.URLError, TimeoutError, OSError, ValueError) as exc:
         print(f'Agent error: {exc}. Ollama access is restricted to 127.0.0.1:11434.', file=sys.stderr)
         return 1

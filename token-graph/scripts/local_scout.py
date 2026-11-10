@@ -236,7 +236,7 @@ def scout(project: Path, repo_label: str, question: str, model: str | None, sibl
     answer = ''
     if model:
         try:
-            answer = explorer.explore(project, question, model)
+            answer = explorer.explore(project, question, model, full_output=True)
         except (OSError, ValueError) as error:       # Ollama down, model not installed (URLError is an OSError)
             unsure.append(f'the model gave no answer ({type(error).__name__}: {str(error)[:100]}); every field here is code-found')
     if handlers:
