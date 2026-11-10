@@ -31,6 +31,7 @@ os.environ.setdefault("PYTHONIOENCODING", "utf-8")
 from local_inference import local_models
 import explore_agent
 import explorer_evidence
+import knowledge_search
 import system_links
 from token_graph import runtime_problems
 PAGE = SKILL / "assets" / "project-explorer.html"
@@ -1085,6 +1086,12 @@ class Handler(BaseHTTPRequestHandler):
                     raise
                 record_activity(project, "ai_question", question, detail=f"Answered locally by {model}")
                 return self._json(200, answer)
+            if url.path == "/api/knowledge/search":
+                project = self._known_project(body.get("project"))
+                question = str(body.get("question") or "").strip()
+                if not question or len(question) > 4000:
+                    raise ValueError("Enter a search question of up to 4,000 characters.")
+                return self._json(200, knowledge_search.search(project, question))
             if url.path == "/api/agent/benchmark":
                 project = self._known_project(body.get('project'))
                 return self._json(200, agent_benchmark(body, project))

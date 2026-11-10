@@ -19,7 +19,6 @@
           <button type="button" class="nav-item" data-nav="agents"><span class="nav-icon" aria-hidden="true">◇</span>Agents</button>
           <div class="nav-label">TOOLS</div>
           <button type="button" class="nav-item" data-nav="changes" title="What the last build or update added, removed or re-connected"><span class="nav-icon" aria-hidden="true">↻</span>Changes</button>
-          <button type="button" class="nav-item" data-nav="docs" title="Write Markdown articles for communities and key symbols into graphify-out/wiki"><span class="nav-icon" aria-hidden="true">≡</span>Generate docs</button>
           <div class="nav-sep"></div>
           <button type="button" class="nav-item" data-nav="settings"><span class="nav-icon" aria-hidden="true">⚙</span>Settings</button>
         </nav>
@@ -65,7 +64,6 @@
           <div class="dash-actions" role="group" aria-label="Quick actions">
             <button type="button" class="dash-action" data-dash="search"><span aria-hidden="true">⌕</span>Find a symbol or file</button>
             <button type="button" class="dash-action" data-nav="documentation"><span aria-hidden="true">▤</span>Read documentation</button>
-            <button type="button" class="dash-action" data-dash="docs" id="dash-docs" title="Write Markdown articles for communities and key symbols into graphify-out/wiki"><span aria-hidden="true">≡</span>Generate documentation</button>
           </div>
           <div class="dash-action-status" id="dash-action-status" role="status" aria-live="polite"></div>
           <div class="dash-grid">
@@ -85,7 +83,37 @@
         </section>
 
         <section class="documentation-page hidden" id="documentation-page" aria-label="Project documentation">
-          <div class="docs-actions"><input class="ask-input" id="docs-search" type="search" placeholder="Search document names…" aria-label="Search document names"><select class="project-select" id="docs-kind" aria-label="Filter documents by type"><option value="all">All documents</option><option value="Project document">Project documents</option><option value="Generated wiki">Generated wiki</option></select><button type="button" class="dash-link" id="docs-graph">Documentation graph</button><button type="button" class="dash-link" data-nav="docs">Generate wiki</button></div>
+          <section class="dash-card knowledge-search" aria-labelledby="knowledge-title">
+            <header><h2 id="knowledge-title">Search project knowledge</h2></header>
+            <p class="dash-note">Search documentation sections first. If none match, search the project graph. Results are not verified; check important claims in source.</p>
+            <form id="knowledge-form" class="knowledge-form"><input class="ask-input" id="knowledge-query" aria-label="Search project knowledge" maxlength="4000" placeholder="e.g. how is authentication configured?" required><button type="submit" class="dash-link" id="knowledge-submit">Search knowledge</button></form>
+            <p class="dash-note" id="knowledge-status" role="status" aria-live="polite"></p><div id="knowledge-results"></div>
+          </section>
+          <details class="dash-card knowledge-correction"><summary>Propose a correction</summary>
+            <p class="dash-note">Create a reviewable Markdown proposal. Copy it into an existing project document after checking the evidence; it is not saved automatically.</p>
+            <form id="correction-form" class="correction-form">
+              <label>Topic<input class="ask-input" id="correction-topic" maxlength="120" required placeholder="e.g. wallet persistence"></label>
+              <label>Previous assumption<textarea class="ask-input" id="correction-before" maxlength="800" required></textarea></label>
+              <label>Corrected information<textarea class="ask-input" id="correction-after" maxlength="1200" required></textarea></label>
+              <label>Evidence (project file and line)<input class="ask-input" id="correction-evidence" maxlength="300" required placeholder="e.g. internal/store.go:42"></label>
+              <button type="submit" class="dash-link">Prepare proposal</button>
+            </form>
+            <div id="correction-preview" class="hidden"><p class="dash-note">Proposed, not verified. Review the source before adding this to the project documentation.</p><pre id="correction-text"></pre><button type="button" class="dash-link" id="correction-copy">Copy proposal</button><button type="button" class="dash-link" id="correction-download">Download Markdown</button><span class="dash-note" id="correction-status" role="status" aria-live="polite"></span></div>
+          </details>
+          <details class="dash-card knowledge-correction"><summary>Prepare a session handoff</summary>
+            <p class="dash-note">Record the current task for a later session. Review and save the Markdown in the project only if it is useful; this does not capture your conversation.</p>
+            <form id="handoff-form" class="correction-form">
+              <label>Current task<input class="ask-input" id="handoff-task" maxlength="200" required placeholder="e.g. investigate wallet balance"></label>
+              <label>Completed work<textarea class="ask-input" id="handoff-completed" maxlength="1600"></textarea></label>
+              <label>Findings and decisions<textarea class="ask-input" id="handoff-findings" maxlength="1600" placeholder="Include source references where possible"></textarea></label>
+              <label>Remaining work and next steps<textarea class="ask-input" id="handoff-next" maxlength="1600"></textarea></label>
+              <label>Relevant files<input class="ask-input" id="handoff-files" maxlength="500" placeholder="Project-relative paths"></label>
+              <button type="submit" class="dash-link">Prepare handoff</button>
+            </form>
+            <div id="handoff-preview" class="hidden"><p class="dash-note">Review the content before saving. It has not been checked against source.</p><pre id="handoff-text"></pre><button type="button" class="dash-link" id="handoff-copy">Copy handoff</button><button type="button" class="dash-link" id="handoff-download">Download Markdown</button><span class="dash-note" id="handoff-status" role="status" aria-live="polite"></span></div>
+          </details>
+          <div class="docs-actions"><input class="ask-input" id="docs-search" type="search" placeholder="Search document names…" aria-label="Search document names"><select class="project-select" id="docs-kind" aria-label="Filter documents by type"><option value="all">All documents</option><option value="Project document">Project documents</option><option value="Generated wiki">Generated wiki</option></select><button type="button" class="dash-link" id="docs-graph">Documentation graph</button><button type="button" class="dash-link" id="dash-docs" data-nav="docs">Generate wiki</button></div>
+          <div class="dash-action-status" id="docs-action-status" role="status" aria-live="polite"></div>
           <div class="docs-api-actions"><button type="button" class="dash-link" id="docs-api-scan">Discover API endpoints</button><button type="button" class="dash-link hidden" id="docs-api-export">Download API Markdown</button><span class="dash-note" id="docs-api-status" role="status"></span></div>
           <section class="dash-card docs-api hidden" id="docs-api-results" aria-label="API endpoints"><header><h2>API endpoints</h2></header><p class="dash-note">Static discovery can miss routes, middleware, authentication, validation and response details. Verify each contract in source.</p><div id="docs-api-list"></div></section>
           <p class="dash-note" id="docs-status" role="status">Choose a project to browse its documents.</p>

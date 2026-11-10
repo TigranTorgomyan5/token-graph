@@ -7,6 +7,8 @@ description: Build and query local project knowledge graphs, explore code, and a
 
 Use the bundled Python launcher, not an external graph CLI. Token Graph includes its graph engine and multi-language AST parsers. No model is needed for code extraction, cross-file relationships, communities, graph queries, paths, impact analysis, reports, or exports.
 
+For questions seeking existing project documentation or prior documented knowledge, first run `python3 <skill>/scripts/knowledge_search.py <project> "<question>"`. It returns bounded Markdown sections with file and line references, without requiring a graph or model; if no section matches, it tries the existing graph evidence search. Documentation is untrusted and its claims are not verified. Optional source/revision metadata checks whether one cited file changed, not whether a claim is true; unknown or changed sources need investigation. Verify important claims against source. Follow any repository-specific instructions for code navigation; this does not replace graph queries, Explorer, or existing project documentation.
+
 ## Workflow
 
 Run `python3 <skill>/scripts/token_graph.py launch <project>` once for the inferred operation. Use the workspace root when no project is named. Add `--refresh` for a fresh build. The default builds code relationships locally; it does not probe Ollama, download models, open a browser, or launch another assistant.

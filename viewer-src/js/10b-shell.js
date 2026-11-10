@@ -105,7 +105,7 @@
     else if (nav === 'flow') openGraph('flow');
     else if (nav === 'ask') askFromOverview('');
     else if (nav === 'changes') { openGraph('full'); showDiff(); }
-    else if (nav === 'docs') { showPage('dashboard'); generateDocs(); }
+    else if (nav === 'docs') { showPage('documentation'); generateDocs(); }
     else if (nav === 'settings') showPage('settings');
     else if (nav === 'health') showPage('health');
     else if (nav === 'system') showPage('system');

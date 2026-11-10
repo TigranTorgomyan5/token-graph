@@ -35,6 +35,37 @@
   function showCard(id, on) { $(`#dash-${id}`).classList.toggle('hidden', !on); }
 
   const documentation = { items: [], selected: '', project: null, request: 0, detail: 0 };
+  const knowledge = { project: null, request: 0 };
+  async function searchKnowledge() {
+    const project = state.projectPath, question = $('#knowledge-query').value.trim(), request = ++knowledge.request;
+    $('#knowledge-results').replaceChildren();
+    if (!serverToken || !project) { $('#knowledge-status').textContent = 'Open a project with the local Token Graph server to search its knowledge.'; return; }
+    if (!question) { $('#knowledge-status').textContent = 'Enter a search question.'; return; }
+    knowledge.project = project; $('#knowledge-submit').disabled = true;
+    $('#knowledge-status').textContent = 'Searching local documentation…';
+    try {
+      const result = await api('/api/knowledge/search', {project, question});
+      if (request !== knowledge.request || state.projectPath !== project) return;
+      const docs = Array.isArray(result.documentation) ? result.documentation : [];
+      const fallback = result.graph_fallback;
+      const docEntries = docs.map(d => ({title: `${d.heading} — ${d.file}:${d.start_line}-${d.end_line}`, text: d.text, file: d.file, note: `Unverified documentation${d.declared_status ? ' · declared ' + d.declared_status : ''}${d.truncated ? ' · excerpt' : ''} · ${d.freshness?.status === 'possibly_stale' ? 'Possibly stale' : d.freshness?.status === 'source_unchanged' ? 'Referenced source unchanged' : 'Freshness unknown'}${d.freshness?.reason ? ': ' + d.freshness.reason : ''}`}));
+      const graphEntries = (fallback?.results || []).map(d => ({title: `${d.symbol || 'Graph result'} — ${d.file || 'unknown file'}${d.matched_line || d.start_line ? ':' + (d.matched_line || d.start_line) : ''}`, text: d.evidence || 'Source excerpt unavailable.', note: `Graph evidence · ${String(d.verification || 'unverified').replace(/_/g, ' ')}`}));
+      const entries = [...docEntries, ...graphEntries];
+      $('#knowledge-status').textContent = docs.length ? `${format(docs.length)} documentation section(s) found${result.documentation_truncated ? ' · results limited' : ''}.${fallback ? ` All matches may be stale; ${format(graphEntries.length)} graph evidence result(s) found.` : ''} Verify important claims against source.`
+        : entries.length ? `No documentation matched. Showing ${format(entries.length)} graph evidence result(s); verify source.`
+        : fallback?.status === 'missing_graph' ? 'No documentation matched and this project has no graph. Build a graph to search code evidence.'
+        : fallback?.message ? `No documentation matched. Graph search: ${fallback.message}` : 'No matching documentation or graph evidence found.';
+      for (const entry of entries) {
+        const item = document.createElement('article'), title = document.createElement('strong'), note = document.createElement('p'), excerpt = document.createElement('pre');
+        item.className = 'knowledge-result'; title.textContent = entry.title; note.className = 'dash-note'; note.textContent = entry.note; excerpt.textContent = entry.text || '';
+        item.append(title, note, excerpt);
+        const index = documentation.items.findIndex(doc => doc.path === entry.file);
+        if (index >= 0) { const open = document.createElement('button'); open.type = 'button'; open.className = 'dash-link'; open.textContent = 'Open document'; open.addEventListener('click', () => openDocumentation(index)); item.append(open); }
+        $('#knowledge-results').append(item);
+      }
+    } catch (error) { if (request === knowledge.request && state.projectPath === project) $('#knowledge-status').textContent = `Could not search knowledge: ${error.message}`; }
+    finally { if (request === knowledge.request) $('#knowledge-submit').disabled = false; }
+  }
   const apiDocs = { request: 0, project: null, markdown: '' };
   async function discoverApiDocs() {
     const project = state.projectPath, request = ++apiDocs.request;
@@ -71,7 +102,7 @@
   async function loadDocumentation() {
     const seq = ++documentation.request, project = state.projectPath;
     if (apiDocs.project !== project) { apiDocs.request++; apiDocs.project = project; apiDocs.markdown = ''; $('#docs-api-results').classList.add('hidden'); $('#docs-api-export').classList.add('hidden'); $('#docs-api-status').textContent = ''; $('#docs-api-scan').disabled = false; }
-    if (documentation.project !== project) { $('#docs-search').value = ''; $('#docs-kind').value = 'all'; }
+    if (documentation.project !== project) { $('#docs-search').value = ''; $('#docs-kind').value = 'all'; knowledge.request++; knowledge.project = project; $('#knowledge-query').value = ''; $('#knowledge-results').replaceChildren(); $('#knowledge-status').textContent = ''; $('#knowledge-submit').disabled = false; $('#correction-form').reset(); $('#correction-preview').classList.add('hidden'); $('#correction-status').textContent = ''; $('#handoff-form').reset(); $('#handoff-preview').classList.add('hidden'); $('#handoff-status').textContent = ''; }
     documentation.project = project; documentation.items = []; documentation.selected = ''; documentation.detail++;
     $('#docs-title').textContent = 'Choose a document'; $('#docs-content').textContent = 'Select a file to read it here.'; $('#docs-list').innerHTML = '';
     if (!serverToken || !project) {
@@ -309,8 +340,7 @@
       languageHtml = `<p class="dash-sub">File types in this graph</p>${bars(local.extensions.slice(0, 8).map(([ext, n]) => ({ name: ext, value: n, text: count(n, 'file') })))}`
         + (serverToken ? '' : '<p class="dash-note">Language names come from the local server.</p>');
     }
-    const path = state.projectPath ? `<code>${escapeHtml(state.projectPath)}</code>` : '';
-    setCard('overview', `<div class="dash-project"><strong>${escapeHtml(name)}</strong>${path}</div><div class="dash-tiles">${tiles}</div>${dash.error ? errorHtml(dash.error) : languageHtml}`, head, dash.loading);
+    setCard('overview', `<div class="dash-project"><strong>${escapeHtml(name)}</strong></div><div class="dash-tiles">${tiles}</div>${dash.error ? errorHtml(dash.error) : languageHtml}`, head, dash.loading);
   }
 
   function renderHealth(data) {
@@ -422,8 +452,9 @@
   }
 
   function dashStatus(html, error = false) {
-    $('#dash-action-status').innerHTML = html;
-    $('#dash-action-status').classList.toggle('error', error);
+    const status = $(state.page === 'documentation' ? '#docs-action-status' : '#dash-action-status');
+    status.innerHTML = html;
+    status.classList.toggle('error', error);
   }
 
   async function generateDocs() {
@@ -437,6 +468,7 @@
       const open = state.editors.vscode ? '<button type="button" class="dash-link" data-dash="open-docs">Open in VS Code</button>' : '';
       dashStatus(`${format(dash.docs.articles)} articles written to <code>${escapeHtml(dash.docs.file)}</code>${open}`);
       refreshDashboard();
+      if (state.page === 'documentation') loadDocumentation();
     } catch (error) {
       dashStatus(escapeHtml(error.message), true);
     } finally {
@@ -488,6 +520,36 @@
 
   function initDashboard() {
     $('#docs-api-scan').addEventListener('click', discoverApiDocs);
+    $('#knowledge-form').addEventListener('submit', event => { event.preventDefault(); searchKnowledge(); });
+    $('#correction-form').addEventListener('submit', event => {
+      event.preventDefault();
+      const safe = selector => $(selector).value.trim().replace(/\s+/g, ' ').replace(/[\\`*_\[\]<>#]/g, '\\$&');
+      const topic = safe('#correction-topic'), before = safe('#correction-before'), after = safe('#correction-after'), evidence = safe('#correction-evidence');
+      if (!topic || !before || !after || !evidence) return;
+      $('#correction-text').textContent = `## Correction: ${topic}\n\n- Status: proposed — verify before relying on this.\n- Scope: this project.\n- Previous assumption: ${before}\n- Correction: ${after}\n- Evidence to verify: ${evidence}\n- Proposed date: ${new Date().toISOString().slice(0, 10)}\n`;
+      $('#correction-preview').classList.remove('hidden'); $('#correction-status').textContent = '';
+    });
+    $('#correction-copy').addEventListener('click', async () => { $('#correction-status').textContent = await copyText($('#correction-text').textContent) ? 'Copied. Review it before adding it to a project document.' : 'Could not copy. Select the proposal text to copy it.'; });
+    $('#correction-download').addEventListener('click', () => {
+      const url = URL.createObjectURL(new Blob([$('#correction-text').textContent], {type:'text/markdown;charset=utf-8'}));
+      const link = document.createElement('a'); link.href = url; link.download = 'correction-proposal.md'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+      $('#correction-status').textContent = 'Downloaded. Review and save it in project documentation to make it searchable.';
+    });
+    $('#handoff-form').addEventListener('submit', event => {
+      event.preventDefault();
+      const safe = selector => $(selector).value.trim().replace(/\s+/g, ' ').replace(/[\\`*_\[\]<>#]/g, '\\$&');
+      const task = safe('#handoff-task'); if (!task) return;
+      const fields = [['Completed work', '#handoff-completed'], ['Findings and decisions', '#handoff-findings'], ['Remaining work and next steps', '#handoff-next'], ['Relevant files', '#handoff-files']];
+      const sections = fields.map(([label, selector]) => `- ${label}: ${safe(selector) || 'Not provided.'}`);
+      $('#handoff-text').textContent = `## Session handoff: ${task}\n\n- Date: ${new Date().toISOString().slice(0, 10)}\n- Scope: this project.\n- Status: user-provided; not verified.\n${sections.join('\n')}\n`;
+      $('#handoff-preview').classList.remove('hidden'); $('#handoff-status').textContent = '';
+    });
+    $('#handoff-copy').addEventListener('click', async () => { $('#handoff-status').textContent = await copyText($('#handoff-text').textContent) ? 'Copied. Review before saving it in the project.' : 'Could not copy. Select the handoff text to copy it.'; });
+    $('#handoff-download').addEventListener('click', () => {
+      const url = URL.createObjectURL(new Blob([$('#handoff-text').textContent], {type:'text/markdown;charset=utf-8'}));
+      const link = document.createElement('a'); link.href = url; link.download = 'session-handoff.md'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+      $('#handoff-status').textContent = 'Downloaded. Save it in a project documentation folder to make it searchable.';
+    });
     $('#docs-api-export').addEventListener('click', () => {
       if (!apiDocs.markdown || apiDocs.project !== state.projectPath) return;
       const url = URL.createObjectURL(new Blob([apiDocs.markdown], {type: 'text/markdown;charset=utf-8'}));
@@ -506,6 +568,7 @@
     $('.agent-open-explorer').addEventListener('click', () => { showPage('ask'); setAskMode('llm'); $('#ask-a').focus(); });
     $('#claude-agents-refresh').addEventListener('click', loadClaudeAgents);
     $('#dashboard').addEventListener('click', onDashboardClick);
+    $('#documentation-page').addEventListener('click', onDashboardClick);
     $('#settings').addEventListener('click', onDashboardClick);
     $('#health-page').addEventListener('click', onDashboardClick);
     let saved = null;

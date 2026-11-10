@@ -12,6 +12,20 @@
   let agentProject = null;
   let buildModelPickerOpen = false;
 
+  function formatEvidence(text) {
+    let data;
+    try { data = JSON.parse(text); } catch (_) { return text; }
+    if (!data || !Array.isArray(data.results)) return text;
+    if (!data.results.length) return 'No matching evidence found. Try a more specific symbol or file name.';
+    const lines = data.results.map((item, index) => {
+      const location = item.file ? `${item.file}${item.matched_line || item.start_line ? ':' + (item.matched_line || item.start_line) : ''}` : 'Source location unavailable';
+      const status = String(item.verification || 'unverified').replace(/_/g, ' ');
+      return `${index + 1}. ${item.symbol || 'Result'} — ${location}\n   ${item.source_type || 'unknown source'} · ${status}${item.evidence ? '\n' + item.evidence : ''}`;
+    });
+    if (data.truncated) lines.push('More results may be available; narrow your search.');
+    return lines.join('\n\n');
+  }
+
   function clearAgentChat() {
     agentHistory = []; llmHistory = []; agentProject = state.projectPath;
     $('#agent-chat').replaceChildren();
@@ -238,7 +252,7 @@
   async function runAsk() {  // graph engine / evidence search only — no local LLM, so no "AI working" state
     if (askMode === 'agent' && !serverToken) { showServerInstructions(); return; }
     if (!state.nodes.length) { $('#ask-hint').textContent = 'Load a project graph first.'; return; }
-    if (serverToken && !state.projectPath) { $('#ask-hint').textContent = 'Open a project graph first.'; return; }
+    if (serverToken && !state.projectPath && (askMode === 'agent' || askMode === 'llm')) { $('#ask-hint').textContent = 'Open a project from the local server, or use Question, Path, or Impact for the loaded graph.'; return; }
     const request = { project: state.projectPath, mode: askMode, a: $('#ask-a').value, b: $('#ask-b').value, depth: $('#ask-depth').value,
       budget: $('#ask-budget').value, hideTests: state.hideTests, hideGenerated: state.hideGenerated };
     const go = $('#ask-go');
@@ -251,8 +265,12 @@
       appendAgentMessage('user', question);
       $('#ask-a').value = '';
       go.disabled = true; go.textContent = 'Thinking…';
-      $('#ask-hint').textContent = `${model} is searching the graph and reading source…`;
+      $('#ask-hint').textContent = `${model} is searching the graph and reading source. The answer appears when complete; this can take several minutes.`;
       const started = Date.now();
+      const progress = setInterval(() => {
+        if (state.projectPath === project && askMode === 'llm')
+          $('#ask-hint').textContent = `${model} is still working (${Math.floor((Date.now() - started) / 1000)} s). The answer appears when complete; this can take several minutes.`;
+      }, 5000);
       setAiBusy(true);  // the real local-model work: chip and Ask border pulse (js/10b-shell.js)
       try {
         const result = await api('/api/llm', { project, question, model, history: llmHistory.slice(-12) });
@@ -261,10 +279,12 @@
         llmHistory.push({ role: 'user', content: question }, { role: 'assistant', content: String(result.text).slice(0, 8000) });
         $('#ask-hint').textContent = `Answered by ${model} in ${Math.round((Date.now() - started) / 1000)} s on this computer. Verify file:line references before relying on them.`;
       } catch (error) {
+        if (state.projectPath !== project) return;
         const text = /unknown endpoint/i.test(error.message) ? 'This Token Graph server was started before LLM answers existed. Restart it: Settings → Stop server, then open Token Graph again with the desktop shortcut.' : error.message;
         appendAgentMessage('assistant', text, 'Error');
+        if (!$('#ask-a').value) $('#ask-a').value = question;
         $('#ask-hint').textContent = text;
-      } finally { setAiBusy(false); go.disabled = false; go.textContent = 'Ask'; }
+      } finally { clearInterval(progress); setAiBusy(false); go.disabled = false; go.textContent = 'Ask'; }
       return;
     }
     if (askMode === 'agent') {
@@ -280,7 +300,7 @@
         const result = await api('/api/agent', {project, question: request.a, operation: 'query', limit: 10, hideTests: state.hideTests, hideGenerated: state.hideGenerated, history});
         if (state.projectPath !== project) return;
         appendAgentMessage('user', request.a);
-        appendAgentMessage('assistant', result.text);
+        appendAgentMessage('assistant', formatEvidence(result.text));
         agentHistory.push({role:'user', content:request.a}, {role:'assistant', content:result.text.slice(0,8000)});
         $('#ask-a').value = '';
         $('#ask-hint').textContent = `Evidence retrieved locally in ${((performance.now() - started) / 1000).toFixed(2)} s. Each result identifies its source type and verification status.`;
@@ -290,8 +310,11 @@
     }
     go.disabled = true; go.textContent = 'Asking…';
     $('#ask-hint').textContent = 'Searching the graph…';
+    const project = state.projectPath, graphNodes = state.nodes;
     try {
-      showAskResult(serverToken && state.projectPath ? await api('/api/ask', request) : browserAsk(request));
+      const result = serverToken && project ? await api('/api/ask', request) : browserAsk(request);
+      if (state.projectPath !== project || state.nodes !== graphNodes) return;
+      showAskResult(result);
       $('#ask-hint').textContent = answerHint();
     } catch (error) {
       $('#ask-hint').textContent = error.message;

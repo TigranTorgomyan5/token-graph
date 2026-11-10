@@ -353,6 +353,7 @@ def main() -> int:
     parser.add_argument('--source', choices=('file', 'argocd', 'loki'), default='file', help='input format (JSON response for argocd or loki)')
     parser.add_argument('--source-service', default='', help='service name for imported source records')
     parser.add_argument('--evidence-out', type=Path, help='save redacted imported records to a new file for citation review')
+    parser.add_argument('--knowledge-project', type=Path, help='optionally look up project documentation for the investigation question')
     parser.add_argument('--no-llm', action='store_true', help='deterministic analysis only')
     args = parser.parse_args()
     try:
@@ -394,6 +395,15 @@ def main() -> int:
         for item in report['timeline']:
             print(f"- {item['time']} {'record' if args.source != 'file' else 'line'} {item['line']} {item['service']} {item['message'][:300]}")
         print('TRACE GROUPS:', json.dumps(report['traces']))
+        if args.knowledge_project:
+            # The query is the user's question, not log content; never store log lines in knowledge.
+            from knowledge_search import search as search_knowledge
+            knowledge = search_knowledge(args.knowledge_project, redact(args.question)[:1000], limit=3, max_chars=2000, graph_fallback=False)
+            print('PROJECT KNOWLEDGE REFERENCES (unverified; inspect source):')
+            for item in knowledge['documentation']:
+                print(f"- {redact(item['file'])}:{item['start_line']}-{item['end_line']} | {redact(item['heading'])} | {item['freshness']['status']}")
+            if not knowledge['documentation']:
+                print('- No matching documentation. Use graph evidence separately if needed.')
         if not args.no_llm:
             models = local_models(args.endpoint)
             if args.model not in models: raise ValueError(f'Local model {args.model!r} is not installed.')

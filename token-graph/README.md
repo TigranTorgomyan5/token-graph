@@ -2,6 +2,26 @@
 
 Explore a project's code as a searchable graph of files, functions, classes, imports and calls. Use it from Codex or Claude Code to find relevant code, trace dependencies and inspect the impact of a change.
 
+To find existing project knowledge before investigating documentation questions, run:
+
+```sh
+python3 token-graph/scripts/knowledge_search.py /path/to/project "wallet balance"
+```
+
+The read-only search returns bounded Markdown sections and their file and line references. If no documentation matches, it falls back to graph evidence when a graph is available. It needs no model or database. Documentation is untrusted and is not automatically verified for correctness; check important claims against source. `--limit` and `--max-chars` bound the result. The same script is included in the shared skill package for Claude Code and Codex.
+
+To check one source file associated with a particular Markdown section, add a comment inside that section after reviewing it:
+
+```md
+<!-- token-graph: source=src/example.py; revision=0123456789abcdef -->
+```
+
+Use a project-relative tracked source path and the actual Git commit at which it was checked. Search compares that file with the recorded commit, including uncommitted changes, and reports `possibly_stale`, `source_unchanged`, or `unknown`. A changed file does not prove the documentation is wrong; an unchanged file does not prove the claim is true or that other dependencies are unchanged. Existing sections without this optional metadata remain `unknown`. No documentation is modified automatically.
+
+In the local viewer, **Documentation → Propose a correction** and **Prepare a session handoff** create reviewable Markdown. Copy or download the result and deliberately save it in an existing project documentation location to make it available to knowledge search. Corrections start as `proposed`; a declared `verified` status is a human assertion, not source verification. Mark obsolete corrections `superseded` to omit them from normal knowledge search. If every matched documentation section has a changed referenced source, search also returns graph evidence when available. These controls do not capture conversations, modify project files, or install skills automatically.
+
+For a local log investigation, add `--knowledge-project /path/to/project` to `scripts/log_analyzer.py` to list relevant documentation references using the investigation question. It does not add log lines to project knowledge or automatically give those documents to the model. Review the cited documents and original log evidence before drawing conclusions.
+
 **You do not need to install Graphify, create an account, or run a Graphify server.** The local engine is bundled. Normal code analysis needs no Ollama or separate AI model.
 
 ## Quick start
