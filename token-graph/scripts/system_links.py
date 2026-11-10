@@ -834,7 +834,15 @@ def scan_system(paths: list[dict], system: dict | None = None) -> dict:
         eps = s["scan"]["endpoints"]
         outside = [{k: e[k] for k in ("tech", "role", "channel", "file", "line", "text")} for e in eps
                    if not e.get("matched") and e["role"] in ("in", "out") and not (e["tech"] == "http" and e["role"] == "in")
-                   and e["kind"] != "url" and not fed_by_broker(e, eps)][:60]
+                   and not fed_by_broker(e, eps)][:60]
+        for endpoint in outside:
+            original = next((e for e in eps if e.get("file") == endpoint["file"] and e.get("line") == endpoint["line"]
+                             and e.get("channel") == endpoint["channel"] and e.get("role") == endpoint["role"]), None)
+            if original and original.get("kind") == "url":
+                # Show the external host/path as a dependency, but never surface URL query values
+                # (which can contain credentials) in the UI's outside-service cards.
+                endpoint["channel"] = f'{original.get("host", "external host")}{(original.get("path") or "").split("?", 1)[0].split("#", 1)[0]}'
+                endpoint["text"] = f'{endpoint["tech"].upper()} URL dependency'
         routes = sum(1 for e in eps if e["tech"] == "http" and e["role"] == "in")
         out.append({"name": s["name"], "path": s["path"], "files": s["scan"]["files"], "techs": s["scan"]["techs"],
                     "endpoints": len(eps), "routes": routes, "missing": bool(s["scan"].get("missing")),

@@ -2,7 +2,7 @@
   // The server scans every service for NATS / Kafka / RabbitMQ / MassTransit / gRPC / HTTP endpoints
   // and links producer to consumer (scripts/system_links.py). This page draws the service map and
   // shows the code lines behind each connection; a service opens as a normal code graph.
-  const sysState = { list: [], current: null, scan: null, loading: false, error: '', note: '', editing: null, selected: null, projectQuery: '', hidden: new Set(), pos: new Map(), drag: null, pan: null, noClick: false, focusOnly: false, mapView: { x: 500, y: 300, zoom: 1 }, graphIds: new Map(), building: false, browser: null, noteError: false, saving: false };
+  const sysState = { list: [], current: null, scan: null, loading: false, error: '', note: '', editing: null, selected: null, projectQuery: '', hidden: new Set(), pos: new Map(), drag: null, pan: null, noClick: false, focusOnly: false, view: 'map', mapView: { x: 500, y: 300, zoom: 1 }, graphIds: new Map(), building: false, browser: null, noteError: false, saving: false };
   const TECH_COLOR = { nats: '#52c9e8', http: '#8877ff', grpc: '#55d6a2', kafka: '#e6ad63', rabbitmq: '#f09461', masstransit: '#e58bd4', redis: '#f07883', websocket: '#b2d66e', mqtt: '#e0d56b', sqs: '#6f9cff', servicebus: '#53b9a6' };
   const TECH_LABEL = { nats: 'NATS', http: 'HTTP', grpc: 'gRPC', kafka: 'Kafka', rabbitmq: 'RabbitMQ', masstransit: 'MassTransit', redis: 'Redis', websocket: 'WebSocket', mqtt: 'MQTT', sqs: 'SQS/SNS', servicebus: 'Service Bus', pubsub: 'Pub/Sub', zeromq: 'ZeroMQ', jms: 'JMS' };
   const MATCH_NOTE = { exact: 'same subject/topic text on both sides', 'shared name': 'both sides use the same constant name', route: 'client path matches a server route; the destination is inferred', url: 'a URL names this service (caller side only)', 'config key': 'a config key names this service (caller side only)' };
@@ -105,6 +105,55 @@
     const markers = techs.map(t => `<marker id="sys-arrow-${t.replace(/\W/g, '')}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="${techColor(t)}"/></marker>`).join('');
     const view = sysState.mapView, width = 1000 / view.zoom, height = 600 / view.zoom;
     return `<svg class="sys-svg" viewBox="${view.x - width / 2} ${view.y - height / 2} ${width} ${height}" role="group" aria-label="Service map: ${services.length} services, ${visible.length} visible connections"><defs>${markers}</defs>${lines}${nodes}${labels}</svg>`;
+  }
+
+  function systemCardsHtml() {
+    const { services, edges } = sysState.scan;
+    const query = sysState.projectQuery.trim().toLocaleLowerCase();
+    const matches = s => !query || `${s.name} ${s.path}`.toLocaleLowerCase().includes(query);
+    const shown = services.map((s, i) => ({ kind: 'service', service: s, i })).filter(n => matches(n.service));
+    const outsideByService = new Map();
+    shown.forEach(({ service, i }) => (service.unmatched || []).forEach(ev => {
+      const key = `${i}:${ev.role}`;
+      if (!outsideByService.has(key)) outsideByService.set(key, { kind: 'outside', key, service, i, role: ev.role, endpoints: [] });
+      outsideByService.get(key).endpoints.push(ev);
+    }));
+    const visibleOutside = [...outsideByService.values()];
+    const items = [...shown, ...visibleOutside];
+    if (!shown.length) return '<p class="dash-note">No services match this search.</p>';
+    const cols = 3, cardW = 240, cardH = 78, gapX = 95, gapY = 64, rows = Math.ceil(items.length / cols);
+    const width = 3 * cardW + 2 * gapX + 60, height = Math.max(150, rows * (cardH + gapY) + 30);
+    const pos = new Map(items.map((n, idx) => [n, { x: 30 + (idx % cols) * (cardW + gapX), y: 20 + Math.floor(idx / cols) * (cardH + gapY) }]));
+    const links = [];
+    edges.forEach((e, k) => {
+      if (sysState.hidden.has(e.tech)) return;
+      const from = items.find(n => n.kind === 'service' && n.i === e.source), to = items.find(n => n.kind === 'service' && n.i === e.target);
+      if (from && to) links.push({ from, to, label: `${techLabel(e.tech)}${e.count > 1 ? ` · ${e.count}` : ''}`, title: `${services[e.source].name} → ${services[e.target].name}: ${e.channels.map(c => c.name).join(', ')}`, edge: k });
+    });
+    visibleOutside.forEach(n => {
+      const serviceNode = items.find(item => item.kind === 'service' && item.i === n.i);
+      links.push(n.role === 'out' ? { from: serviceNode, to: n } : { from: n, to: serviceNode });
+    });
+    const paths = links.map(link => {
+      const a = pos.get(link.from), b = pos.get(link.to), ac = { x: a.x + cardW / 2, y: a.y + cardH / 2 }, bc = { x: b.x + cardW / 2, y: b.y + cardH / 2 };
+      const dx = bc.x - ac.x, dy = bc.y - ac.y, len = Math.hypot(dx, dy) || 1, ux = dx / len, uy = dy / len;
+      const scale = Math.min((cardW / 2) / Math.max(.001, Math.abs(dx / len)), (cardH / 2) / Math.max(.001, Math.abs(dy / len)));
+      const x1 = ac.x + ux * scale, y1 = ac.y + uy * scale, x2 = bc.x - ux * scale, y2 = bc.y - uy * scale, midx = (x1 + x2) / 2, midy = (y1 + y2) / 2;
+      const outsideTitle = link.title || (link.from.kind === 'service'
+        ? `${link.from.service.name} has ${link.to.endpoints.length} unmatched outgoing endpoint(s): ${link.to.endpoints.slice(0, 4).map(ev => ev.channel).join(', ')}`
+        : `${link.to.service.name} has ${link.from.endpoints.length} unmatched incoming endpoint(s): ${link.from.endpoints.slice(0, 4).map(ev => ev.channel).join(', ')}`);
+      return `<g class="sys-card-edge"${link.edge !== undefined ? ` data-sys="edge" data-i="${link.edge}" tabindex="0" role="button"` : ''}><path d="M${x1} ${y1} L${x2} ${y2}" marker-end="url(#sys-card-arrow)"></path>${link.label ? `<text x="${midx}" y="${midy - 5}">${escapeHtml(link.label)}</text>` : ''}<title>${escapeHtml(outsideTitle)}</title></g>`;
+    }).join('');
+    const boxes = items.map(n => {
+      const p = pos.get(n), isService = n.kind === 'service';
+      const name = isService ? n.service.name : n.role === 'out' ? 'External dependencies' : 'External callers';
+      const channels = isService ? [] : [...new Set(n.endpoints.map(ev => `${techLabel(ev.tech)} · ${ev.channel}`))];
+      const note = isService ? (n.service.missing ? 'Folder not found' : `${format(n.service.files)} files · ${format(n.service.routes)} HTTP routes`) : `${n.endpoints.length} endpoints · ${channels.slice(0, 2).join(' · ')}${channels.length > 2 ? ` · +${channels.length - 2}` : ''}`;
+      const action = isService ? `data-sys="node" data-i="${n.i}" aria-label="Select service ${escapeHtml(name)}"` : `data-sys="outside" data-i="${n.i}" aria-label="Inspect ${name.toLocaleLowerCase()} for ${escapeHtml(n.service.name)}, ${n.endpoints.length} endpoints"`;
+      const title = isService ? n.service.path : n.endpoints.slice(0, 8).map(ev => `${ev.file}:${ev.line}`).join('\n');
+      return `<g class="architecture-box sys-service-box${isService ? '' : ' sys-outside-box'}${sysState.selected?.type === 'service' && sysState.selected.index === n.i ? ' on' : ''}" role="button" tabindex="0" ${action} transform="translate(${p.x} ${p.y})"><rect width="${cardW}" height="${cardH}" rx="10"></rect><text x="14" y="30">${escapeHtml(name)}</text><text class="architecture-box-note" x="14" y="55">${escapeHtml(note.length > 40 ? `${note.slice(0, 37)}…` : note)}</text><title>${escapeHtml(title)}</title></g>`;
+    }).join('');
+    return `<div class="architecture-card-map sys-card-map"><svg viewBox="0 0 ${width} ${height}" role="group" aria-label="Service dependency rectangles with grouped external endpoints"><defs><marker id="sys-card-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#aaa0ff"></path></marker></defs><g class="sys-card-edges">${paths}</g>${boxes}</svg></div>`;
   }
 
   // ---- one graph for the whole system: all services' code + cross-service links (Graph page, 2D/3D) ----
@@ -302,6 +351,7 @@
       else if (action === 'zoom-in') sysState.mapView.zoom = Math.min(3, sysState.mapView.zoom * 1.35);
       else if (action === 'zoom-out') sysState.mapView.zoom = Math.max(.6, sysState.mapView.zoom / 1.35);
       else if (action === 'fit-map') sysState.mapView = { x: 500, y: 300, zoom: 1 };
+      else if (action === 'view-map' || action === 'view-cards') sysState.view = action === 'view-cards' ? 'cards' : 'map';
       else if (action === 'focus' && sysState.selected?.type === 'service') sysState.focusOnly = !sysState.focusOnly;
       else if (action === 'delete' && sysState.current) {
         if (!confirm(`Delete the system "${sysState.current.name}"?\n\nOnly the list of services is removed; no files are touched.`)) return;
@@ -338,7 +388,7 @@
           await loadSystems(); return;
         }
       }
-      else if (action === 'node') { if (sysState.noClick) { sysState.noClick = false; return; } sysState.selected = sysState.selected?.type === 'service' && sysState.selected.index === i ? null : { type: 'service', index: i }; if (!sysState.selected) sysState.focusOnly = false; }
+      else if (action === 'node' || action === 'outside') { if (sysState.noClick) { sysState.noClick = false; return; } sysState.selected = sysState.selected?.type === 'service' && sysState.selected.index === i ? null : { type: 'service', index: i }; if (!sysState.selected) sysState.focusOnly = false; }
       else if (action === 'edge') { sysState.selected = { type: 'edge', index: i }; sysState.focusOnly = false; }
       else if (action === 'clear') { sysState.selected = null; sysState.focusOnly = false; }
       else if (action === 'tech') { const t = target.dataset.tech; if (sysState.hidden.has(t)) sysState.hidden.delete(t); else sysState.hidden.add(t); }
@@ -394,7 +444,14 @@
     main.classList.remove('hidden');
     const { edges } = sysState.scan, techs = [...new Set(edges.map(e => e.tech))];
     sysEl('legend').innerHTML = techs.map(t => `<button type="button" class="sys-chip${sysState.hidden.has(t) ? ' off' : ''}" style="--tc:${techColor(t)}" data-sys="tech" data-tech="${escapeHtml(t)}" aria-pressed="${!sysState.hidden.has(t)}">${escapeHtml(techLabel(t))}</button>`).join('');
-    sysEl('map').innerHTML = mapSvg();
+    sysEl('map').innerHTML = sysState.view === 'cards' ? systemCardsHtml() : mapSvg();
+    const mapOnly = sysState.view === 'map';
+    for (const action of ['view-map', 'view-cards']) {
+      const button = sysEl('map').closest('.dash-card').querySelector(`[data-sys="${action}"]`);
+      button?.setAttribute('aria-pressed', String((action === 'view-map') === mapOnly));
+    }
+    sysEl('map').closest('.dash-card').querySelectorAll('[data-sys="zoom-in"], [data-sys="zoom-out"], [data-sys="fit-map"]').forEach(button => { button.hidden = !mapOnly; });
+    $('#sys-map-hint').textContent = mapOnly ? 'Drag the background to pan. Select a service to inspect it.' : 'Rectangles show services and grouped unresolved dependencies. Select an external group for its source evidence.';
     const sel = sysState.selected;
     const focus = sysEl('focus');
     focus.disabled = sel?.type !== 'service'; focus.setAttribute('aria-pressed', String(sysState.focusOnly)); focus.textContent = sysState.focusOnly ? 'Show all services' : 'Focus selected service';
@@ -455,10 +512,10 @@
   $('#system-page').addEventListener('input', event => {
     if (event.target.id !== 'sys-project-search') return;
     sysState.projectQuery = event.target.value;
-    if (sysState.scan) sysEl('map').innerHTML = mapSvg();
+    if (sysState.scan) sysEl('map').innerHTML = sysState.view === 'cards' ? systemCardsHtml() : mapSvg();
   });
   $('#system-page').addEventListener('keydown', event => {
-    const mapTarget = event.target.closest('.sys-node, .sys-edge');
+    const mapTarget = event.target.closest('.sys-node, .sys-edge, .sys-service-box');
     if (mapTarget && (event.key === 'Enter' || event.key === ' ')) {
       event.preventDefault();
       const action = mapTarget.dataset.sys, index = mapTarget.dataset.i;
