@@ -522,6 +522,31 @@ def manage_hooks(root: Path, install: bool) -> str:
     return "Token Graph hooks installed." if install else "Token Graph hooks removed."
 
 
+HEALTH_ACTIONS = ("dead", "similar", "hotspots", "review")
+
+
+def health_feature(root: Path, action: str, *, question: str | None = None, node: str | None = None,
+                   top: int | None = None, prefix: str = "", days: int = 180,
+                   ignore: list[str] | None = None, ref: str = "HEAD", auto_update: bool = True) -> int:
+    """dead / similar / hotspots: code-health reports computed from the graph (code_health.py)."""
+    global QUIET_LOG
+    QUIET_LOG = root / "graphify-out" / "token-graph.log"
+    try:
+        note = refresh_if_stale(root, auto_update)
+        from node_filters import scoped_graph
+        from code_health import run
+        # Tests stay in: a symbol only tests call is a finding, and a test is a caller of record.
+        graph = scoped_graph(graph_file(root), tests=True, generated=False, external=False, docs=False, vendored=False)
+        if note: print(note)
+        print(run(action, graph, root, question=question, node=node, top=top, prefix=prefix, days=days, ignore=ignore, ref=ref))
+        return 0
+    except ValueError as error:
+        print(f"Token Graph {action}: {error}")
+        return 2
+    finally:
+        QUIET_LOG = None
+
+
 def local_feature(root: Path, action: str, *, question: str | None = None,
                   source: str | None = None, target: str | None = None,
                   node: str | None = None, relations: list[str] | None = None,
@@ -746,13 +771,17 @@ def main() -> int:
     one.add_argument("--no-auto-update", action="store_true", help="answer from the graph as it is; only warn when it is older than the code")
     one.add_argument("--context", action="append", default=[], help="edge context filter for a query; repeat as needed")
     one.add_argument("--refresh", action="store_true", help="refresh the graph before generating artifacts")
-    one.add_argument("--action", choices=("graph", "query", "path", "explain", "affected", "hubs", "stats", "benchmark", "update", "tree", "recluster", "export", "hook-install", "hook-uninstall", "reflect", "merge", "diagnose", "watch-start", "watch-stop", "watch-status"), default="graph", help="local graph operation to run; results stay on this device")
+    one.add_argument("--action", choices=("graph", "query", "path", "explain", "affected", "hubs", "dead", "similar", "hotspots", "review", "stats", "benchmark", "update", "tree", "recluster", "export", "hook-install", "hook-uninstall", "reflect", "merge", "diagnose", "watch-start", "watch-stop", "watch-status"), default="graph", help="local graph operation to run; results stay on this device")
     one.add_argument("--source", help="source node for --action path")
     one.add_argument("--target", help="target node for --action path")
     one.add_argument("--node", help="node for explain or affected")
     one.add_argument("--relation", action="append", default=[], help="relation filter for affected; repeat as needed")
     one.add_argument("--depth", type=int, default=2, help="affected traversal depth")
-    one.add_argument("--top", type=int, default=10, help="number of graph hubs")
+    one.add_argument("--top", type=int, default=None, help="how many hubs / dead symbols / similar symbols / hotspots to list")
+    one.add_argument("--path", default="", help="dead|similar|hotspots: only look inside this folder (relative to the project)")
+    one.add_argument("--ref", default="HEAD", help="review: compare the working tree against this git ref (default HEAD; e.g. origin/main)")
+    one.add_argument("--days", type=int, default=180, help="hotspots: how many days of git history count as churn")
+    one.add_argument("--ignore", action="append", default=[], help="dead: regex of symbol names or file paths to skip (entry points the graph cannot see); repeat as needed")
     one.add_argument("--format", dest="export_format", help="local export format: html, callflow-html, svg, graphml, wiki, obsidian, neo4j, falkordb")
     one.add_argument("--queries", type=int, default=1, help="projected query count for benchmark estimates")
     one.add_argument("--merge-graph", action="append", dest="merge_graphs", default=[], help="local graph.json to merge; repeat as needed")
@@ -779,7 +808,9 @@ def main() -> int:
                 return launch_local(root, args.question, args.refresh, budget=args.budget, contexts=args.context, tests=not args.no_tests, generated=args.include_generated, external=args.include_external, auto_update=not args.no_auto_update)
             if not (root / "graphify-out" / "graph.json").is_file():
                 if launch_local(root, None, True, open_page=False): return 1
-            return local_feature(root, args.action, question=args.question, source=args.source, target=args.target, node=args.node, relations=args.relation, depth=args.depth, top=args.top, export_format=args.export_format, queries=args.queries, budget=args.budget, contexts=args.context, merge_graphs=args.merge_graphs, tests=not args.no_tests, generated=args.include_generated, external=args.include_external, auto_update=not args.no_auto_update)
+            if args.action in HEALTH_ACTIONS:
+                return health_feature(root, args.action, question=args.question, node=args.node, top=args.top, prefix=args.path, days=args.days, ignore=args.ignore, ref=args.ref, auto_update=not args.no_auto_update)
+            return local_feature(root, args.action, question=args.question, source=args.source, target=args.target, node=args.node, relations=args.relation, depth=args.depth, top=args.top or 10, export_format=args.export_format, queries=args.queries, budget=args.budget, contexts=args.context, merge_graphs=args.merge_graphs, tests=not args.no_tests, generated=args.include_generated, external=args.include_external, auto_update=not args.no_auto_update)
         if args.command == "build":
             require_runtime()
             if run_engine(root, "extract", str(root), "--code-only", "--no-cluster"): return 1

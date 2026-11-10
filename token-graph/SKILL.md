@@ -22,6 +22,10 @@ The runtime is `<skill>/.runtime`. Graphify itself is never installed. For a new
 | Explain a symbol | `--action explain --node "Name"` |
 | Inspect impact | `--action affected --node "Name" --depth 2`; optional repeatable `--relation` |
 | Architectural hubs | `--action hubs --top 10` |
+| Before commit: what does my diff touch? (callers, missing tests, hotspots, twins) | `--action review [--ref origin/main] [--top 15]` |
+| Unused code (dead functions/classes, dead chains) | `--action dead [--path <folder>] [--top 40] [--ignore <regex>]` |
+| Does this already exist? (before writing new code) | `--action similar --question "<what you plan to write>"` |
+| Risky, hard-to-change code (size x connections x git churn) | `--action hotspots [--days 180] [--top 10]` |
 | Counts | `--action stats` |
 | Context savings estimate | `--action benchmark`; optional `--question` and `--queries` |
 | File hierarchy | `--action tree` |
