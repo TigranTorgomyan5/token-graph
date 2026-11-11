@@ -135,27 +135,44 @@
     const container = $('#docs-content');
     container.replaceChildren();
     const text = String(content || ''), pattern = /\[([^\]\n]+)\]\(([^)\n]+)\)/g;
-    let last = 0, match;
-    while ((match = pattern.exec(text))) {
-      const target = match[2].split('#')[0].split('?')[0];
-      let decoded;
-      try { decoded = decodeURIComponent(target); } catch (_) { decoded = ''; }
-      const parts = path.split('/').slice(0, -1);
-      let valid = !!decoded && !/^(?:[a-z][a-z0-9+.-]*:|\/|\\)/i.test(decoded) && !decoded.includes('\\');
-      if (valid) for (const part of decoded.split('/')) {
-        if (!part || part === '.') continue;
-        if (part === '..') { if (!parts.length) { valid = false; break; } parts.pop(); }
-        else parts.push(part);
+    let fence = null;
+    const append = value => { if (value) container.append(document.createTextNode(value)); };
+    text.split('\n').forEach((line, lineIndex) => {
+      if (lineIndex) append('\n');
+      const marker = /^\s{0,3}(`{3,}|~{3,})/.exec(line);
+      if (marker) {
+        if (!fence) fence = marker[1];
+        else if (marker[1][0] === fence[0] && marker[1].length >= fence.length) fence = null;
+        append(line);
+        return;
       }
-      const index = valid ? documentation.items.findIndex(item => item.path === parts.join('/')) : -1;
-      if (index < 0) continue;
-      container.append(document.createTextNode(text.slice(last, match.index)));
-      const button = document.createElement('button');
-      button.type = 'button'; button.className = 'docs-inline-link'; button.dataset.docIndex = String(index); button.textContent = match[1];
-      container.append(button); last = pattern.lastIndex;
-    }
-    container.append(document.createTextNode(text.slice(last)));
+      if (fence) { append(line); return; }  // links inside a code fence are source text, not navigation
+      let last = 0, match;
+      pattern.lastIndex = 0;
+      while ((match = pattern.exec(line))) {
+        if (match.index > 0 && line[match.index - 1] === '!') continue;  // images are not document links
+        const target = match[2].split('#')[0].split('?')[0];
+        let decoded;
+        try { decoded = decodeURIComponent(target); } catch (_) { decoded = ''; }
+        const parts = path.split('/').slice(0, -1);
+        let valid = !!decoded && !/^(?:[a-z][a-z0-9+.-]*:|\/|\\)/i.test(decoded) && !decoded.includes('\\');
+        if (valid) for (const part of decoded.split('/')) {
+          if (!part || part === '.') continue;
+          if (part === '..') { if (!parts.length) { valid = false; break; } parts.pop(); }
+          else parts.push(part);
+        }
+        const index = valid ? documentation.items.findIndex(item => item.path === parts.join('/')) : -1;
+        if (index < 0) continue;  // leave the original link text visible
+        append(line.slice(last, match.index));
+        const button = document.createElement('button');
+        button.type = 'button'; button.className = 'docs-inline-link'; button.dataset.docIndex = String(index); button.textContent = match[1];
+        container.append(button); last = pattern.lastIndex;
+      }
+      append(line.slice(last));
+    });
   }
+
+
 
   function showPage(page) {
     // One task per page. "plain" pages hide the graph workspace and the inspector.
@@ -184,7 +201,7 @@
     else if (state.page === 'agents') { loadClaudeAgents(); loadBenchModels(); if (benchmarkProject !== state.projectPath) { benchmarkRows.clear(); benchmarkProject = state.projectPath; renderBenchResults(); } }
     else if (state.page === 'documentation') loadDocumentation();
     else if (info.plain) refreshDashboard();
-    else if (state.page === 'graph') { resize(); fitGraph(); }
+    else if (state.page === 'graph') { updateArchitectureDisplay(); resize(); fitGraph(); }
   }
 
   function noteJob(job) {

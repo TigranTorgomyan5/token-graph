@@ -28,6 +28,17 @@ def edges(result):
 
 
 class ScannerTests(unittest.TestCase):
+    def test_url_dependency_strips_query_and_fragment(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'app.js').write_text("fetch('http://wallet-service:8080/balance?token=secret#frag')\n", encoding='utf-8')
+            result = system_links.scan_system([{'path': str(root)}])
+        [endpoint] = [e for e in result['services'][0]['unmatched'] if e['role'] == 'out']
+        self.assertEqual(endpoint['channel'], 'wallet-service/balance')
+        self.assertEqual(endpoint['text'], 'HTTP URL dependency')
+        self.assertNotIn('secret', json.dumps(endpoint))
+        self.assertNotIn('frag', json.dumps(endpoint))
+
     def test_service_setting_does_not_link_sibling_implementation(self):
         files = [('config.go', '.go', 'package config\nfunc Load() { base := req("SPORT_SERVICE_URI"); _ = base }')]
         endpoints = system_links.extract(files, system_links.collect_consts(files))

@@ -166,6 +166,42 @@ def identifier_counts(root: Path, graph_files: set[str]) -> Counter:
 
 # ---- 1. dead code ------------------------------------------------------------------------------
 
+# A route/router/controller file may use a framework the graph cannot see (decorators, attributes,
+# registries). Such roots are reported as uncertain, never as safe to delete, and never seed chains.
+ROUTE_FILE = re.compile(r'(^|/)(routes?|routers?|controllers?|handlers?|endpoints?|resources?|views?|apis?|urls|web)(/|\.|$)', re.I)
+
+
+def framework_entry_ids(root: Path, candidates: dict[str, dict]) -> set[str]:
+    """Symbols that a framework route in the same file dispatches to (Flask, Express, ASP.NET, Go mux …).
+
+    Language patterns stay in agent_frameworks; this only maps its route line back to a symbol name."""
+    import agent_frameworks
+    names_by_file: dict[str, set[str]] = {}
+    entries: set[str] = set()
+    for key, node in candidates.items():
+        file = file_of(node)
+        if not file:
+            continue
+        if file not in names_by_file:
+            names: set[str] = set()
+            path = root / file
+            try:
+                if path.is_file() and path.stat().st_size <= 1_000_000:
+                    lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
+                    for hint in agent_frameworks.file_routes(file, lines):
+                        match = re.search(r":(\d+)$", hint)
+                        if match:
+                            name = agent_frameworks.handler_name(file, lines, int(match.group(1)))
+                            if name:
+                                names.add(name)
+            except OSError:
+                pass
+            names_by_file[file] = names
+        if bare_name(str(node.get("label") or "")) in names_by_file[file]:
+            entries.add(key)
+    return entries
+
+
 def find_dead(data: dict, root: Path, prefix: str = "", ignore: list[str] | None = None) -> dict:
     """Classify unused symbols. Returns {"checked": n, "items": [...]} sorted by lines saved."""
     nodes = drop_vendor_dirs(symbols(data, prefix), prefix)
@@ -216,7 +252,12 @@ def find_dead(data: dict, root: Path, prefix: str = "", ignore: list[str] | None
     # "maybe" dead (top-level script code, html handlers, dynamic calls) and must not condemn
     # the code it calls, so dead chains grow from the certain roots only.
     roots = {k for k in candidates if not used_from(k)}
-    certain = {k for k in roots if textual(k) <= 0}
+    entries = framework_entry_ids(root, {k: nodes[k] for k in roots})
+    roots -= entries
+    # A root in a router/controller-style file can be an entry point registered elsewhere; keep it
+    # visible but medium, and do not let it seed a dead chain.
+    suspected = {k for k in roots if ROUTE_FILE.search(file_of(nodes[k]))}
+    certain = {k for k in roots if textual(k) <= 0} - suspected
     dead = set(certain)
     chain: set[str] = set()
     changed = True
@@ -242,6 +283,8 @@ def find_dead(data: dict, root: Path, prefix: str = "", ignore: list[str] | None
             continue
         if key in chain:
             confidence, why = "high", "only called by other unused code"
+        elif key in suspected:
+            confidence, why = "medium", "router/controller-style file: could be a framework entry point"
         elif key not in certain:
             confidence, why = "medium", f"no graph references, but the name appears {textual(key)}x elsewhere (dynamic call?)"
         else:
@@ -420,14 +463,16 @@ def find_hotspots(data: dict, root: Path, top: int = 10, days: int = 180, prefix
                      "outside_files": outside, "churn": changes, "score": score})
     rows.sort(key=lambda r: -r["score"])
     per_file: dict[str, dict] = {}
+    max_end: dict[str, int] = {}
     for node in nodes.values():
         file = file_of(node)
+        max_end[file] = max(max_end.get(file, 0), span(node)[1])
         entry = per_file.setdefault(file, {"file": file, "symbols": 0, "lines": 0, "degree": 0, "churn": churn.get(file, 0)})
         entry["symbols"] += 1
         entry["degree"] += fan_in[node["id"]] + fan_out[node["id"]]
     for entry in per_file.values():
         # File length from the farthest symbol end, so one-line files do not rank on size.
-        entry["lines"] = max((span(n)[1] for n in nodes.values() if file_of(n) == entry["file"]), default=0)
+        entry["lines"] = max_end.get(entry["file"], 0)
         entry["score"] = entry["lines"] * math.sqrt(1 + entry["degree"] / max(entry["symbols"], 1)) * (1 + math.log(1 + entry["churn"]))
     files = sorted(per_file.values(), key=lambda e: -e["score"])
     return {"symbols": rows[:top], "files": files[:top], "days": days, "note": note}

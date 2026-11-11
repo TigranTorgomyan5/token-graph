@@ -113,7 +113,7 @@
     const matches = s => !query || `${s.name} ${s.path}`.toLocaleLowerCase().includes(query);
     const shown = services.map((s, i) => ({ kind: 'service', service: s, i })).filter(n => matches(n.service));
     const outsideByService = new Map();
-    shown.forEach(({ service, i }) => (service.unmatched || []).forEach(ev => {
+    shown.forEach(({ service, i }) => (service.unmatched || []).filter(ev => !sysState.hidden.has(ev.tech)).forEach(ev => {
       const key = `${i}:${ev.role}`;
       if (!outsideByService.has(key)) outsideByService.set(key, { kind: 'outside', key, service, i, role: ev.role, endpoints: [] });
       outsideByService.get(key).endpoints.push(ev);
@@ -351,7 +351,7 @@
       else if (action === 'zoom-in') sysState.mapView.zoom = Math.min(3, sysState.mapView.zoom * 1.35);
       else if (action === 'zoom-out') sysState.mapView.zoom = Math.max(.6, sysState.mapView.zoom / 1.35);
       else if (action === 'fit-map') sysState.mapView = { x: 500, y: 300, zoom: 1 };
-      else if (action === 'view-map' || action === 'view-cards') sysState.view = action === 'view-cards' ? 'cards' : 'map';
+      else if (action === 'view-map' || action === 'view-cards') { sysState.view = action === 'view-cards' ? 'cards' : 'map'; if (sysState.view === 'cards') sysState.focusOnly = false; }
       else if (action === 'focus' && sysState.selected?.type === 'service') sysState.focusOnly = !sysState.focusOnly;
       else if (action === 'delete' && sysState.current) {
         if (!confirm(`Delete the system "${sysState.current.name}"?\n\nOnly the list of services is removed; no files are touched.`)) return;
@@ -451,10 +451,10 @@
       button?.setAttribute('aria-pressed', String((action === 'view-map') === mapOnly));
     }
     sysEl('map').closest('.dash-card').querySelectorAll('[data-sys="zoom-in"], [data-sys="zoom-out"], [data-sys="fit-map"]').forEach(button => { button.hidden = !mapOnly; });
-    $('#sys-map-hint').textContent = mapOnly ? 'Drag the background to pan. Select a service to inspect it.' : 'Rectangles show services and grouped unresolved dependencies. Select an external group for its source evidence.';
+    $('#sys-map-hint').textContent = mapOnly ? 'Drag the background to pan. Select a service to inspect it.' : 'Select a rectangle to inspect the service; external groups show its unmatched endpoints.';
     const sel = sysState.selected;
     const focus = sysEl('focus');
-    focus.disabled = sel?.type !== 'service'; focus.setAttribute('aria-pressed', String(sysState.focusOnly)); focus.textContent = sysState.focusOnly ? 'Show all services' : 'Focus selected service';
+    focus.disabled = sysState.view === 'cards' || sel?.type !== 'service'; focus.setAttribute('aria-pressed', String(sysState.focusOnly)); focus.textContent = sysState.focusOnly ? 'Show all services' : 'Focus selected service';
     sysEl('detail-title').textContent = sel?.type === 'edge' ? 'Connection' : sel?.type === 'service' ? 'Service' : 'System';
     sysEl('detail').innerHTML = (sel ? `<button type="button" class="sys-x sys-close" data-sys="clear" aria-label="Back to system summary">×</button>` : '') + (sel?.type === 'edge' ? edgeDetail(sel.index) : sel?.type === 'service' ? serviceDetail(sel.index) : summaryDetail());
     const visibleEdges = visibleSystemEdges();
@@ -515,7 +515,7 @@
     if (sysState.scan) sysEl('map').innerHTML = sysState.view === 'cards' ? systemCardsHtml() : mapSvg();
   });
   $('#system-page').addEventListener('keydown', event => {
-    const mapTarget = event.target.closest('.sys-node, .sys-edge, .sys-service-box');
+    const mapTarget = event.target.closest('.sys-node, .sys-edge, .sys-card-edge, .sys-service-box');
     if (mapTarget && (event.key === 'Enter' || event.key === ' ')) {
       event.preventDefault();
       const action = mapTarget.dataset.sys, index = mapTarget.dataset.i;

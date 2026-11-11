@@ -30,6 +30,9 @@ class KnowledgeSearchTests(unittest.TestCase):
             (root / 'private').mkdir()
             (root / 'private' / 'notes.md').write_text('# Wallet\nPrivate wallet info')
             (root / 'credentials.md').write_text('# Wallet\nSecret wallet info')
+            for folder in ('secrets', 'credentials', '.secrets', '.credentials'):
+                (root / folder).mkdir()
+                (root / folder / 'notes.md').write_text('# Wallet\nFolder secret wallet info')
             external = Path(outside) / 'external.md'
             external.write_text('# Wallet\nExternal wallet info')
             (root / 'external.md').symlink_to(external)
@@ -38,6 +41,13 @@ class KnowledgeSearchTests(unittest.TestCase):
             self.assertEqual(result['documentation'], [])
             self.assertEqual(result['graph_fallback']['status'], 'missing_graph')
             fallback.assert_called_once()
+
+    def test_rst_and_adoc_documents_are_searched(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'guide.rst').write_text('Wallet\n======\nwallet details\n')
+            (root / 'notes.adoc').write_text('= Wallet\nwallet details\n')
+            self.assertEqual({item['file'] for item in search(root, 'wallet')['documentation']}, {'guide.rst', 'notes.adoc'})
 
     def test_fenced_headings_do_not_split_sections(self):
         with tempfile.TemporaryDirectory() as directory:

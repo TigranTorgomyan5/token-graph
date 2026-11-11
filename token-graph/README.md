@@ -100,6 +100,17 @@ Use these requests after invoking the skill:
 
 Each project keeps its own graph. Projects are not merged unless you explicitly request a merge.
 
+For code-health checks, use the same launcher:
+
+```sh
+python3 scripts/token_graph.py launch /path/to/project --action review --ref origin/main
+python3 scripts/token_graph.py launch /path/to/project --action dead --top 30
+python3 scripts/token_graph.py launch /path/to/project --action similar --question "validate a wallet token"
+python3 scripts/token_graph.py launch /path/to/project --action hotspots --days 180
+```
+
+`review` maps the working-tree diff to graph symbols and shows callers, tests and hotspots. `dead` reports symbols with no graph callers; framework route handlers are kept out and router-style files are only reported as medium confidence. `similar` finds existing code before you write a new function. `hotspots` ranks size × connections × recent Git churn. These are navigation aids: verify the source before deleting or refactoring.
+
 ## View all your projects in one place
 
 1. Open `assets/project-explorer.html` from the installed skill folder in your browser.

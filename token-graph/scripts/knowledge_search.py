@@ -9,7 +9,7 @@ import re
 import subprocess
 from pathlib import Path
 
-from explorer_evidence import MAX_SOURCE_BYTES, SKIP_DIRS, _source_path, search_evidence
+from explorer_evidence import DOC_SUFFIXES, MAX_SOURCE_BYTES, SKIP_DIRS, _source_path, search_evidence
 
 STOP = set('a an and are as at be by can could do does for from how in is it of on or the this to what where which with'.split())
 HEADING = re.compile(r'^\s{0,3}(#{1,6})\s+(.+?)\s*#*\s*$')
@@ -63,7 +63,7 @@ def search(project: Path, question: str, *, limit: int = 5, max_chars: int = 500
         dirs[:] = sorted(d for d in dirs if not d.startswith('.') and d.casefold() not in SKIP_DIRS and not (Path(directory) / d).is_symlink())
         for name in sorted(files):
             path = Path(directory) / name
-            if path.suffix.lower() not in {'.md', '.mdx'} or path.is_symlink() or name.startswith('.'):
+            if path.suffix.lower() not in DOC_SUFFIXES or path.is_symlink() or name.startswith('.'):
                 continue
             relative = path.relative_to(root).as_posix()
             if _source_path(root, relative) is None:

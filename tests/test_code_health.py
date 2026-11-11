@@ -82,6 +82,22 @@ class DeadCode(unittest.TestCase):
     def test_ignore_pattern_skips_symbols(self):
         self.assertNotIn("lonely_helper", self.found(ignore=["^lonely"]))
 
+    def test_route_handler_decorated_in_the_same_file_is_not_dead(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / 'app.py').write_text("from flask import Flask\napp = Flask(__name__)\n@app.route('/status')\ndef check_health():\n    return 'ok'\n", encoding='utf-8')
+            data = {'nodes': [fn('h', 'check_health()', 'app.py', 4, 5)], 'links': []}
+            self.assertEqual(ch.find_dead(data, root)['items'], [])
+
+    def test_router_style_file_is_medium_never_a_dead_chain_root(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / 'routes').mkdir()
+            (root / 'routes' / 'user.py').write_text("def load_user():\n    return 1\n", encoding='utf-8')
+            data = {'nodes': [fn('u', 'load_user()', 'routes/user.py', 1, 2)], 'links': []}
+            [item] = ch.find_dead(data, root)['items']
+            self.assertEqual((item['name'], item['confidence']), ('load_user', 'medium'))
+
     def test_report_is_bounded_and_mentions_lines(self):
         text = ch.format_dead(ch.find_dead(graph(), self.root), top=1)
         self.assertIn("more", text)

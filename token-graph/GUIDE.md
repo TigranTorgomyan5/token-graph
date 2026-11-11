@@ -120,6 +120,10 @@ In any project, type `/token-graph` and say what you want in plain words; Claude
 | "How does … work?" | `--action query --question "…"` | budget 800 by default |
 | "Most connected code" | `--action hubs` | |
 | "How big is the graph?" | `--action stats` | |
+| "What did my diff touch?" | `--action review [--ref origin/main]` | callers, tests, hotspots, unused-after-edit |
+| "What is unused?" | `--action dead` | medium/high confidence; verify routes and dynamic calls |
+| "Does this already exist?" | `--action similar --question "…"` | before writing a new function |
+| "What is risky to change?" | `--action hotspots` | size × connections × Git churn |
 
 Defaults that keep answers small:
 

@@ -62,6 +62,7 @@
     }
     $('#graph-title').textContent = view === 'docs' ? 'Documentation relationships' : 'Relationship graph';
     $('.legend-code').classList.toggle('hidden', view === 'docs');
+    updateArchitectureDisplay();
     updateMetrics({});
     renderCommunityList();
     fitGraph();

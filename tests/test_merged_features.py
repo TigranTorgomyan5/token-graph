@@ -65,10 +65,10 @@ class MergeRegressionTests(unittest.TestCase):
             with patch.object(agent, 'installed_models', return_value={'zeta:1', 'qwen3:8b'}), patch.object(agent, 'explore', return_value='answer') as explore, redirect_stdout(io.StringIO()):
                 with patch.object(sys, 'argv', ['explore_agent.py', str(project), 'question']):
                     self.assertEqual(agent.main(), 0)
-                explore.assert_called_with(project, 'question', 'qwen3:8b')
+                explore.assert_called_with(project, 'question', 'qwen3:8b', full_output=False, max_output_chars=3000)
                 with patch.object(sys, 'argv', ['explore_agent.py', str(project), 'question', '--model', 'zeta:1']):
                     self.assertEqual(agent.main(), 0)
-                explore.assert_called_with(project, 'question', 'zeta:1')
+                explore.assert_called_with(project, 'question', 'zeta:1', full_output=False, max_output_chars=3000)
 
     def test_ai_generation_uses_local_builder_and_restores_graph_on_failure(self):
         server = load('explorer_server')
@@ -220,6 +220,24 @@ class MergeRegressionTests(unittest.TestCase):
             self.assertIn('NODE TestOnly', cli(['query', directory, 'TestOnly']))
             self.assertNotIn('NODE TestOnly', cli(['query', directory, 'TestOnly', '--no-tests']))
             self.assertEqual(json.loads((output / 'graph.json').read_text()), graph)
+
+    def test_viewer_query_uses_ranked_edges_and_viewer_scope(self):
+        launcher = load('token_graph')
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / 'graphify-out'
+            output.mkdir()
+            nodes = [{'id': 'h', 'label': 'exchangeWidget()', 'source_file': 'svc/handler.go', 'source_location': 'L1', 'file_type': 'code'},
+                     {'id': 'v', 'label': 'validateWidget()', 'source_file': 'svc/handler.go', 'source_location': 'L10', 'file_type': 'code'},
+                     {'id': 'd', 'label': 'DocOnly', 'source_file': 'docs/readme.md', 'source_location': 'L1', 'file_type': 'document'}]
+            (output / 'graph.json').write_text(json.dumps({'nodes': nodes, 'links': [{'source': 'h', 'target': 'v', 'relation': 'calls'}]}))
+            result = subprocess.run([launcher.engine_python(), str(SCRIPTS / 'ask_engine.py'), directory, 'query',
+                                     'exchangeWidget validateWidget', '800', '--no-docs', '--no-external', '--no-vendored'],
+                                    capture_output=True, text=True, timeout=60)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            answer = json.loads(result.stdout)
+            self.assertIn('EDGE exchangeWidget() --calls--> validateWidget()', answer['text'])
+            self.assertNotIn('DocOnly', answer['text'])
 
     def test_viewer_query_returns_grounded_node_ids(self):
         launcher = load('token_graph')

@@ -24,6 +24,7 @@ install(False)
 import networkx as nx  # noqa: E402
 from graphify import affected as gaffected  # noqa: E402
 from graphify import serve  # noqa: E402
+from graph_answer import answer as ranked_answer  # noqa: E402
 
 QUERY_DEPTH = 2  # shallower than the CLI default (3): a highlight of thousands of nodes shows nothing
 WORD = re.compile(r"[A-Z]+(?![a-z])|[A-Z]?[a-z]+|\d+")   # GetSentPayoutsAsync -> Get Sent Payouts Async
@@ -126,15 +127,18 @@ def ask_query(G: nx.Graph, graph_file: str, question: str, budget: int) -> dict:
     filters, _ = serve._resolve_context_filters(question, None)
     traversal = serve._filter_graph_by_context(serve._traversal_view(G), filters)
     nodes, _edges = serve._bfs(traversal, seeds, QUERY_DEPTH)
-    text = serve._query_graph_text(G, question, depth=QUERY_DEPTH, token_budget=budget, graph_path=graph_file)
-    # The text keeps only what fits the token budget; highlight exactly those NODE lines, not the whole traversal.
+    # The CLI's ranked, compact answer (edges before further nodes, a fair share per file); the
+    # browser and CLI must describe the same graph result.
+    text = ranked_answer(graph_file, question, budget, depth=QUERY_DEPTH)
+    # The text keeps only what fits the budget; highlight exactly those NODE lines, not the whole traversal.
     by_key = {}
     for nid in nodes:
         data = G.nodes[nid]
         by_key.setdefault((str(data.get("label", nid)), str(data.get("source_file") or ""), str(data.get("source_location") or "")), nid)
     shown = set(seeds)
-    for match in re.finditer(r"^NODE (.*?) \[src=(.*?) loc=(.*?) community=", text, re.M):
-        nid = by_key.get(match.groups())
+    for match in re.finditer(r"^NODE (.*?) \[src=(.*?) loc=([^\]]+)\]", text, re.M):
+        label, src, loc = match.groups()
+        nid = by_key.get((label, src, loc.split("-", 1)[0]))
         if nid:
             shown.add(nid)
     levels = levels_from(traversal, seeds, nodes)
@@ -197,7 +201,9 @@ def main() -> int:
     project, mode, *args = [a for a in sys.argv[1:] if not a.startswith("--")]
     root = Path(project).resolve()
     from node_filters import scoped_graph
-    graph_file = scoped_graph(root / "graphify-out" / "graph.json", tests="--no-tests" not in flags, generated="--no-generated" not in flags)
+    graph_file = scoped_graph(root / "graphify-out" / "graph.json", tests="--no-tests" not in flags,
+                              generated="--no-generated" not in flags, external="--no-external" not in flags,
+                              docs="--no-docs" not in flags, vendored="--no-vendored" not in flags)
     if mode == "affected":
         G = gaffected.load_graph(graph_file)
     else:

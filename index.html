@@ -352,7 +352,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       @media(min-width:1251px){#dash-ask{grid-column:span 7}#dash-overview{grid-column:span 5}}
       @media(max-width:820px){.explore-intro{align-items:flex-start;flex-direction:column;gap:14px}.workflow-badge{font-size:10px}#dash-docs{margin-left:0}}
       #dash-savings{border-color:#31594d}#dash-savings .dash-tiles{grid-template-columns:repeat(4,minmax(0,1fr))}.savings-details summary{cursor:pointer;color:#c7bfff;padding:8px 0;min-height:36px}.savings-details[open]{display:block}.savings-details .dash-bars{margin-top:12px}@media(max-width:820px){#dash-savings .dash-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:420px){#dash-savings .dash-tiles{grid-template-columns:1fr}}
-      #dashboard .dash-grid>.benchmark-strip{grid-column:1/-1;margin-top:0;margin-bottom:4px}
+      #dashboard .benchmark-strip{margin-bottom:14px}
       .architecture-switch{display:flex;gap:4px;padding:10px 16px}.architecture-card-view{padding:12px 18px;min-height:360px}.architecture-card-map{overflow:auto;max-height:70vh}.architecture-card-map svg{display:block;width:100%;min-width:680px}.architecture-edges path{fill:none;stroke:#7770b6;stroke-width:1.5;opacity:.7}.architecture-edges marker path{fill:#aaa0ff;stroke:none}.architecture-box{cursor:pointer}.architecture-box rect{fill:#18223a;stroke:#7569cb;stroke-width:1.5}.architecture-box:hover rect,.architecture-box:focus-visible rect{fill:#24244b;stroke:#c0b6ff;stroke-width:3}.architecture-box text{fill:#edf0ff;font:600 14px var(--sans);pointer-events:none}.architecture-box .architecture-box-note{fill:#a2b0c7;font:11px var(--sans)}
       .docs-inline-link{display:inline;border:0;background:none;padding:0;color:#b8abff;font:inherit;text-align:left;text-decoration:underline;text-underline-offset:3px;cursor:pointer}.docs-inline-link:hover{color:#e5dfff}
       .docs-api-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:12px 0}.docs-api{margin-bottom:14px}.docs-api details{border-top:1px solid #26324a;padding:10px 2px}.docs-api summary{cursor:pointer;color:#d9d2ff;font-weight:600;overflow-wrap:anywhere}.docs-api pre{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.6 var(--mono);color:#cbd5e5}
@@ -428,8 +428,6 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
             <button type="button" class="dash-action" data-nav="documentation"><span aria-hidden="true">▤</span>Read documentation</button>
           </div>
           <div class="dash-action-status" id="dash-action-status" role="status" aria-live="polite"></div>
-          <div class="dash-grid">
-            <article class="dash-card" id="dash-savings" aria-labelledby="dash-savings-title"><header><h2 id="dash-savings-title">Token savings in Claude Code</h2><span class="dash-head"></span></header><div class="dash-body"></div></article>
           <section class="benchmark-strip" id="benchmark-strip" aria-label="Token Graph context reduction estimate">
             <span class="benchmark-mark" aria-hidden="true">↘</span>
             <div class="benchmark-main"><span class="benchmark-label">PROJECT CONTEXT ESTIMATE</span><strong id="reduction-total">Loading estimate…</strong></div>
@@ -437,8 +435,10 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
             <span class="benchmark-source" id="benchmark-source">Estimated savings/query</span>
             <p class="benchmark-explanation">Based on this project's benchmark, independent of Claude Code sessions. An estimate, not measured token usage.</p>
           </section>
+          <div class="dash-grid">
             <article class="dash-card" id="dash-ask" aria-labelledby="dash-ask-title"><header><h2 id="dash-ask-title">Find the implementation</h2><span class="dash-head"></span></header><div class="dash-body"></div></article>
             <article class="dash-card" id="dash-overview" aria-labelledby="dash-overview-title"><header><h2 id="dash-overview-title">Project overview</h2><span class="dash-head"></span></header><div class="dash-body"></div></article>
+            <article class="dash-card" id="dash-savings" aria-labelledby="dash-savings-title"><header><h2 id="dash-savings-title">Token savings in Claude Code</h2><span class="dash-head"></span></header><div class="dash-body"></div></article>
             <article class="dash-card w-7" id="dash-architecture" aria-labelledby="dash-architecture-title"><header><h2 id="dash-architecture-title">How it is built</h2><span class="dash-head"></span></header><div class="dash-body"></div></article>
             <article class="dash-card w-5" id="dash-components" aria-labelledby="dash-components-title"><header><h2 id="dash-components-title">Key components</h2><span class="dash-head"></span></header><div class="dash-body"></div></article>
           </div>
@@ -1328,6 +1328,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     }
     $('#graph-title').textContent = view === 'docs' ? 'Documentation relationships' : 'Relationship graph';
     $('.legend-code').classList.toggle('hidden', view === 'docs');
+    updateArchitectureDisplay();
     updateMetrics({});
     renderCommunityList();
     fitGraph();
@@ -1689,11 +1690,11 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
   function setLens(lens) {
     if (state.view === 'docs' && lens !== 'full') setView('all');
     state.lens = lens;
-    updateArchitectureDisplay();
     state.focus = null; $('#focus-bar').classList.add('hidden');
     state.expanded = new Set(); state.selectedCluster = null;
     state.focusDir = lens === 'flow' ? 'out' : 'both';
     computeLensNodes();
+    updateArchitectureDisplay();
     updateLensButtons();
     if (state.selected && !visible(state.selected)) select(null); else renderDetails(state.selected);
     renderCommunityList();
@@ -2837,7 +2838,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     const matches = s => !query || `${s.name} ${s.path}`.toLocaleLowerCase().includes(query);
     const shown = services.map((s, i) => ({ kind: 'service', service: s, i })).filter(n => matches(n.service));
     const outsideByService = new Map();
-    shown.forEach(({ service, i }) => (service.unmatched || []).forEach(ev => {
+    shown.forEach(({ service, i }) => (service.unmatched || []).filter(ev => !sysState.hidden.has(ev.tech)).forEach(ev => {
       const key = `${i}:${ev.role}`;
       if (!outsideByService.has(key)) outsideByService.set(key, { kind: 'outside', key, service, i, role: ev.role, endpoints: [] });
       outsideByService.get(key).endpoints.push(ev);
@@ -3075,7 +3076,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       else if (action === 'zoom-in') sysState.mapView.zoom = Math.min(3, sysState.mapView.zoom * 1.35);
       else if (action === 'zoom-out') sysState.mapView.zoom = Math.max(.6, sysState.mapView.zoom / 1.35);
       else if (action === 'fit-map') sysState.mapView = { x: 500, y: 300, zoom: 1 };
-      else if (action === 'view-map' || action === 'view-cards') sysState.view = action === 'view-cards' ? 'cards' : 'map';
+      else if (action === 'view-map' || action === 'view-cards') { sysState.view = action === 'view-cards' ? 'cards' : 'map'; if (sysState.view === 'cards') sysState.focusOnly = false; }
       else if (action === 'focus' && sysState.selected?.type === 'service') sysState.focusOnly = !sysState.focusOnly;
       else if (action === 'delete' && sysState.current) {
         if (!confirm(`Delete the system "${sysState.current.name}"?\n\nOnly the list of services is removed; no files are touched.`)) return;
@@ -3175,10 +3176,10 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
       button?.setAttribute('aria-pressed', String((action === 'view-map') === mapOnly));
     }
     sysEl('map').closest('.dash-card').querySelectorAll('[data-sys="zoom-in"], [data-sys="zoom-out"], [data-sys="fit-map"]').forEach(button => { button.hidden = !mapOnly; });
-    $('#sys-map-hint').textContent = mapOnly ? 'Drag the background to pan. Select a service to inspect it.' : 'Rectangles show services and grouped unresolved dependencies. Select an external group for its source evidence.';
+    $('#sys-map-hint').textContent = mapOnly ? 'Drag the background to pan. Select a service to inspect it.' : 'Select a rectangle to inspect the service; external groups show its unmatched endpoints.';
     const sel = sysState.selected;
     const focus = sysEl('focus');
-    focus.disabled = sel?.type !== 'service'; focus.setAttribute('aria-pressed', String(sysState.focusOnly)); focus.textContent = sysState.focusOnly ? 'Show all services' : 'Focus selected service';
+    focus.disabled = sysState.view === 'cards' || sel?.type !== 'service'; focus.setAttribute('aria-pressed', String(sysState.focusOnly)); focus.textContent = sysState.focusOnly ? 'Show all services' : 'Focus selected service';
     sysEl('detail-title').textContent = sel?.type === 'edge' ? 'Connection' : sel?.type === 'service' ? 'Service' : 'System';
     sysEl('detail').innerHTML = (sel ? `<button type="button" class="sys-x sys-close" data-sys="clear" aria-label="Back to system summary">×</button>` : '') + (sel?.type === 'edge' ? edgeDetail(sel.index) : sel?.type === 'service' ? serviceDetail(sel.index) : summaryDetail());
     const visibleEdges = visibleSystemEdges();
@@ -3239,7 +3240,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     if (sysState.scan) sysEl('map').innerHTML = sysState.view === 'cards' ? systemCardsHtml() : mapSvg();
   });
   $('#system-page').addEventListener('keydown', event => {
-    const mapTarget = event.target.closest('.sys-node, .sys-edge, .sys-service-box');
+    const mapTarget = event.target.closest('.sys-node, .sys-edge, .sys-card-edge, .sys-service-box');
     if (mapTarget && (event.key === 'Enter' || event.key === ' ')) {
       event.preventDefault();
       const action = mapTarget.dataset.sys, index = mapTarget.dataset.i;
@@ -3400,27 +3401,44 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     const container = $('#docs-content');
     container.replaceChildren();
     const text = String(content || ''), pattern = /\[([^\]\n]+)\]\(([^)\n]+)\)/g;
-    let last = 0, match;
-    while ((match = pattern.exec(text))) {
-      const target = match[2].split('#')[0].split('?')[0];
-      let decoded;
-      try { decoded = decodeURIComponent(target); } catch (_) { decoded = ''; }
-      const parts = path.split('/').slice(0, -1);
-      let valid = !!decoded && !/^(?:[a-z][a-z0-9+.-]*:|\/|\\)/i.test(decoded) && !decoded.includes('\\');
-      if (valid) for (const part of decoded.split('/')) {
-        if (!part || part === '.') continue;
-        if (part === '..') { if (!parts.length) { valid = false; break; } parts.pop(); }
-        else parts.push(part);
+    let fence = null;
+    const append = value => { if (value) container.append(document.createTextNode(value)); };
+    text.split('\n').forEach((line, lineIndex) => {
+      if (lineIndex) append('\n');
+      const marker = /^\s{0,3}(`{3,}|~{3,})/.exec(line);
+      if (marker) {
+        if (!fence) fence = marker[1];
+        else if (marker[1][0] === fence[0] && marker[1].length >= fence.length) fence = null;
+        append(line);
+        return;
       }
-      const index = valid ? documentation.items.findIndex(item => item.path === parts.join('/')) : -1;
-      if (index < 0) continue;
-      container.append(document.createTextNode(text.slice(last, match.index)));
-      const button = document.createElement('button');
-      button.type = 'button'; button.className = 'docs-inline-link'; button.dataset.docIndex = String(index); button.textContent = match[1];
-      container.append(button); last = pattern.lastIndex;
-    }
-    container.append(document.createTextNode(text.slice(last)));
+      if (fence) { append(line); return; }  // links inside a code fence are source text, not navigation
+      let last = 0, match;
+      pattern.lastIndex = 0;
+      while ((match = pattern.exec(line))) {
+        if (match.index > 0 && line[match.index - 1] === '!') continue;  // images are not document links
+        const target = match[2].split('#')[0].split('?')[0];
+        let decoded;
+        try { decoded = decodeURIComponent(target); } catch (_) { decoded = ''; }
+        const parts = path.split('/').slice(0, -1);
+        let valid = !!decoded && !/^(?:[a-z][a-z0-9+.-]*:|\/|\\)/i.test(decoded) && !decoded.includes('\\');
+        if (valid) for (const part of decoded.split('/')) {
+          if (!part || part === '.') continue;
+          if (part === '..') { if (!parts.length) { valid = false; break; } parts.pop(); }
+          else parts.push(part);
+        }
+        const index = valid ? documentation.items.findIndex(item => item.path === parts.join('/')) : -1;
+        if (index < 0) continue;  // leave the original link text visible
+        append(line.slice(last, match.index));
+        const button = document.createElement('button');
+        button.type = 'button'; button.className = 'docs-inline-link'; button.dataset.docIndex = String(index); button.textContent = match[1];
+        container.append(button); last = pattern.lastIndex;
+      }
+      append(line.slice(last));
+    });
   }
+
+
 
   function showPage(page) {
     // One task per page. "plain" pages hide the graph workspace and the inspector.
@@ -3449,7 +3467,7 @@ select.source-button{min-width:0;max-width:100%}@media(max-width:700px){.sidebar
     else if (state.page === 'agents') { loadClaudeAgents(); loadBenchModels(); if (benchmarkProject !== state.projectPath) { benchmarkRows.clear(); benchmarkProject = state.projectPath; renderBenchResults(); } }
     else if (state.page === 'documentation') loadDocumentation();
     else if (info.plain) refreshDashboard();
-    else if (state.page === 'graph') { resize(); fitGraph(); }
+    else if (state.page === 'graph') { updateArchitectureDisplay(); resize(); fitGraph(); }
   }
 
   function noteJob(job) {

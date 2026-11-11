@@ -88,6 +88,6 @@ Codex/Claude still handles its normal conversation through its configured provid
 
 Context-reduction figures are heuristic estimates, not measured token usage or guaranteed savings. Cloud and remote database integrations are disabled. Some document/media features require optional local packages.
 
-The release has 22 passing automated tests and a local-server HTTP smoke test on macOS/Python 3.14. Native Windows/Linux validation is still outstanding. See the [review report](RELEASE_REVIEW.md) for details.
+The full automated test suite passes, together with a local-server HTTP smoke test on macOS/Python 3.14. Native Windows/Linux validation is still outstanding. See the [review report](RELEASE_REVIEW.md) for details.
 
 The bundled engine's attribution and license files are preserved under [token-graph/vendor](token-graph/vendor).

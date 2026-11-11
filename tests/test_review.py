@@ -94,6 +94,11 @@ class EndToEnd(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             self.assertIn("Review:", review.format_review(review.build_review(graph(), Path(tmp))))
 
+    def test_ref_starting_with_a_dash_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result = review.build_review(graph(), Path(tmp), ref="--output=/tmp/x")
+        self.assertIn("Invalid git ref", result["error"])
+
 
 if __name__ == "__main__":
     unittest.main()

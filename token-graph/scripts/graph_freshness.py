@@ -15,8 +15,11 @@ from pathlib import Path
 GIT_TIMEOUT = 10
 
 
-def _new_code_files(root: Path, indexed: set[str]) -> list[str]:
-    """Find new code without reading file contents, respecting the engine's ignore rules."""
+def _new_code_files(root: Path, indexed: set[str], since: float) -> list[str]:
+    """Find code added after the graph was built, respecting the engine's ignore rules.
+
+    Only files newer than the graph are considered. A file the engine could not index would otherwise
+    be reported as new after every refresh, causing an update before every answer."""
     root = root.resolve()
     vendor = str(Path(__file__).resolve().parents[1] / 'vendor')
     if vendor not in sys.path:
@@ -31,10 +34,19 @@ def _new_code_files(root: Path, indexed: set[str]) -> list[str]:
             path = parent / name
             if path.is_symlink() or path.suffix.lower() not in CODE_EXTENSIONS or ignored(path) or _is_sensitive(path):
                 continue
+            try:
+                if path.stat().st_mtime <= since:
+                    continue
+            except OSError:
+                continue
             relative = path.relative_to(root).as_posix()
             if relative not in indexed:
                 found.append(relative)
     return found
+
+
+def _change_note(count: int) -> str:
+    return f"{count} file{'s' if count != 1 else ''} changed after the graph was built"
 
 
 def _git(root: Path, *args: str) -> str | None:
@@ -95,15 +107,18 @@ def stale_reason(root: Path, graph: Path) -> str | None:
         status = _git(root, "status", "--porcelain", "--untracked-files=normal") or ""
         edited = [line[3:].strip().strip('"').split(" -> ")[-1] for line in status.splitlines() if len(line) > 3]
         edited = _changed_since(root, edited, graph_time)
-        return f"{len(edited)} files edited after the graph was built" if edited else None
+        return _change_note(len(edited)) if edited else None
     manifest = graph.with_name("manifest.json")
     try:
         contents = json.loads(manifest.read_text(encoding="utf-8"))
-        if not isinstance(contents, dict):
-            return 'graph manifest is invalid; freshness cannot be verified'
-        files = list(contents)
     except (OSError, ValueError):
-        return 'graph manifest is unavailable; freshness cannot be verified'
+        return None  # unknown, not stale: never rewrite a graph just because its manifest is absent
+    if isinstance(contents, dict):
+        files = list(contents)
+    elif isinstance(contents, list) and all(isinstance(name, str) for name in contents):
+        files = contents  # older engine manifests stored a plain path list
+    else:
+        return None  # unknown, not stale
     edited = _changed_since(root, files, graph_time)
-    edited += _new_code_files(root, set(files))
-    return f"{len(edited)} files edited after the graph was built" if edited else None
+    edited += _new_code_files(root, set(files), graph_time)
+    return _change_note(len(edited)) if edited else None

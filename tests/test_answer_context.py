@@ -183,7 +183,7 @@ class FreshnessTest(unittest.TestCase):
         path.write_text('x = 2\n', encoding='utf-8')
         later = time.time() + 5
         os.utime(path, (later, later))
-        self.assertEqual(graph_freshness.stale_reason(self.root, self.graph), '1 files edited after the graph was built')
+        self.assertEqual(graph_freshness.stale_reason(self.root, self.graph), '1 file changed after the graph was built')
         os.utime(self.graph, (later + 1, later + 1))  # what the launcher does after a refresh
         self.assertIsNone(graph_freshness.stale_reason(self.root, self.graph))
 
@@ -193,6 +193,21 @@ class FreshnessTest(unittest.TestCase):
 
 
 class FreshnessWithoutGitTest(unittest.TestCase):
+    def test_missing_or_invalid_manifest_is_unknown_not_stale(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            graph = root / 'graphify-out' / 'graph.json'
+            graph.parent.mkdir()
+            graph.write_text('{}', encoding='utf-8')
+            self.assertIsNone(graph_freshness.stale_reason(root, graph))  # a graph without a manifest is not rewritten
+            graph.with_name('manifest.json').write_text('[]', encoding='utf-8')
+            self.assertIsNone(graph_freshness.stale_reason(root, graph))  # older list manifests are valid
+            (root / 'a.py').write_text('x = 1\n', encoding='utf-8')
+            past = time.time() - 60
+            os.utime(root / 'a.py', (past, past))
+            graph.with_name('manifest.json').write_text('{"a.py": 1}', encoding='utf-8')
+            self.assertIsNone(graph_freshness.stale_reason(root, graph))
+
     def test_new_code_marks_non_git_graph_stale_but_ignored_files_do_not(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -205,7 +220,7 @@ class FreshnessWithoutGitTest(unittest.TestCase):
             (root / 'ignored.py').write_text('ignored = True\n')
             self.assertIsNone(graph_freshness.stale_reason(root, graph))
             (root / 'added.py').write_text('value = 1\n')
-            self.assertEqual(graph_freshness.stale_reason(root, graph), '1 files edited after the graph was built')
+            self.assertEqual(graph_freshness.stale_reason(root, graph), '1 file changed after the graph was built')
 
     def test_manifest_files_newer_than_graph(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -219,7 +234,7 @@ class FreshnessWithoutGitTest(unittest.TestCase):
             os.utime(root / 'a.py', (past, past))
             self.assertIsNone(graph_freshness.stale_reason(root, graph))
             os.utime(root / 'a.py', (past + 120, past + 120))
-            self.assertEqual(graph_freshness.stale_reason(root, graph), '1 files edited after the graph was built')
+            self.assertEqual(graph_freshness.stale_reason(root, graph), '1 file changed after the graph was built')
 
 
 if __name__ == '__main__':

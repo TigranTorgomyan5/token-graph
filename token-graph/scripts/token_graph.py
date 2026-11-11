@@ -530,6 +530,10 @@ def health_feature(root: Path, action: str, *, question: str | None = None, node
                    ignore: list[str] | None = None, ref: str = "HEAD", auto_update: bool = True) -> int:
     """dead / similar / hotspots: code-health reports computed from the graph (code_health.py)."""
     global QUIET_LOG
+    if top is not None and top < 1:
+        raise ValueError("--top must be positive")
+    if days < 1:
+        raise ValueError("--days must be positive")
     QUIET_LOG = root / "graphify-out" / "token-graph.log"
     try:
         note = refresh_if_stale(root, auto_update)
@@ -540,7 +544,7 @@ def health_feature(root: Path, action: str, *, question: str | None = None, node
         if note: print(note)
         print(run(action, graph, root, question=question, node=node, top=top, prefix=prefix, days=days, ignore=ignore, ref=ref))
         return 0
-    except ValueError as error:
+    except (OSError, ValueError) as error:
         print(f"Token Graph {action}: {error}")
         return 2
     finally:

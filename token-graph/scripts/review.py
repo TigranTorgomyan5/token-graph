@@ -58,6 +58,8 @@ def parse_diff(text: str) -> tuple[dict[str, list[tuple[int, int]]], list[str]]:
 def git_changes(root: Path, ref: str = "HEAD") -> dict:
     """Working tree against `ref` (default HEAD), plus untracked files as wholly new.
     Paths are relative to `root`. {"files", "deleted", "error"}"""
+    if not ref or ref.startswith("-") or any(char in ref for char in "\n\r"):
+        return {"files": {}, "deleted": [], "error": "Invalid git ref."}
     code, out = _git(root, "diff", "-U0", "--no-color", "--no-renames", "--relative", ref)
     if code != 0:
         return {"files": {}, "deleted": [], "error": out or "git diff failed (is this a git repository?)"}

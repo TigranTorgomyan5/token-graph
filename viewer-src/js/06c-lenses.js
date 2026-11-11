@@ -107,11 +107,11 @@
   function setLens(lens) {
     if (state.view === 'docs' && lens !== 'full') setView('all');
     state.lens = lens;
-    updateArchitectureDisplay();
     state.focus = null; $('#focus-bar').classList.add('hidden');
     state.expanded = new Set(); state.selectedCluster = null;
     state.focusDir = lens === 'flow' ? 'out' : 'both';
     computeLensNodes();
+    updateArchitectureDisplay();
     updateLensButtons();
     if (state.selected && !visible(state.selected)) select(null); else renderDetails(state.selected);
     renderCommunityList();

@@ -82,7 +82,8 @@ def _source_path(project: Path, source_file: str) -> Path | None:
         return None
     if _is_ignored(project.resolve(), relative.as_posix()):
         return None
-    forbidden = {".git", ".hg", ".svn", ".aws", ".ssh", ".azure", ".kube", ".config", "node_modules", "vendor", "graphify-out", ".runtime", ".venv", "venv"}
+    forbidden = {".git", ".hg", ".svn", ".aws", ".ssh", ".azure", ".kube", ".config", "node_modules", "vendor", "graphify-out", ".runtime", ".venv", "venv",
+                 "secrets", "secret", "credentials", ".secrets", ".credentials"}
     if any(part.casefold() in forbidden or part.casefold().startswith(".env") for part in relative.parts):
         return None
     name = candidate.name.casefold()
