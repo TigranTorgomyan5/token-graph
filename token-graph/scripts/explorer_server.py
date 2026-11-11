@@ -373,7 +373,8 @@ def ask(body: dict, project: Path) -> dict:
     # The page's Hide tests / Hide generated toggles also scope the answer.
     args += [flag for flag, on in (("--no-tests", body.get("hideTests")), ("--no-generated", body.get("hideGenerated"))) if on]
     # The browser answer uses the same scope as the CLI: no imported-only names, docs or minified bundles.
-    args += ["--no-external", "--no-docs", "--no-vendored"]
+    if mode == "query":
+        args += ["--no-external", "--no-docs", "--no-vendored"]
     try:
         result = subprocess.run([engine_python(), str(SCRIPTS / "ask_engine.py"), str(project), mode, *args], cwd=project,
                                 capture_output=True, text=True, encoding="utf-8", errors="replace",

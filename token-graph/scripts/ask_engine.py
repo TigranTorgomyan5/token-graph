@@ -131,9 +131,10 @@ def ask_query(G: nx.Graph, graph_file: str, question: str, budget: int) -> dict:
     # browser and CLI must describe the same graph result.
     text = ranked_answer(graph_file, question, budget, depth=QUERY_DEPTH)
     # The text keeps only what fits the budget; highlight exactly those NODE lines, not the whole traversal.
+    # The ranked answer chooses its own start nodes, so match against the whole graph, not only
+    # this function's traversal; otherwise most listed symbols would not be highlighted.
     by_key = {}
-    for nid in nodes:
-        data = G.nodes[nid]
+    for nid, data in G.nodes(data=True):
         by_key.setdefault((str(data.get("label", nid)), str(data.get("source_file") or ""), str(data.get("source_location") or "")), nid)
     shown = set(seeds)
     for match in re.finditer(r"^NODE (.*?) \[src=(.*?) loc=([^\]]+)\]", text, re.M):

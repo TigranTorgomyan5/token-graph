@@ -238,6 +238,8 @@ class MergeRegressionTests(unittest.TestCase):
             answer = json.loads(result.stdout)
             self.assertIn('EDGE exchangeWidget() --calls--> validateWidget()', answer['text'])
             self.assertNotIn('DocOnly', answer['text'])
+            # Every symbol the ranked text lists is highlighted, not only the ones this function traversed.
+            self.assertTrue({'h', 'v'} <= set(answer['nodes']), answer['nodes'])
 
     def test_viewer_query_returns_grounded_node_ids(self):
         launcher = load('token_graph')

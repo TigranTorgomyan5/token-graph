@@ -77,7 +77,7 @@ EXPECTED_HANDLERS = {
 
 def service_files(name):
     folder = SERVICES / name
-    return {str(path.relative_to(folder)): path.read_text().splitlines() for path in sorted(folder.rglob('*')) if path.is_file()}
+    return {str(path.relative_to(folder)): path.read_text().splitlines() for path in sorted(folder.rglob('*')) if path.is_file() and '__pycache__' not in path.parts and path.suffix != '.pyc'}
 
 
 class FrameworkRouteTests(unittest.TestCase):
