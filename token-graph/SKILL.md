@@ -44,6 +44,7 @@ Use exact IDs or `path::symbol` when a symbol name is ambiguous. For questions, 
 Keep answers small — every line of tool output costs the user tokens:
 - Prefer the narrowest action: `path`, `affected` or `explain` on a named symbol before an open `query`.
 - `query` defaults to `--budget 800`. Raise it (1500, 3000) only when the output says TRUNCATED and the needed node is not in it.
+- A `query` answer that starts with `CLARIFY` means the graph cannot tell what the task means (nothing matched, the name exists in several unrelated places, or a code-like name is not in the graph). Ask the user those questions, with the listed choices, before changing code; do not guess. No `CLARIFY` block means the graph is sure: just do the task.
 - `query`, `path`, `explain`, `affected` and `hubs` answer from the graph **without generated code** (gen/ folders, `*.pb.go`, `*.g.cs`, `*.Designer.cs`, EF migrations …). Add `--include-generated` only when the question is about generated code. Tests are included; add `--no-tests` when the question is clearly about production code only and test nodes crowd the answer.
 - Answers leave out names the project only imports (`json`, `os`, `ILogger` …); add `--include-external` to ask about one. Locations are line ranges (`L1200-1236`): read just that range.
 - When the graph is older than the code, the answer first refreshes it and starts with `[graph refreshed: …]`; `[STALE] …` means the refresh failed or `--no-auto-update` was given, so line numbers may be off.

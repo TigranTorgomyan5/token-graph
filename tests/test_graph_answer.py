@@ -89,7 +89,58 @@ class GraphAnswerTests(unittest.TestCase):
             self.assertIn("community=", result.stdout)
 
     def test_no_match_message(self):
-        self.assertIn("No matching nodes", self.query(sample_graph(), "zzzqqq"))
+        text = self.query(sample_graph(), "zzzqqq")
+        self.assertIn("No matching nodes", text)
+        self.assertIn("CLARIFY", text)
+        self.assertIn('"zzzqqq"', text)
+
+
+def two_services_graph(linked=False):
+    """`PlaceBet` in two services; `linked` makes one call the other (a controller and its service)."""
+    nodes = [node("f_a", "BetHub.cs", "crash/Hubs/BetHub.cs", "L1"),
+             node("f_b", "BetHub.cs", "dice/Hubs/BetHub.cs", "L1"),
+             node("a", ".PlaceBet()", "crash/Hubs/BetHub.cs", "L30-60"),
+             node("b", ".PlaceBet()", "dice/Hubs/BetHub.cs", "L40-70"),
+             node("a2", ".Validate()", "crash/Hubs/BetHub.cs", "L80-90"),
+             node("b2", ".Settle()", "dice/Hubs/BetHub.cs", "L90-99")]
+    links = [edge("f_a", "a", "contains"), edge("f_b", "b", "contains"), edge("a", "a2"), edge("b", "b2")]
+    if linked:
+        links.append(edge("a", "b"))
+    return {"directed": False, "nodes": nodes, "links": links}
+
+
+class ClarifyTests(unittest.TestCase):
+    """The CLARIFY block: asked only when the graph cannot tell what the question means."""
+    query = GraphAnswerTests.query
+
+    def test_same_name_in_unrelated_places_asks_which_one(self):
+        text = self.query(two_services_graph(), "fix PlaceBet")
+        self.assertIn("CLARIFY", text)
+        self.assertIn("2 unrelated places", text)
+        self.assertIn("crash/Hubs/BetHub.cs", text)
+        self.assertIn("dice/Hubs/BetHub.cs", text)
+        self.assertLess(text.index("CLARIFY"), text.index("NODE "), "questions come before the answer")
+
+    def test_linked_same_name_is_one_place(self):
+        self.assertNotIn("CLARIFY", self.query(two_services_graph(linked=True), "fix PlaceBet"))
+
+    def test_qualified_name_needs_no_question(self):
+        self.assertNotIn("CLARIFY", self.query(two_services_graph(), "fix crash.PlaceBet"))
+
+    def test_clear_question_is_not_interrupted(self):
+        self.assertNotIn("CLARIFY", self.query(sample_graph(), "exchange widget token lookup sign validate"))
+        self.assertNotIn("CLARIFY", self.query(sample_graph(), "how does exchangeWidget call signWidget"))
+
+    def test_code_name_missing_from_graph_is_asked_about(self):
+        text = self.query(sample_graph(), "make exchangeWidget use WidgetCache")
+        self.assertIn('"WidgetCache" is not in the graph', text)
+        self.assertNotIn('"exchangeWidget" is not in the graph', text)
+
+    def test_code_names(self):
+        ga = load("graph_answer")
+        self.assertEqual(ga.code_names("fix PlaceBet in bet_hub and Crashaxy.Api, call run() Hub2 v2 x"),
+                         ["PlaceBet", "bet_hub", "Crashaxy.Api", "run", "Hub2"])
+        self.assertEqual(ga.code_names("how is a user question processed"), [])
 
 
 class NodeFilterTests(unittest.TestCase):
