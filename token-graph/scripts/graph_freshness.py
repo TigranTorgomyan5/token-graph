@@ -15,6 +15,10 @@ from pathlib import Path
 GIT_TIMEOUT = 10
 
 
+class FreshnessUnknown(str):
+    """A warning that must not be treated as evidence that a graph is stale."""
+
+
 def _new_code_files(root: Path, indexed: set[str], since: float) -> list[str]:
     """Find code added after the graph was built, respecting the engine's ignore rules.
 
@@ -92,7 +96,7 @@ def _changed_since(root: Path, files: list[str], since: float) -> list[str]:
 
 
 def stale_reason(root: Path, graph: Path) -> str | None:
-    """Why the graph is behind the code, or None when it is current."""
+    """Return a stale reason, FreshnessUnknown if unverifiable, or None if current."""
     if not graph.is_file():
         return "no graph yet"
     graph_time = graph.stat().st_mtime
@@ -112,13 +116,13 @@ def stale_reason(root: Path, graph: Path) -> str | None:
     try:
         contents = json.loads(manifest.read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return None  # unknown, not stale: never rewrite a graph just because its manifest is absent
+        return FreshnessUnknown("graph manifest is missing or unreadable; freshness cannot be verified")
     if isinstance(contents, dict):
         files = list(contents)
     elif isinstance(contents, list) and all(isinstance(name, str) for name in contents):
         files = contents  # older engine manifests stored a plain path list
     else:
-        return None  # unknown, not stale
+        return FreshnessUnknown("graph manifest is invalid; freshness cannot be verified")
     edited = _changed_since(root, files, graph_time)
     edited += _new_code_files(root, set(files), graph_time)
     return _change_note(len(edited)) if edited else None

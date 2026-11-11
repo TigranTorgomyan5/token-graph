@@ -338,11 +338,13 @@ def refresh_if_stale(root: Path, auto_update: bool = True) -> str:
     A stale graph answers with old line numbers: the assistant then opens the wrong place
     and reads the file again, which costs more than the incremental update."""
     import time
-    from graph_freshness import stale_reason
+    from graph_freshness import FreshnessUnknown, stale_reason
     graph = root / "graphify-out" / "graph.json"
     reason = stale_reason(root, graph)
     if not reason:
         return ""
+    if isinstance(reason, FreshnessUnknown):
+        return f"[FRESHNESS UNKNOWN] {reason}; line numbers may be off. Refresh with --action update."
     if not auto_update:
         return f"[STALE] {reason}; line numbers may be off. Refresh with --action update."
     global QUIET_LOG

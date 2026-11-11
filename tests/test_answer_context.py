@@ -8,6 +8,7 @@ import tempfile
 import textwrap
 import time
 import unittest
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -199,7 +200,18 @@ class FreshnessWithoutGitTest(unittest.TestCase):
             graph = root / 'graphify-out' / 'graph.json'
             graph.parent.mkdir()
             graph.write_text('{}', encoding='utf-8')
-            self.assertIsNone(graph_freshness.stale_reason(root, graph))  # a graph without a manifest is not rewritten
+            self.assertIsInstance(graph_freshness.stale_reason(root, graph), graph_freshness.FreshnessUnknown)
+            import token_graph
+            for auto_update in (True, False):
+                with mock.patch.object(token_graph, 'run_engine') as update:
+                    note = token_graph.refresh_if_stale(root, auto_update)
+                self.assertIn('[FRESHNESS UNKNOWN]', note)
+                self.assertIn('manifest', note)
+                update.assert_not_called()
+            graph.with_name('manifest.json').write_text('{invalid', encoding='utf-8')
+            self.assertIsInstance(graph_freshness.stale_reason(root, graph), graph_freshness.FreshnessUnknown)
+            graph.with_name('manifest.json').write_text('42', encoding='utf-8')
+            self.assertIsInstance(graph_freshness.stale_reason(root, graph), graph_freshness.FreshnessUnknown)
             graph.with_name('manifest.json').write_text('[]', encoding='utf-8')
             self.assertIsNone(graph_freshness.stale_reason(root, graph))  # older list manifests are valid
             (root / 'a.py').write_text('x = 1\n', encoding='utf-8')
