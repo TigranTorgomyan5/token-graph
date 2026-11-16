@@ -186,6 +186,32 @@ class MergeRegressionTests(unittest.TestCase):
                 self.assertEqual(handler._project_file(str(project), 'safe.py'), project / 'safe.py')
                 with self.assertRaises(PermissionError): handler._project_file(str(project), '../outside.py')
 
+    def test_source_preview_refuses_sensitive_and_ignored_files(self):
+        server = load('explorer_server')
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory).resolve()
+            for name in ('.env', 'private.key', 'ignored.txt', 'safe.py'):
+                (project / name).write_text('dummy')
+            (project / '.gitignore').write_text('ignored.txt\n')
+            handler = object.__new__(server.Handler)
+            with patch.object(server, 'load_projects', return_value=[str(project)]):
+                self.assertEqual(handler._project_file(str(project), 'safe.py'), project / 'safe.py')
+                for name in ('.env', 'private.key', 'ignored.txt'):
+                    with self.subTest(name=name), self.assertRaises(PermissionError):
+                        handler._project_file(str(project), name)
+
+    @unittest.skipIf(os.name == 'nt', 'POSIX file modes do not describe Windows ACLs')
+    def test_server_state_is_private_even_when_replacing_existing_file(self):
+        server = load('explorer_server')
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / 'server.json'
+            state.write_text('{}')
+            state.chmod(0o644)
+            with patch.object(server, 'STATE', state):
+                server.write_server_state({'port': 123, 'token': 'dummy'})
+            self.assertEqual(state.stat().st_mode & 0o777, 0o600)
+            self.assertEqual(json.loads(state.read_text())['token'], 'dummy')
+
     def test_server_rejects_bad_host_token_and_body(self):
         server = load('explorer_server')
         handler = object.__new__(server.Handler)

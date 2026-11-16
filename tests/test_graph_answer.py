@@ -94,6 +94,15 @@ class GraphAnswerTests(unittest.TestCase):
         self.assertIn("CLARIFY", text)
         self.assertIn('"zzzqqq"', text)
 
+    def test_authentication_question_finds_authorization_handler(self):
+        graph = {"directed": False, "nodes": [
+            node('server', 'explorer_server.py', 'svc/explorer_server.py', 'L1'),
+            node('authorized', '._authorized()', 'svc/explorer_server.py', 'L20-22'),
+            node('request', '.do_GET()', 'svc/explorer_server.py', 'L30-40'),
+        ], "links": [edge('server', 'authorized', 'contains'), edge('request', 'authorized')]}
+        text = self.query(graph, 'How does the explorer server authenticate requests?')
+        self.assertIn('._authorized()', text)
+
 
 def two_services_graph(linked=False):
     """`PlaceBet` in two services; `linked` makes one call the other (a controller and its service)."""

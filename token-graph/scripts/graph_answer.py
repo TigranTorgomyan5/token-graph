@@ -44,6 +44,13 @@ CLARIFY_MAX_CHOICES = 6
 CLARIFY_SHORT_QUESTION = 3     # content words; a longer question names no single symbol unless code-like
 CLARIFY_HEADER = "CLARIFY - the graph cannot tell what is meant. Ask the user these before changing code:"
 
+# Common terminology variants that occur in real questions and code labels.
+# Keep the original term too; these improve recall without replacing exact names.
+QUERY_ALIASES = {"authentication": ("auth", "authoriz"),
+                 "authenticate": ("auth", "authoriz"),
+                 "authenticated": ("auth", "authoriz"),
+                 "authorization": ("authoriz", "auth")}
+
 
 def is_file_node(data: dict) -> bool:
     src = str(data.get("source_file") or "").replace("\\", "/")
@@ -154,7 +161,8 @@ def answer(graph_path: str, question: str, budget: int = 800, contexts: list[str
     from graphify import serve as S
     G = S._load_graph(graph_path)
     terms = S._query_terms(question)
-    qs = S._score_query(G, terms, collect_per_term_seeds=True)
+    search_terms = list(dict.fromkeys(terms + [alias for term in terms for alias in QUERY_ALIASES.get(term, ())]))
+    qs = S._score_query(G, search_terms, collect_per_term_seeds=True)
     by_term = qs.best_seed_by_term
     intent = getattr(S, "_RELATIONAL_INTENT_TERMS", set())
     skipped = {t for t in by_term if t in intent}

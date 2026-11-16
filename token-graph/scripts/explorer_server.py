@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import tempfile
 import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -1180,6 +1181,8 @@ class Handler(BaseHTTPRequestHandler):
             file.relative_to(project)
         except ValueError:
             raise PermissionError("File is outside the project") from None
+        if explorer_evidence._source_path(project, raw_file) is None:
+            raise PermissionError("Source file is excluded from the project")
         if not file.is_file():
             raise FileNotFoundError("Source unavailable")
         return file
@@ -1231,6 +1234,18 @@ def existing_server() -> str | None:
     return None
 
 
+def write_server_state(state: dict) -> None:
+    """Publish the token atomically using a private file on POSIX systems."""
+    fd, temporary = tempfile.mkstemp(prefix=".explorer-server-", dir=STATE.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            json.dump(state, stream)
+        os.replace(temporary, STATE)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
 def main() -> int:
     url = existing_server()
     if url:
@@ -1242,7 +1257,7 @@ def main() -> int:
     Handler.token = secrets.token_urlsafe(24)
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     Handler.port = server.server_address[1]
-    STATE.write_text(json.dumps({"port": Handler.port, "token": Handler.token, "pid": os.getpid()}), encoding="utf-8")
+    write_server_state({"port": Handler.port, "token": Handler.token, "pid": os.getpid()})
     url = f"http://127.0.0.1:{Handler.port}/?token={Handler.token}"
     if "--no-browser" not in sys.argv:
         webbrowser.open(url)

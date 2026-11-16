@@ -54,12 +54,17 @@ class ServerRestartTests(unittest.TestCase):
             self.assertFalse(server.stopped)
         finally:
             server.shutdown()
+            server.server_close()
 
     def test_outdated_server_is_stopped_and_replaced(self):
         server = fake_server(self.state, None)   # started before code versions existed
-        self.assertIsNone(explorer_server.existing_server())
-        self.assertTrue(server.stopped)
-        self.assertFalse(self.state.exists())
+        try:
+            self.assertIsNone(explorer_server.existing_server())
+            self.assertTrue(server.stopped)
+            self.assertFalse(self.state.exists())
+        finally:
+            server.shutdown()
+            server.server_close()
 
 
 if __name__ == '__main__':

@@ -69,9 +69,11 @@ class ListFoldersTest(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError) as missing:
             get(str(self.root / 'nope'))
         self.assertEqual(missing.exception.code, 400)
+        missing.exception.close()
         with self.assertRaises(urllib.error.HTTPError) as denied:
             get(str(self.root), token='wrong')
         self.assertEqual(denied.exception.code, 403)
+        denied.exception.close()
 
 
 class NativeDialogTest(unittest.TestCase):
