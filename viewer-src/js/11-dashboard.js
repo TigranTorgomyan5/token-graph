@@ -102,7 +102,7 @@
   async function loadDocumentation() {
     const seq = ++documentation.request, project = state.projectPath;
     if (apiDocs.project !== project) { apiDocs.request++; apiDocs.project = project; apiDocs.markdown = ''; $('#docs-api-results').classList.add('hidden'); $('#docs-api-export').classList.add('hidden'); $('#docs-api-status').textContent = ''; $('#docs-api-scan').disabled = false; }
-    if (documentation.project !== project) { $('#docs-search').value = ''; $('#docs-kind').value = 'all'; knowledge.request++; knowledge.project = project; $('#knowledge-query').value = ''; $('#knowledge-results').replaceChildren(); $('#knowledge-status').textContent = ''; $('#knowledge-submit').disabled = false; $('#correction-form').reset(); $('#correction-preview').classList.add('hidden'); $('#correction-status').textContent = ''; $('#handoff-form').reset(); $('#handoff-preview').classList.add('hidden'); $('#handoff-status').textContent = ''; }
+    if (documentation.project !== project) { $('#docs-search').value = ''; $('#docs-kind').value = 'all'; knowledge.request++; knowledge.project = project; $('#knowledge-query').value = ''; $('#knowledge-results').replaceChildren(); $('#knowledge-status').textContent = ''; $('#knowledge-submit').disabled = false; }
     documentation.project = project; documentation.items = []; documentation.selected = ''; documentation.detail++;
     $('#docs-title').textContent = 'Choose a document'; $('#docs-content').textContent = 'Select a file to read it here.'; $('#docs-list').innerHTML = '';
     if (!serverToken || !project) {
@@ -183,6 +183,7 @@
       health: { title: 'Health', crumb: 'HEALTH', hint: 'Issues, graph freshness, changes and recent activity.', section: '#health-page', plain: true },
       system: { title: 'System', crumb: 'SYSTEM', hint: 'Several services and how they talk to each other: NATS, Kafka, RabbitMQ, MassTransit, gRPC, HTTP.', section: '#system-page', plain: true },
       agents: { title: 'Agents', crumb: 'AGENTS', hint: 'Explore code and investigate logs with local tools.', section: '#agents-page', plain: true },
+      skills: { title: 'Skills', crumb: 'SKILLS', hint: 'Browse local skill definitions on this computer and in the selected project.', section: '#skills-page', plain: true },
       documentation: { title: 'Documentation', crumb: 'DOCUMENTATION', hint: 'Browse project documents and generated wiki articles.', section: '#documentation-page', plain: true },
       settings: { title: 'Settings', crumb: 'SETTINGS', hint: 'Projects, local AI and the index.', section: '#settings', plain: true },
     };
@@ -199,6 +200,7 @@
     try { localStorage.setItem('tokenGraph.page', state.page); } catch (_) { /* per-viewer convenience only */ }
     if (state.page === 'system') loadSystems();
     else if (state.page === 'agents') { loadClaudeAgents(); loadBenchModels(); if (benchmarkProject !== state.projectPath) { benchmarkRows.clear(); benchmarkProject = state.projectPath; renderBenchResults(); } }
+    else if (state.page === 'skills') loadLocalSkills();
     else if (state.page === 'documentation') loadDocumentation();
     else if (info.plain) refreshDashboard();
     else if (state.page === 'graph') { updateArchitectureDisplay(); resize(); fitGraph(); }
@@ -289,6 +291,25 @@
   // per recent session (session_savings.py over the local transcripts; an estimate).
   const tokensText = n => Math.abs(n) >= 1000 ? `${(n / 1000).toFixed(1)}K` : format(n);
   const percentText = p => p === null || p === undefined ? '—' : `${p}%`;
+  function readCompressorMetrics(result) {
+    if (!result || typeof result !== 'object' || Array.isArray(result)) throw new Error('Expected a compressor CLI result object.');
+    const before = result.original_tokens, after = result.compressed_tokens, saved = result.saved_tokens;
+    if (![before, after, saved].every(Number.isSafeInteger) || before < 0 || after < 0 || saved !== before - after || typeof result.lossless !== 'boolean') throw new Error('Invalid compressor token counts or lossless flag.');
+    return {before, after, saved, lossless: result.lossless, estimated: result.token_counts_estimated !== false,
+      engine: typeof result.engine === 'string' ? result.engine.slice(0, 120) : 'Unknown',
+      transforms: Array.isArray(result.transforms_applied) ? result.transforms_applied.filter(x => typeof x === 'string').slice(0, 20).map(x => x.slice(0, 120)) : []};
+  }
+  async function importCompressorResult(event) {
+    const file = event.target.files?.[0], output = $('#compressor-result');
+    if (!file) return;
+    if (file.size > 2_000_000) { output.textContent = 'Result file exceeds 2 MB.'; return; }
+    try {
+      const r = readCompressorMetrics(JSON.parse(await file.text()));
+      const percent = r.before ? `${(100 * r.saved / r.before).toFixed(1)}%` : '—';
+      output.textContent = `${file.name}: ${format(r.before)} → ${format(r.after)} tokens; saved ${format(r.saved)} (${percent}). ${r.estimated ? 'Estimated tokens.' : 'Token counter supplied.'} ${r.lossless ? 'Lossless.' : 'Lossy; verify retained information.'} Engine: ${r.engine}. Transforms: ${r.transforms.join(', ') || 'none'}.`;
+    } catch (error) { output.textContent = `Could not read result: ${error.message}`; }
+    finally { event.target.value = ''; }
+  }
   function renderSavings() {
     if (!serverToken) { setCard('savings', serverOnlyHtml('Counting saved tokens'), pill('off', 'Server off')); return; }
     if (!state.projectPath) {
@@ -538,35 +559,6 @@
   function initDashboard() {
     $('#docs-api-scan').addEventListener('click', discoverApiDocs);
     $('#knowledge-form').addEventListener('submit', event => { event.preventDefault(); searchKnowledge(); });
-    $('#correction-form').addEventListener('submit', event => {
-      event.preventDefault();
-      const safe = selector => $(selector).value.trim().replace(/\s+/g, ' ').replace(/[\\`*_\[\]<>#]/g, '\\$&');
-      const topic = safe('#correction-topic'), before = safe('#correction-before'), after = safe('#correction-after'), evidence = safe('#correction-evidence');
-      if (!topic || !before || !after || !evidence) return;
-      $('#correction-text').textContent = `## Correction: ${topic}\n\n- Status: proposed — verify before relying on this.\n- Scope: this project.\n- Previous assumption: ${before}\n- Correction: ${after}\n- Evidence to verify: ${evidence}\n- Proposed date: ${new Date().toISOString().slice(0, 10)}\n`;
-      $('#correction-preview').classList.remove('hidden'); $('#correction-status').textContent = '';
-    });
-    $('#correction-copy').addEventListener('click', async () => { $('#correction-status').textContent = await copyText($('#correction-text').textContent) ? 'Copied. Review it before adding it to a project document.' : 'Could not copy. Select the proposal text to copy it.'; });
-    $('#correction-download').addEventListener('click', () => {
-      const url = URL.createObjectURL(new Blob([$('#correction-text').textContent], {type:'text/markdown;charset=utf-8'}));
-      const link = document.createElement('a'); link.href = url; link.download = 'correction-proposal.md'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
-      $('#correction-status').textContent = 'Downloaded. Review and save it in project documentation to make it searchable.';
-    });
-    $('#handoff-form').addEventListener('submit', event => {
-      event.preventDefault();
-      const safe = selector => $(selector).value.trim().replace(/\s+/g, ' ').replace(/[\\`*_\[\]<>#]/g, '\\$&');
-      const task = safe('#handoff-task'); if (!task) return;
-      const fields = [['Completed work', '#handoff-completed'], ['Findings and decisions', '#handoff-findings'], ['Remaining work and next steps', '#handoff-next'], ['Relevant files', '#handoff-files']];
-      const sections = fields.map(([label, selector]) => `- ${label}: ${safe(selector) || 'Not provided.'}`);
-      $('#handoff-text').textContent = `## Session handoff: ${task}\n\n- Date: ${new Date().toISOString().slice(0, 10)}\n- Scope: this project.\n- Status: user-provided; not verified.\n${sections.join('\n')}\n`;
-      $('#handoff-preview').classList.remove('hidden'); $('#handoff-status').textContent = '';
-    });
-    $('#handoff-copy').addEventListener('click', async () => { $('#handoff-status').textContent = await copyText($('#handoff-text').textContent) ? 'Copied. Review before saving it in the project.' : 'Could not copy. Select the handoff text to copy it.'; });
-    $('#handoff-download').addEventListener('click', () => {
-      const url = URL.createObjectURL(new Blob([$('#handoff-text').textContent], {type:'text/markdown;charset=utf-8'}));
-      const link = document.createElement('a'); link.href = url; link.download = 'session-handoff.md'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
-      $('#handoff-status').textContent = 'Downloaded. Save it in a project documentation folder to make it searchable.';
-    });
     $('#docs-api-export').addEventListener('click', () => {
       if (!apiDocs.markdown || apiDocs.project !== state.projectPath) return;
       const url = URL.createObjectURL(new Blob([apiDocs.markdown], {type: 'text/markdown;charset=utf-8'}));
@@ -584,7 +576,11 @@
     updateBenchFields();
     $('.agent-open-explorer').addEventListener('click', () => { showPage('ask'); setAskMode('llm'); $('#ask-a').focus(); });
     $('#claude-agents-refresh').addEventListener('click', loadClaudeAgents);
+    $('#local-skills-refresh').addEventListener('click', loadLocalSkills);
+    $('#local-skills-provider').addEventListener('change', renderLocalSkills);
+    $('#local-skills-search').addEventListener('input', renderLocalSkills);
     $('#dashboard').addEventListener('click', onDashboardClick);
+    $('#compressor-result-file').addEventListener('change', importCompressorResult);
     $('#documentation-page').addEventListener('click', onDashboardClick);
     $('#settings').addEventListener('click', onDashboardClick);
     $('#health-page').addEventListener('click', onDashboardClick);

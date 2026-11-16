@@ -96,6 +96,29 @@
       list.innerHTML = ''; status.textContent = `Could not load Claude Code agents: ${error.message}`;
     }
   }
+  let localSkillsRequest = 0, localSkills = [];
+  function renderLocalSkills() {
+    const provider = $('#local-skills-provider').value || 'all';
+    const query = $('#local-skills-search').value.trim().toLocaleLowerCase();
+    const skills = localSkills.filter(skill => (provider === 'all' || skill.provider === provider) &&
+      (!query || [skill.name, skill.description, skill.provider, skill.scope, skill.path].some(value => String(value || '').toLocaleLowerCase().includes(query))));
+    const status = $('#local-skills-status'), list = $('#local-skills-list');
+    status.textContent = skills.length ? `${skills.length} local skill definition${skills.length === 1 ? '' : 's'} shown.` : 'No local skill definitions found for this selection.';
+    list.innerHTML = skills.map(skill => `<article class="dash-card w-6 agent-card"><header><h2>${escapeHtml(skill.name)}</h2><span class="agent-badge">${escapeHtml(skill.provider)} · ${escapeHtml(skill.scope)}</span></header><div class="dash-body"><p>${escapeHtml(skill.description || 'No description provided.')}</p><p class="dash-note"><code>${escapeHtml(skill.path)}</code></p></div></article>`).join('');
+  }
+  async function loadLocalSkills() {
+    const seq = ++localSkillsRequest, project = state.projectPath;
+    const status = $('#local-skills-status'), list = $('#local-skills-list');
+    localSkills = [];
+    if (!serverToken) { status.textContent = 'Open the local server to see skill definitions.'; list.innerHTML = ''; return; }
+    status.textContent = 'Loading local skill definitions…';
+    try {
+      const result = await api(`/api/skills${project ? `?project=${encodeURIComponent(project)}` : ''}`);
+      if (seq !== localSkillsRequest || project !== state.projectPath) return;
+      localSkills = Array.isArray(result.skills) ? result.skills : [];
+      renderLocalSkills();
+    } catch (error) { if (seq === localSkillsRequest) { list.innerHTML = ''; status.textContent = `Could not load local skills: ${error.message}`; } }
+  }
   function onNav(target) {
     const nav = target.dataset.nav;
     if (nav === 'overview') showPage('dashboard');
@@ -109,6 +132,7 @@
     else if (nav === 'settings') showPage('settings');
     else if (nav === 'health') showPage('health');
     else if (nav === 'system') showPage('system');
+    else if (nav === 'skills') showPage('skills');
     else if (nav === 'agents') showPage('agents');
     updateNav();
   }

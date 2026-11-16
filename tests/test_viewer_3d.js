@@ -26,6 +26,15 @@ for (const name of ['index.html', 'token-graph/assets/project-explorer.html', 't
   for(let i=20;i<40;i++) fixture.edges.push({source:"node0",target:"node"+i,relation:"calls"});
   api.normalizeGraph(fixture);
   if (api.showPage) {
+    const compressorInput = el('#compressor-result-file');
+    const compressorOutput = el('#compressor-result');
+    compressorInput.files = [{name:'result.json', size:100, text:async()=>JSON.stringify({original_tokens:100, compressed_tokens:70, saved_tokens:30, lossless:false, engine:'test', content:'private source'})}];
+    await compressorInput.handlers.change({target:compressorInput});
+    assert(compressorOutput.textContent.includes('100 → 70') && compressorOutput.textContent.includes('30.0%') && compressorOutput.textContent.includes('Lossy'));
+    assert(!compressorOutput.textContent.includes('private source'), 'do not display source text');
+    compressorInput.files = [{name:'bad.json', size:100, text:async()=>JSON.stringify({original_tokens:100, compressed_tokens:70, saved_tokens:99, lossless:true})}];
+    await compressorInput.handlers.change({target:compressorInput});
+    assert(compressorOutput.textContent.includes('Invalid compressor'));
     // Dashboard page (project explorer only): opens by default, shows real loaded-graph figures,
     // and asks for the local server instead of inventing server-only figures.
     assert.equal(api.state.page,'dashboard');
@@ -36,6 +45,8 @@ for (const name of ['index.html', 'token-graph/assets/project-explorer.html', 't
     for (const card of ['ask','health','ai','index','intel','activity']) assert(el(`#dash-${card} .dash-body`).innerHTML.includes('local Token Graph server'), `${card} needs the server`);
     api.showPage('graph'); assert(el('#dashboard').classList.contains('hidden')); assert.equal(el('#view-crumb').textContent,'GRAPH');
     api.showPage('dashboard'); assert(!el('#dashboard').classList.contains('hidden')); assert.equal(el('#view-crumb').textContent,'OVERVIEW');
+    api.showPage('skills'); assert(!el('#skills-page').classList.contains('hidden')); assert(el('#agents-page').classList.contains('hidden')); assert.equal(el('#view-crumb').textContent,'SKILLS');
+    api.showPage('dashboard');
     api.setView('docs'); assert.equal(el('#view-crumb').textContent,'OVERVIEW', 'graph sub-views do not retitle the overview'); api.setView('all');
     assert(el('#dash-architecture .dash-body').innerHTML.includes('dash-modmap'), 'architecture map is drawn from the loaded graph');
     assert(el('#dash-components .dash-body').innerHTML.includes('data-dash="node"'), 'key components list');

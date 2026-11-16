@@ -60,6 +60,7 @@
     $('#project-location').textContent = entry.path || `${entry.name} · imported graph`;
     $('#graph-selector').title = entry.path || entry.name;
     if (state.page === 'agents') loadClaudeAgents();
+    if (state.page === 'skills') loadLocalSkills();
     if (state.page === 'documentation') loadDocumentation();
     state.editorRootKey = `tokenGraph.vscodeRoot.${hashString(`${entry.name}|${entry.sourceRoot || ''}`)}`;
     state.localSource = entry.folderFiles ? {files: entry.folderFiles, root: entry.sourceRoot} : null;

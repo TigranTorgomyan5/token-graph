@@ -149,6 +149,119 @@ def claude_agents(project: Path | None = None, user_home: Path | None = None) ->
             continue
     return agents
 
+
+def _skill_metadata(path: Path) -> dict | None:
+    """Read only bounded YAML front matter; instruction bodies are not returned."""
+    try:
+        if path.is_symlink() or not path.is_file() or path.stat().st_size > 128_000:
+            return None
+        with path.open(encoding='utf-8') as source:
+            if source.readline().strip() != '---':
+                return None
+            fields, closed, block = {}, False, None
+            for _ in range(100):
+                line = source.readline()
+                if not line:
+                    break
+                if line.strip() == '---':
+                    closed = True
+                    break
+                if block and (line[:1].isspace() or not line.strip()):
+                    fields[block] = (fields.get(block, '') + ' ' + line.strip()).strip()[:1200]
+                    continue
+                block = None
+                match = re.match(r'^(name|description):\s*(.*?)\s*$', line)
+                if match:
+                    key, value = match.groups()
+                    if value in ('>', '|', '>-', '|-'):
+                        fields[key], block = '', key
+                    else:
+                        fields[key] = value.strip('"\'')[:1200]
+        return fields if closed else None
+    except (OSError, UnicodeError):
+        return None
+
+
+def installed_skills(project: Path | None = None, user_home: Path | None = None) -> list[dict]:
+    """Read bounded skill metadata from conventional local directories, never instructions."""
+    home = user_home or Path.home()
+    roots = [(home / '.codex' / 'skills', 'Codex', 'User'),
+             (home / '.claude' / 'skills', 'Claude Code', 'User'),
+             (home / '.agents' / 'skills', 'Agents', 'User')]
+    # Cache entries are definitions on disk, not proof that a plugin/version is active.
+    for pattern, provider, scope in (
+        ('.bb/runtime/global-skills/*/skills', 'BB', 'Global catalog'),
+        ('.codex/plugins/cache/*/*/*/skills', 'Codex', 'Plugin cache'),
+    ):
+        roots.extend((path, provider, scope) for path in sorted(home.glob(pattern))[:500]
+                     if not any(part.is_symlink() for part in (path, *path.parents) if part != home and home in part.parents))
+    if project:
+        roots += [(project / '.codex' / 'skills', 'Codex', 'Project'),
+                  (project / '.claude' / 'skills', 'Claude Code', 'Project'),
+                  (project / '.agents' / 'skills', 'Agents', 'Project')]
+    skills = []
+    for root, provider, scope in roots:
+        try:
+            if not root.is_dir() or root.is_symlink():
+                continue
+            folders = sorted(root.iterdir(), key=lambda p: p.name.casefold())[:500]
+            for folder in folders:
+                if folder.is_symlink() or not folder.is_dir():
+                    continue
+                candidates = [folder] if (folder / 'SKILL.md').is_file() else sorted(folder.iterdir(), key=lambda p: p.name.casefold())[:200]
+                for candidate in candidates:
+                    path = candidate / 'SKILL.md'
+                    if candidate.is_symlink() or not candidate.is_dir() or path.is_symlink() or not path.is_file():
+                        continue
+                    fields = _skill_metadata(path)
+                    if fields is None:
+                        continue
+                    skills.append({'name': fields.get('name') or candidate.name,
+                                   'description': fields.get('description', ''), 'provider': provider,
+                                   'scope': scope, 'path': str(path)})
+                    if len(skills) >= 1000:
+                        return skills
+        except OSError:
+            continue
+    registry = home / '.claude' / 'plugins' / 'installed_plugins.json'
+    cache = home / '.claude' / 'plugins' / 'cache'
+    try:
+        if registry.is_symlink() or registry.stat().st_size > 1_000_000:
+            return skills
+        entries = json.loads(registry.read_text(encoding='utf-8')).get('plugins', {})
+        if not isinstance(entries, dict):
+            return skills
+        for records in entries.values():
+            if not isinstance(records, list):
+                continue
+            for record in records:
+                if not isinstance(record, dict) or record.get('scope') != 'user':
+                    continue
+                root = Path(str(record.get('installPath') or ''))
+                try:
+                    relative = root.relative_to(cache)
+                    root.resolve().relative_to(cache.resolve())
+                    if '..' in relative.parts:
+                        continue
+                    if any((cache.joinpath(*relative.parts[:i])).is_symlink() for i in range(1, len(relative.parts) + 1)):
+                        continue
+                    commands = root / 'commands'
+                    if commands.is_symlink() or not commands.is_dir():
+                        continue
+                    for path in sorted(commands.glob('*.md'))[:200]:
+                        fields = _skill_metadata(path)
+                        if fields is not None:
+                            skills.append({'name': fields.get('name') or path.stem,
+                                           'description': fields.get('description', ''), 'provider': 'Claude Code',
+                                           'scope': 'Installed plugin command', 'path': str(path)})
+                        if len(skills) >= 1000:
+                            return skills
+                except (OSError, ValueError):
+                    continue
+    except (OSError, ValueError, UnicodeError, AttributeError):
+        pass
+    return skills
+
 PICK_FOLDER = r"""
 import sys, tkinter
 from tkinter import filedialog
@@ -997,6 +1110,9 @@ class Handler(BaseHTTPRequestHandler):
             if url.path == "/api/claude-agents":
                 project = self._known_project(query['project']) if query.get('project') else None
                 return self._json(200, {"agents": claude_agents(project)})
+            if url.path == "/api/skills":
+                project = self._known_project(query['project']) if query.get('project') else None
+                return self._json(200, {"skills": installed_skills(project)})
             if url.path == "/api/documentation":
                 return self._json(200, {"documents": documentation_files(self._known_project(query.get('project')))})
             if url.path == "/api/documentation/endpoints":

@@ -27,6 +27,48 @@ def load(name):
 
 
 class MergeRegressionTests(unittest.TestCase):
+    def test_installed_claude_plugin_commands_are_listed(self):
+        server = load('explorer_server')
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory).resolve()
+            plugin = home / '.claude/plugins/cache/official/code-review/1.0'
+            commands = plugin / 'commands'
+            commands.mkdir(parents=True)
+            (commands / 'code-review.md').write_text('---\ndescription: Review a pull request\n---\nprivate instructions\n')
+            (commands / 'broken.md').write_text('---\ndescription: no ending\n')
+            registry = home / '.claude/plugins/installed_plugins.json'
+            registry.write_text(json.dumps({'plugins': {'code-review@official': [{'scope': 'user', 'installPath': str(plugin)}]}}))
+            items = server.installed_skills(user_home=home)
+            self.assertEqual([(item['name'], item['provider'], item['scope']) for item in items], [('code-review', 'Claude Code', 'Installed plugin command')])
+            self.assertEqual(items[0]['description'], 'Review a pull request')
+            self.assertNotIn('private instructions', json.dumps(items))
+
+    def test_local_skills_list_metadata_without_instructions_or_symlinks(self):
+        server = load('explorer_server')
+        with tempfile.TemporaryDirectory() as directory:
+            home, project = Path(directory) / 'home', Path(directory) / 'project'
+            skill = home / '.codex/skills/compressor'
+            system = home / '.codex/skills/.system/example'
+            local = project / '.agents/skills/local'
+            bb = home / '.bb/runtime/global-skills/catalog/skills/bb-skill'
+            plugin = home / '.codex/plugins/cache/vendor/plugin/1.0/skills/plugin-skill'
+            for folder in (skill, system, local, bb, plugin):
+                folder.mkdir(parents=True)
+                (folder / 'SKILL.md').write_text('---\nname: example\ndescription: Test skill\n---\nprivate instructions\n')
+            (system / 'SKILL.md').write_text('---\nname: example\ndescription: >\n  Test skill\n---\nprivate instructions\n')
+            broken = home / '.claude/skills/broken'
+            broken.mkdir(parents=True)
+            (broken / 'SKILL.md').write_text('---\nname: broken\ndescription: incomplete\n')
+            try:
+                (home / '.codex/skills/linked').symlink_to(local, target_is_directory=True)
+            except (OSError, NotImplementedError):
+                pass  # Symlink creation may require privileges on Windows.
+            items = server.installed_skills(project, home)
+            self.assertEqual(len(items), 5)
+            self.assertEqual({(item['provider'], item['scope']) for item in items}, {('Codex', 'User'), ('Agents', 'Project'), ('BB', 'Global catalog'), ('Codex', 'Plugin cache')})
+            self.assertTrue(all(item['description'] == 'Test skill' for item in items))
+            self.assertNotIn('private instructions', json.dumps(items))
+
     def test_documentation_listing_respects_ignores_and_lists_generated_wiki(self):
         server = load('explorer_server')
         with tempfile.TemporaryDirectory() as directory:
