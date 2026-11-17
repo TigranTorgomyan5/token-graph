@@ -67,6 +67,23 @@
     finally { if (request === knowledge.request) $('#knowledge-submit').disabled = false; }
   }
   const apiDocs = { request: 0, project: null, markdown: '' };
+  // Contracts are source-derived text, not trusted HTML. Render only the small
+  // inline markup emitted by endpoint_contracts; escape every text fragment.
+  function apiInline(text) {
+    return String(text).split(/(`[^`\n]+`|\*\*[^*\n]+\*\*)/g).map(part => {
+      if (part.startsWith('`') && part.endsWith('`') && part.length > 1) return `<code>${escapeHtml(part.slice(1, -1))}</code>`;
+      if (part.startsWith('**') && part.endsWith('**') && part.length > 3) return `<strong>${escapeHtml(part.slice(2, -2))}</strong>`;
+      return escapeHtml(part);
+    }).join('');
+  }
+  function apiContractHtml(lines) {
+    if (!Array.isArray(lines) || !lines.length) return '<p class="api-contract-empty">Request and response details: unknown; inspect the handler and middleware.</p>';
+    return lines.map(line => {
+      const text = String(line), item = text.match(/^(\s*)-\s+(.*)$/);
+      if (item) return `<div class="api-finding${item[1].length ? ' api-finding-nested' : ''}"><span aria-hidden="true" class="api-finding-dot">•</span><span>${apiInline(item[2])}</span></div>`;
+      return `<p class="api-contract-heading">${apiInline(text)}</p>`;
+    }).join('');
+  }
   async function discoverApiDocs() {
     const project = state.projectPath, request = ++apiDocs.request;
     apiDocs.project = project; apiDocs.markdown = '';
@@ -81,9 +98,11 @@
       const lines = ['# API endpoint inventory', '', result.note || '', ''];
       for (const route of routes) {
         const title = `${route.method} ${route.path}`, evidence = `Route: ${route.file}:${route.line}`;
-        const details = document.createElement('details'), summary = document.createElement('summary'), pre = document.createElement('pre');
-        summary.textContent = title; const findings = Array.isArray(route.contracts) && route.contracts.length ? route.contracts.join('\n') : 'Request and response details: unknown; inspect the handler and middleware.';
-        pre.textContent = `${evidence}\n\n${findings}`; details.append(summary, pre); $('#docs-api-list').append(details);
+        const details = document.createElement('details'), summary = document.createElement('summary'), method = document.createElement('span'), path = document.createElement('code'), body = document.createElement('div'), source = document.createElement('p'), findingsView = document.createElement('div');
+        method.className = 'api-method'; method.textContent = String(route.method || ''); path.textContent = String(route.path || ''); summary.append(method, path);
+        body.className = 'api-contract'; source.className = 'api-source'; source.textContent = evidence;
+        const findings = Array.isArray(route.contracts) && route.contracts.length ? route.contracts.join('\n') : 'Request and response details: unknown; inspect the handler and middleware.';
+        findingsView.innerHTML = apiContractHtml(route.contracts); body.append(source, findingsView); details.append(summary, body); $('#docs-api-list').append(details);
         lines.push(`## ${title}`, '', evidence, '', findings, '', 'Authentication and validation: verify handler and middleware.', '');
       }
       if (!routes.length) $('#docs-api-list').textContent = 'No routes detected. The service may use unsupported routing patterns.';

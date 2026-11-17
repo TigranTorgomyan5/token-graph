@@ -5,7 +5,7 @@ for (const name of ['index.html', 'token-graph/assets/project-explorer.html', 't
   const html = fs.readFileSync(require('path').join(root, name), 'utf8');
   let code = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map(m => m[1]).find(s => s.includes('(() =>'));
   new vm.Script(code);
-  code = code.replace(/\}\)\(\);\s*$/, 'globalThis.viewerTest = {state, normalizeGraph, projectNode, findNode, fitGraph, setDimension, select, draw, setView, recoverGraph, browserAsk, runAsk, setAskMode, importProjectFolder, switchGraph, showPage: typeof showPage === "function" ? showPage : null, renderDashboard: typeof renderDashboard === "function" ? renderDashboard : null, clusterModel: typeof clusterModel === "function" ? clusterModel : null, clustersActive: typeof clustersActive === "function" ? clustersActive : null, expandCluster: typeof expandCluster === "function" ? expandCluster : null, enterFocus: typeof enterFocus === "function" ? enterFocus : null, setLens: typeof setLens === "function" ? setLens : null, visible: typeof visible === "function" ? visible : null, system: typeof sysState !== "undefined" ? {sysState, mapSvg, visibleSystemEdges, onSystemAction, systemCardsHtml} : null}; })();');
+  code = code.replace(/\}\)\(\);\s*$/, 'globalThis.viewerTest = {state, normalizeGraph, projectNode, findNode, fitGraph, setDimension, select, draw, setView, recoverGraph, browserAsk, runAsk, setAskMode, importProjectFolder, switchGraph, showPage: typeof showPage === "function" ? showPage : null, renderDashboard: typeof renderDashboard === "function" ? renderDashboard : null, apiContractHtml: typeof apiContractHtml === "function" ? apiContractHtml : null, clusterModel: typeof clusterModel === "function" ? clusterModel : null, clustersActive: typeof clustersActive === "function" ? clustersActive : null, expandCluster: typeof expandCluster === "function" ? expandCluster : null, enterFocus: typeof enterFocus === "function" ? enterFocus : null, setLens: typeof setLens === "function" ? setLens : null, visible: typeof visible === "function" ? visible : null, system: typeof sysState !== "undefined" ? {sysState, mapSvg, visibleSystemEdges, onSystemAction, systemCardsHtml} : null}; })();');
   const elements = new Map(), arcs = [];
   const context = new Proxy({measureText:t=>({width:String(t).length*7}), arc:(...args)=>arcs.push(args)}, {get:(target,k)=>target[k] || (()=>{})});
   function el(key) {
@@ -26,6 +26,11 @@ for (const name of ['index.html', 'token-graph/assets/project-explorer.html', 't
   for(let i=20;i<40;i++) fixture.edges.push({source:"node0",target:"node"+i,relation:"calls"});
   api.normalizeGraph(fixture);
   if (api.showPage) {
+    const contract = api.apiContractHtml(['**Request and responses: POST /items** (handler test.go:4)', '- Request body: `item` <script>alert(1)</script>', '  - 400 — `invalid` — test.go:8']);
+    assert(contract.includes('<strong>Request and responses: POST /items</strong>'));
+    assert(contract.includes('<code>item</code>') && contract.includes('api-finding-nested'));
+    assert(contract.includes('&lt;script&gt;') && !contract.includes('<script>'));
+    assert(api.apiContractHtml([]).includes('unknown'));
     const compressorInput = el('#compressor-result-file');
     const compressorOutput = el('#compressor-result');
     compressorInput.files = [{name:'result.json', size:100, text:async()=>JSON.stringify({original_tokens:100, compressed_tokens:70, saved_tokens:30, lossless:false, engine:'test', content:'private source'})}];
